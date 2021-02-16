@@ -1,0 +1,6 @@
+make run_cora
+make run_citeseer
+make run_pubmed
+make run_coauthor_cs
+make run_coauthor_physics
+make run_county_facebook

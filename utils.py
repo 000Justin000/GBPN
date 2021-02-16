@@ -1,12 +1,15 @@
+import os
+import sys
 import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import pandas as pd
 import torch_sparse
+from torch_geometric.nn import SGConv, GCNConv, GATConv
 from torch_geometric.utils import remove_self_loops, to_undirected, is_undirected
 from torch_geometric.data import Data
-from torch_geometric.datasets import Planetoid
+from torch_geometric.datasets import Planetoid, Coauthor
 from ogb.nodeproppred import PygNodePropPredDataset
 
 
@@ -33,6 +36,49 @@ class MLP(nn.Module):
             x = self.activation(m(self.dropout(x)))
 
         return self.linears[-1](self.dropout(x))
+
+
+class SGC(torch.nn.Module):
+    def __init__(self, dim_in, dim_out):
+        super(SGC, self).__init__()
+        self.conv1 = SGConv(dim_in, dim_out, K=2, cached=True)
+
+    def forward(self, x, edge_index, **kwargs):
+        x = self.conv1(x, edge_index)
+        return F.log_softmax(x, dim=1)
+
+
+class GCN(nn.Module):
+    def __init__(self, dim_in, dim_out, dim_hidden=128, dropout_p=0.0):
+        super(GCN, self).__init__()
+        self.conv1 = GCNConv(dim_in, dim_hidden, cached=True)
+        self.conv2 = GCNConv(dim_hidden, dim_out, cached=True)
+        self.dropout = nn.Dropout(dropout_p)
+
+    def forward(self, x, edge_index, **kwargs):
+        x = self.dropout(x)
+        x = self.conv1(x, edge_index)
+        x = F.relu(x)
+        x = self.dropout(x)
+        x = self.conv2(x, edge_index)
+        return F.log_softmax(x, dim=-1)
+
+
+class GAT(nn.Module):
+    def __init__(self, dim_in, dim_out, dim_hidden=128, dropout_p=0.0, num_heads=8):
+        super(GAT, self).__init__()
+        self.conv1 = GATConv(dim_in, dim_hidden, heads=num_heads, dropout=dropout_p)
+        # On the Pubmed dataset, use heads=8 in conv2.
+        self.conv2 = GATConv(dim_hidden*num_heads, dim_out, heads=num_heads, concat=False, dropout=dropout_p)
+        self.dropout = nn.Dropout(dropout_p)
+
+    def forward(self, x, edge_index, **kwargs):
+        x = self.dropout(x)
+        x = self.conv1(x, edge_index)
+        x = F.elu(x)
+        x = self.dropout(x)
+        x = self.conv2(x, edge_index)
+        return F.log_softmax(x, dim=-1)
 
 
 def rand_split(x, ps):
@@ -95,15 +141,29 @@ def process_edge_index(edge_index):
     return edge_index, rv
 
 
-def load_citation(name='Cora', transform=None, split='original'):
+def load_citation(name='Cora', transform=None, split=None):
     data = Planetoid(root='/tmp/{}'.format(name), name=name)[0]
 
-    if split != 'original':
+    if split is not None:
         train_idx, val_idx, test_idx = rand_split(data.x.shape[0], split)
 
         data.train_mask = torch.zeros(data.x.shape[0], dtype=bool).scatter_(0, torch.tensor(train_idx), True)
         data.val_mask = torch.zeros(data.x.shape[0], dtype=bool).scatter_(0, torch.tensor(val_idx), True)
         data.test_mask = torch.zeros(data.x.shape[0], dtype=bool).scatter_(0, torch.tensor(test_idx), True)
+
+    data.edge_index, data.rv = process_edge_index(data.edge_index)
+
+    return data if (transform is None) else transform(data)
+
+
+def load_coauthor(name='CS', transform=None, split=[0.3, 0.2, 0.5]):
+    data = Coauthor(root='/tmp/{}'.format(name), name=name)[0]
+
+    train_idx, val_idx, test_idx = rand_split(data.x.shape[0], split)
+
+    data.train_mask = torch.zeros(data.x.shape[0], dtype=bool).scatter_(0, torch.tensor(train_idx), True)
+    data.val_mask = torch.zeros(data.x.shape[0], dtype=bool).scatter_(0, torch.tensor(val_idx), True)
+    data.test_mask = torch.zeros(data.x.shape[0], dtype=bool).scatter_(0, torch.tensor(test_idx), True)
 
     data.edge_index, data.rv = process_edge_index(data.edge_index)
 
@@ -154,6 +214,10 @@ def acc(score, y, mask):
     return int(score.max(dim=-1)[1][mask].eq(y[mask]).sum().item()) / int(mask.sum())
 
 
+def log_normalize(log_x):
+    return log_x - torch.logsumexp(log_x, -1, keepdim=True)
+
+
 def subsample(mask, p=0.10):
     return torch.logical_and(mask, torch.rand(mask.shape) < p)
 
@@ -195,3 +259,18 @@ def exp_loss(projection, target, reduction='mean'):
     else:
         raise Exception('unexpected reduction type')
     return loss
+
+
+def create_outpath(dataset):
+    path = os.getcwd()
+    pid = os.getpid()
+
+    wsppath = os.path.join(path, 'workspace')
+    if not os.path.isdir(wsppath):
+        os.mkdir(wsppath)
+
+    outpath = os.path.join(wsppath, 'dataset:'+dataset + '-' + 'pid:'+str(pid))
+    assert not os.path.isdir(outpath), 'output directory already exist (process id coincidentally the same), please retry'
+    os.mkdir(outpath)
+
+    return outpath

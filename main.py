@@ -1,3 +1,6 @@
+import sys
+import subprocess
+import argparse
 import torch.nn as nn
 import torch.nn.functional as F
 from torch_sparse import SparseTensor
@@ -6,14 +9,8 @@ from torch_geometric.transforms import ToSparseTensor
 from torch_geometric.nn import MessagePassing
 from torch_geometric.utils import sort_edge_index, is_undirected, subgraph
 from utils import *
+import matplotlib
 import matplotlib.pyplot as plt
-
-compute_device = 'cuda'
-storage_device = 'cpu'
-
-
-def log_normalize(log_x):
-    return log_x - torch.logsumexp(log_x, -1, keepdim=True)
 
 
 class SumConv(MessagePassing):
@@ -28,17 +25,15 @@ class BPConv(MessagePassing):
     def __init__(self, n_channels, learn_coupling=False):
         super(BPConv, self).__init__(aggr='add')
         self.learn_coupling = learn_coupling
-        self.T = nn.Parameter(torch.randn(n_channels, n_channels) / (n_channels**0.5))
+        self.weights = nn.Parameter(torch.zeros(n_channels*(n_channels-1)//2))
         self.n_channels = n_channels
 
-    def log_H(self):
-        if self.learn_coupling:
-            T = self.T
-            s = (T * T).sum(dim=1)
-            S = s.view(-1, 1) + s.view(1, -1) - 2*torch.mm(T, T.transpose(0, 1))
-        else:
-            S = (torch.ones((self.n_channels, self.n_channels))-torch.eye(self.n_channels)) * 3.0
-        return -S
+    def get_logH(self):
+        logT = torch.zeros(self.n_channels, self.n_channels).to(self.weights.device)
+        rid, cid = torch.tril_indices(self.n_channels, self.n_channels, -1)
+        logT[rid, cid] = F.logsigmoid((self.weights - self.weights.mean()))
+        logH = (logT + logT.transpose(0,1))
+        return (logH if self.learn_coupling else logH.detach())
 
     def forward(self, x, edge_index, info):
         # x has shape [N, n_channels]
@@ -48,7 +43,7 @@ class BPConv(MessagePassing):
 
     def message(self, x_j, info):
         # x_j has shape [E, n_channels]
-        log_msg_raw = torch.logsumexp((x_j - info['log_msg_'][info['rv']]).unsqueeze(-1) + self.log_H().unsqueeze(0), dim=-2)
+        log_msg_raw = torch.logsumexp((x_j - info['log_msg_'][info['rv']]).unsqueeze(-1) + self.get_logH().unsqueeze(0), dim=-2)
         log_msg = log_normalize(log_msg_raw)
         info['log_msg_'] = log_msg
         return log_msg
@@ -65,12 +60,14 @@ class BPGNN(nn.Module):
         self.transform = nn.Sequential(MLP(dim_in, dim_out, dim_hidden, num_hidden, nn.ReLU(), dropout_p), nn.LogSoftmax(dim=-1))
         self.conv = BPConv(dim_out, learn_coupling)
 
-    def forward(self, x, edge_index, rv, subgraph=None):
+    def forward(self, x, edge_index, rv, phi=None):
         log_b0 = self.transform(x)
-        if subgraph is not None:
-            log_b0[subgraph[0]] += subgraph[1]
+        if phi is not None:
+            log_b0[phi[0]] += phi[1]
         num_classes = log_b0.shape[-1]
-        info = {'log_b0': log_b0, 'log_msg_': torch.ones(edge_index.shape[1], num_classes) * (-np.log(num_classes)), 'rv': rv}
+        info = {'log_b0': log_b0,
+                'log_msg_': (-np.log(num_classes)) * torch.ones(edge_index.shape[1], num_classes).to(x.device),
+                'rv': rv}
         log_b = log_b0
         for _ in range(5):
             log_b = self.conv(log_b, edge_index, info)
@@ -78,66 +75,104 @@ class BPGNN(nn.Module):
         return log_b
 
 
-class GCN(nn.Module):
-    def __init__(self, dim_in, dim_out, dim_hidden=128):
-        super(GCN, self).__init__()
-        self.conv1 = GCNConv(dim_in, dim_hidden, cached=True)
-        self.conv2 = GCNConv(dim_hidden, dim_out, cached=True)
+def run(dataset, split, model, device, develop):
 
-    def forward(self, x, edge_index):
-        x = self.conv1(x, edge_index)
-        x = F.relu(x)
-        x = self.conv2(x, edge_index)
-        return F.log_softmax(x, dim=-1)
+    if dataset == 'Cora':
+        data = load_citation('Cora', split=split)
+    elif dataset == 'CiteSeer':
+        data = load_citation('CiteSeer', split=split)
+    elif dataset == 'PubMed':
+        data = load_citation('PubMed', split=split)
+    elif dataset == 'Coauthor_CS':
+        data = load_coauthor('CS', split=split)
+    elif dataset == 'Coauthor_Physics':
+        data = load_coauthor('Physics', split=split)
+    elif dataset == 'County_Facebook':
+        data = load_county_facebook(split=split)
+    else:
+        raise Exception('unexpected dataset')
+    data = data.to(device)
+
+    edge_index, rv = data.edge_index, data.rv
+    x, y = data.x, data.y
+    num_nodes, num_features = x.shape
+    num_classes = len(torch.unique(y))
+    train_mask, val_mask, test_mask = data.train_mask, data.val_mask, data.test_mask
+
+    if model == 'SGC':
+        gnn = SGC(num_features, num_classes)
+    elif model == 'GCN':
+        gnn = GCN(num_features, num_classes, 128, 0.3)
+    elif model == 'GAT':
+        gnn = GAT(num_features, num_classes, 8, 0.6)
+    elif model == 'BPGNN':
+        gnn = BPGNN(num_features, num_classes, 128, 1, 0.3, False)
+    else:
+        raise Exception('unexpected model')
+    gnn = gnn.to(device)
+
+    optimizer = torch.optim.AdamW([{'params': gnn.parameters(), 'lr': 1.0e-2}], weight_decay=2.5e-4)
+
+    def train():
+        gnn.train()
+        optimizer.zero_grad()
+        b = gnn(x, edge_index, rv=rv)
+        loss = F.nll_loss(b[train_mask], y[train_mask])
+        loss.backward()
+        optimizer.step()
+        if develop:
+            print('step {:5d}, train accuracy: {:5.3f}, val accuracy: {:5.3f}, test accuracy: {:5.3f}'.format(epoch, acc(b, y, train_mask), acc(b, y, val_mask), acc(b, y, test_mask)), flush=True)
+        return acc(b, y, val_mask)
+
+    def evaluation():
+        gnn.eval()
+        if type(gnn) == BPGNN:
+            sum_conv = SumConv()
+            log_e0 = torch.zeros(num_nodes, num_classes).to(device)
+            log_e0[train_mask] = gnn.conv.get_logH()[y[train_mask]]
+            subgraph_mask = torch.logical_not(train_mask)
+            subgraph_edge_index, subgraph_rv = process_edge_index(subgraph(subgraph_mask, edge_index)[0])
+            b = gnn(x, subgraph_edge_index, rv=subgraph_rv, phi=(subgraph_mask, sum_conv(log_e0, edge_index)[subgraph_mask]))
+            if develop:
+                print('train accuracy: {:5.3f}, val accuracy: {:5.3f}, test accuracy: {:5.3f}'.format(acc(b, y, train_mask), acc(b, y, val_mask), acc(b, y, test_mask)), flush=True)
+        else:
+            b = gnn(x, edge_index, rv=rv)
+            if develop:
+                print('evaluation, train accuracy: {:5.3f}, val accuracy: {:5.3f}, test accuracy: {:5.3f}'.format(acc(b, y, train_mask), acc(b, y, val_mask), acc(b, y, test_mask)), flush=True)
+        return acc(b, y, test_mask)
+
+    opt_val = 0.0
+    opt_test = 0.0
+    for epoch in range(300):
+        val = train()
+        if opt_val < val:
+            opt_val = val
+            opt_test = evaluation()
+
+    if develop:
+        print('optimal val accuracy: {:7.5f}, optimal test accuracy: {:7.5f}'.format(opt_val, opt_test))
+
+    return opt_test
 
 
-transform = None
-# data = load_citation('Cora', transform=transform)
-# data = load_citation('CiteSeer', transform=transform)
-data = load_citation('PubMed', transform=transform)
-# data = load_citation('Cora', transform=transform, split=[0.6,0.2,0.2])
-# data = load_citation('CiteSeer', transform=transform, split=[0.6,0.2,0.2])
-# data = load_citation('PubMed', transform=transform, split=[0.6,0.2,0.2])
-# data = load_county_facebook(transform=transform, split=[0.4,0.1,0.5])
+parser = argparse.ArgumentParser('gnn')
+parser.add_argument('--dataset', type=str, default='Cora')
+parser.add_argument('--split', metavar='N', type=float, nargs=3, default=None)
+parser.add_argument('--model', type=str, default='BPGNN')
+parser.add_argument('--device', type=str, default='cpu')
+parser.add_argument('--develop', type=bool, default=False)
+args = parser.parse_args()
 
-edge_index, rv = data.edge_index, data.rv
-x, y = data.x, data.y
-num_nodes, num_features = x.shape
-num_classes = len(torch.unique(y))
-train_mask, val_mask, test_mask = data.train_mask, data.val_mask, data.test_mask
+outpath = create_outpath(args.dataset)
+commit = subprocess.check_output("git log --pretty=format:\'%h\' -n 1", shell=True).decode()
+if not args.develop:
+    matplotlib.use('agg')
+    sys.stdout = open(outpath + '/' + commit + '.log', 'w')
+    sys.stderr = open(outpath + '/' + commit + '.err', 'w')
 
-gnn = BPGNN(num_features, num_classes, 128, 1, 0.3, False)
-optimizer = torch.optim.AdamW([{'params': gnn.parameters()}], lr=1.0e-2, weight_decay=2.5e-4)
+test_acc = []
+for _ in range(30):
+    test_acc.append(run(args.dataset, args.split, args.model, args.device, args.develop))
 
-
-def train():
-    optimizer.zero_grad()
-    b = gnn(x, edge_index, rv)
-    loss = F.nll_loss(b[train_mask], y[train_mask])
-    loss.backward()
-    optimizer.step()
-    print('step: {:3d}, train accuracy: {:5.3f}, val accuracy: {:5.3f}, test accuracy: {:5.3f}'.format(epoch, acc(b, y, train_mask), acc(b, y, val_mask), acc(b, y, test_mask)), flush=True)
-#   print(gnn.conv.log_H())
-
-
-def evaluation():
-    gnn.eval()
-    b = gnn(x, edge_index, rv)
-    print('train accuracy: {:5.3f}, val accuracy: {:5.3f}, test accuracy: {:5.3f}'.format(acc(b, y, train_mask), acc(b, y, val_mask), acc(b, y, test_mask)), flush=True)
-
-    sum_conv = SumConv()
-    log_e0 = torch.zeros(num_nodes, num_classes)
-    log_e0[train_mask] = gnn.conv.log_H()[y[train_mask]]
-
-    subgraph_mask = torch.logical_not(train_mask)
-    subgraph_edge_index, subgraph_rv = process_edge_index(subgraph(subgraph_mask, edge_index)[0])
-    b = gnn(x, subgraph_edge_index, subgraph_rv, (subgraph_mask, sum_conv(log_e0, edge_index)[subgraph_mask]))
-    print('train accuracy: {:5.3f}, val accuracy: {:5.3f}, test accuracy: {:5.3f}'.format(acc(b, y, train_mask), acc(b, y, val_mask), acc(b, y, test_mask)), flush=True)
-
-
-for epoch in range(300):
-    train()
-
-evaluation()
-
-print('finished')
+print(args)
+print('test accuracies: {:7.3f} ± {:7.3f}'.format(np.mean(test_acc)*100, np.std(test_acc)*100))
