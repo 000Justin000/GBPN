@@ -1,12 +1,13 @@
 import os
-import sys
 import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import pandas as pd
 import torch_sparse
-from torch_geometric.nn import SGConv, GCNConv, GATConv
+from torch_geometric.nn import MessagePassing
+from torch_geometric.nn import GCNConv, GATConv
+from torch_geometric.nn.conv.gcn_conv import gcn_norm
 from torch_geometric.utils import remove_self_loops, to_undirected, is_undirected
 from torch_geometric.data import Data
 from torch_geometric.datasets import Planetoid, Coauthor
@@ -38,13 +39,32 @@ class MLP(nn.Module):
         return self.linears[-1](self.dropout(x))
 
 
+class SGConv(MessagePassing):
+    def __init__(self, dim_in, dim_out, K=1):
+        super(SGConv, self).__init__(aggr='add')
+        self.dim_in = dim_in
+        self.dim_out = dim_out
+        self.K = K
+        self.linear = nn.Linear(dim_in, dim_out)
+
+    def forward(self, x, edge_index, edge_weight=None):
+        edge_index, edge_weight = gcn_norm(edge_index, edge_weight, x.shape[0], False, True, dtype=x.dtype)
+        x = self.linear(x)
+        for k in range(self.K):
+            x = self.propagate(edge_index, x=x, edge_weight=edge_weight, size=None)
+        return x
+
+    def message(self, x_j, edge_weight):
+        return edge_weight.view(-1, 1) * x_j
+
+
 class SGC(torch.nn.Module):
     def __init__(self, dim_in, dim_out):
         super(SGC, self).__init__()
-        self.conv1 = SGConv(dim_in, dim_out, K=2, cached=True)
+        self.conv = SGConv(dim_in, dim_out, K=2)
 
     def forward(self, x, edge_index, **kwargs):
-        x = self.conv1(x, edge_index)
+        x = self.conv(x, edge_index)
         return F.log_softmax(x, dim=1)
 
 
