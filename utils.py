@@ -152,10 +152,16 @@ def simplex_coordinates_test(m):
     print(torch.mm(x, x.transpose(0,1)))
 
 
-def process_edge_index(edge_index):
+def process_edge_index(num_nodes, edge_index):
+    def sort_edge(num_nodes, edge_index):
+        idx = edge_index[0]*num_nodes+edge_index[1]
+        sid, perm = idx.sort()
+        assert sid.unique_consecutive().shape == sid.shape
+        return edge_index[:,perm], perm
+
     assert is_undirected(edge_index)
-    edge_index = edge_index.unique(dim=1, sorted=True)
-    _, rv = edge_index.flip(dims=[0]).unique(dim=1, sorted=True, return_inverse=True)
+    edge_index, _ = sort_edge(num_nodes, edge_index)
+    _, rv = sort_edge(num_nodes, edge_index.flip(dims=[0]))
     assert torch.all(edge_index[:, rv] == edge_index.flip(dims=[0]))
 
     return edge_index, rv
@@ -163,29 +169,31 @@ def process_edge_index(edge_index):
 
 def load_citation(name='Cora', transform=None, split=None):
     data = Planetoid(root='/tmp/{}'.format(name), name=name)[0]
+    num_nodes = data.x.shape[0]
 
     if split is not None:
-        train_idx, val_idx, test_idx = rand_split(data.x.shape[0], split)
+        train_idx, val_idx, test_idx = rand_split(num_nodes, split)
 
-        data.train_mask = torch.zeros(data.x.shape[0], dtype=bool).scatter_(0, torch.tensor(train_idx), True)
-        data.val_mask = torch.zeros(data.x.shape[0], dtype=bool).scatter_(0, torch.tensor(val_idx), True)
-        data.test_mask = torch.zeros(data.x.shape[0], dtype=bool).scatter_(0, torch.tensor(test_idx), True)
+        data.train_mask = torch.zeros(num_nodes, dtype=bool).scatter_(0, torch.tensor(train_idx), True)
+        data.val_mask = torch.zeros(num_nodes, dtype=bool).scatter_(0, torch.tensor(val_idx), True)
+        data.test_mask = torch.zeros(num_nodes, dtype=bool).scatter_(0, torch.tensor(test_idx), True)
 
-    data.edge_index, data.rv = process_edge_index(data.edge_index)
+    data.edge_index, data.rv = process_edge_index(num_nodes, data.edge_index)
 
     return data if (transform is None) else transform(data)
 
 
 def load_coauthor(name='CS', transform=None, split=[0.3, 0.2, 0.5]):
     data = Coauthor(root='/tmp/{}'.format(name), name=name)[0]
+    num_nodes = data.x.shape[0]
 
-    train_idx, val_idx, test_idx = rand_split(data.x.shape[0], split)
+    train_idx, val_idx, test_idx = rand_split(num_nodes, split)
 
-    data.train_mask = torch.zeros(data.x.shape[0], dtype=bool).scatter_(0, torch.tensor(train_idx), True)
-    data.val_mask = torch.zeros(data.x.shape[0], dtype=bool).scatter_(0, torch.tensor(val_idx), True)
-    data.test_mask = torch.zeros(data.x.shape[0], dtype=bool).scatter_(0, torch.tensor(test_idx), True)
+    data.train_mask = torch.zeros(num_nodes, dtype=bool).scatter_(0, torch.tensor(train_idx), True)
+    data.val_mask = torch.zeros(num_nodes, dtype=bool).scatter_(0, torch.tensor(val_idx), True)
+    data.test_mask = torch.zeros(num_nodes, dtype=bool).scatter_(0, torch.tensor(test_idx), True)
 
-    data.edge_index, data.rv = process_edge_index(data.edge_index)
+    data.edge_index, data.rv = process_edge_index(num_nodes, data.edge_index)
 
     return data if (transform is None) else transform(data)
 
@@ -201,31 +209,36 @@ def load_county_facebook(transform=None, split=[0.3, 0.2, 0.5], normalize=True):
     edge_index = to_undirected(remove_self_loops(torch.transpose(torch.tensor(adj.values), 0, 1))[0])
 
     data = Data(x=x, y=y, edge_index=edge_index)
-    train_idx, val_idx, test_idx = rand_split(x.shape[0], split)
+    num_nodes = data.x.shape[0]
+    train_idx, val_idx, test_idx = rand_split(num_nodes, split)
 
-    data.train_mask = torch.zeros(data.x.shape[0], dtype=bool).scatter_(0, torch.tensor(train_idx), True)
-    data.val_mask = torch.zeros(data.x.shape[0], dtype=bool).scatter_(0, torch.tensor(val_idx), True)
-    data.test_mask = torch.zeros(data.x.shape[0], dtype=bool).scatter_(0, torch.tensor(test_idx), True)
+    data.train_mask = torch.zeros(num_nodes, dtype=bool).scatter_(0, torch.tensor(train_idx), True)
+    data.val_mask = torch.zeros(num_nodes, dtype=bool).scatter_(0, torch.tensor(val_idx), True)
+    data.test_mask = torch.zeros(num_nodes, dtype=bool).scatter_(0, torch.tensor(test_idx), True)
 
-    data.edge_index, data.rv = process_edge_index(data.edge_index)
+    data.edge_index, data.rv = process_edge_index(num_nodes, data.edge_index)
 
     return data if (transform is None) else transform(data)
 
 
-def load_ogbn_product(transform=None):
+def load_ogbn_products(transform=None, split=None):
     dataset = PygNodePropPredDataset(name='ogbn-products')
+    num_nodes = dataset[0].x.shape[0]
 
-    split_idx = dataset.get_idx_split()
-    train_idx, val_idx, test_idx = split_idx["train"], split_idx["valid"], split_idx["test"]
+    if split is not None:
+        train_idx, val_idx, test_idx = rand_split(num_nodes, split)
+    else:
+        split_idx = dataset.get_idx_split()
+        train_idx, val_idx, test_idx = split_idx["train"], split_idx["valid"], split_idx["test"]
 
     data = dataset[0]
     data.y = data.y.reshape(-1)
-    data.train_mask = torch.zeros(data.x.shape[0], dtype=bool).scatter_(0, train_idx, True)
-    data.val_mask = torch.zeros(data.x.shape[0], dtype=bool).scatter_(0, val_idx, True)
-    data.test_mask = torch.zeros(data.x.shape[0], dtype=bool).scatter_(0, test_idx, True)
+    data.train_mask = torch.zeros(num_nodes, dtype=bool).scatter_(0, torch.tensor(train_idx), True)
+    data.val_mask = torch.zeros(num_nodes, dtype=bool).scatter_(0, torch.tensor(val_idx), True)
+    data.test_mask = torch.zeros(num_nodes, dtype=bool).scatter_(0, torch.tensor(test_idx), True)
     data.edge_index = remove_self_loops(data.edge_index)[0]
 
-    data.edge_index, data.rv = process_edge_index(data.edge_index)
+    data.edge_index, data.rv = process_edge_index(num_nodes, data.edge_index)
 
     return data if (transform is None) else transform(data)
 

@@ -89,6 +89,8 @@ def run(dataset, split, model, device, develop):
         data = load_coauthor('Physics', split=split)
     elif dataset == 'County_Facebook':
         data = load_county_facebook(split=split)
+    elif dataset == 'OGBN_Products':
+        data = load_ogbn_products(split=split)
     else:
         raise Exception('unexpected dataset')
     data = data.to(device)
@@ -131,7 +133,7 @@ def run(dataset, split, model, device, develop):
             log_e0 = torch.zeros(num_nodes, num_classes).to(device)
             log_e0[train_mask] = gnn.conv.get_logH()[y[train_mask]]
             subgraph_mask = torch.logical_not(train_mask)
-            subgraph_edge_index, subgraph_rv = process_edge_index(subgraph(subgraph_mask, edge_index)[0])
+            subgraph_edge_index, subgraph_rv = process_edge_index(num_nodes, subgraph(subgraph_mask, edge_index)[0])
             b = gnn(x, subgraph_edge_index, rv=subgraph_rv, phi=(subgraph_mask, sum_conv(log_e0, edge_index)[subgraph_mask]))
             if develop:
                 print('train accuracy: {:5.3f}, val accuracy: {:5.3f}, test accuracy: {:5.3f}'.format(acc(b, y, train_mask), acc(b, y, val_mask), acc(b, y, test_mask)), flush=True)
