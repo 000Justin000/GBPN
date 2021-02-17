@@ -164,7 +164,7 @@ parser.add_argument('--model', type=str, default='BPGNN')
 parser.add_argument('--num_hidden', type=int, default=2)
 parser.add_argument('--device', type=str, default='cpu')
 parser.add_argument('--learning_rate', type=float, default=0.01)
-parser.add_argument('--develop', type=bool, default=False)
+parser.add_argument('--develop', type=bool, default=True)
 args = parser.parse_args()
 
 outpath = create_outpath(args.dataset)
