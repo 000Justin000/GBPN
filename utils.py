@@ -222,7 +222,7 @@ def load_county_facebook(transform=None, split=[0.3, 0.2, 0.5], normalize=True):
 
 
 def load_ogbn(name='products', transform=None, split=None):
-    dataset = PygNodePropPredDataset(root='datasets', name='ogbn-'.format(name))
+    dataset = PygNodePropPredDataset(root='datasets', name='ogbn-{}'.format(name))
     num_nodes = dataset[0].x.shape[0]
 
     if split is not None:
