@@ -75,7 +75,7 @@ class BPGNN(nn.Module):
         return log_b
 
 
-def run(dataset, split, model, device, learning_rate, develop):
+def run(dataset, split, model, num_hidden, device, learning_rate, develop):
 
     if dataset == 'Cora':
         data = load_citation('Cora', split=split)
@@ -108,7 +108,7 @@ def run(dataset, split, model, device, learning_rate, develop):
     elif model == 'GAT':
         gnn = GAT(num_features, num_classes, 32, 0.6)
     elif model == 'BPGNN':
-        gnn = BPGNN(num_features, num_classes, 128, 2, 0.3, False)
+        gnn = BPGNN(num_features, num_classes, 128, num_hidden, 0.3, False)
     else:
         raise Exception('unexpected model')
     gnn = gnn.to(device)
@@ -145,7 +145,7 @@ def run(dataset, split, model, device, learning_rate, develop):
 
     opt_val = 0.0
     opt_test = 0.0
-    for epoch in range(500):
+    for epoch in range(300):
         val = train()
         if opt_val < val:
             opt_val = val
@@ -161,6 +161,7 @@ parser = argparse.ArgumentParser('gnn')
 parser.add_argument('--dataset', type=str, default='Cora')
 parser.add_argument('--split', metavar='N', type=float, nargs=3, default=None)
 parser.add_argument('--model', type=str, default='BPGNN')
+parser.add_argument('--num_hidden', type=int, default=2)
 parser.add_argument('--device', type=str, default='cpu')
 parser.add_argument('--learning_rate', type=float, default=0.01)
 parser.add_argument('--develop', type=bool, default=False)
@@ -175,7 +176,7 @@ if not args.develop:
 
 test_acc = []
 for _ in range(30):
-    test_acc.append(run(args.dataset, args.split, args.model, args.device, args.learning_rate, args.develop))
+    test_acc.append(run(args.dataset, args.split, args.model, args.num_hidden, args.device, args.learning_rate, args.develop))
 
 print(args)
 print('test accuracies: {:7.3f} ± {:7.3f}'.format(np.mean(test_acc)*100, np.std(test_acc)*100))
