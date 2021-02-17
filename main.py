@@ -145,7 +145,7 @@ def run(dataset, split, model, device, learning_rate, develop):
 
     opt_val = 0.0
     opt_test = 0.0
-    for epoch in range(300):
+    for epoch in range(500):
         val = train()
         if opt_val < val:
             opt_val = val
