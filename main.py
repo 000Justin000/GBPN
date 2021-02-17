@@ -106,14 +106,14 @@ def run(dataset, split, model, device, develop):
     elif model == 'GCN':
         gnn = GCN(num_features, num_classes, 128, 0.3)
     elif model == 'GAT':
-        gnn = GAT(num_features, num_classes, 8, 0.6)
+        gnn = GAT(num_features, num_classes, 32, 0.6)
     elif model == 'BPGNN':
-        gnn = BPGNN(num_features, num_classes, 128, 1, 0.3, False)
+        gnn = BPGNN(num_features, num_classes, 128, 2, 0.3, False)
     else:
         raise Exception('unexpected model')
     gnn = gnn.to(device)
 
-    optimizer = torch.optim.AdamW([{'params': gnn.parameters(), 'lr': 1.0e-2}], weight_decay=2.5e-4)
+    optimizer = torch.optim.AdamW([{'params': gnn.parameters(), 'lr': 1.0e-3}], weight_decay=2.5e-4)
 
     def train():
         gnn.train()
