@@ -75,7 +75,7 @@ class BPGNN(nn.Module):
         return log_b
 
 
-def run(dataset, split, model, device, develop):
+def run(dataset, split, model, device, learning_rate, develop):
 
     if dataset == 'Cora':
         data = load_citation('Cora', split=split)
@@ -113,7 +113,7 @@ def run(dataset, split, model, device, develop):
         raise Exception('unexpected model')
     gnn = gnn.to(device)
 
-    optimizer = torch.optim.AdamW([{'params': gnn.parameters(), 'lr': 1.0e-3}], weight_decay=2.5e-4)
+    optimizer = torch.optim.AdamW([{'params': gnn.parameters(), 'lr': learning_rate}], weight_decay=2.5e-4)
 
     def train():
         gnn.train()
@@ -162,6 +162,7 @@ parser.add_argument('--dataset', type=str, default='Cora')
 parser.add_argument('--split', metavar='N', type=float, nargs=3, default=None)
 parser.add_argument('--model', type=str, default='BPGNN')
 parser.add_argument('--device', type=str, default='cpu')
+parser.add_argument('--learning_rate', type=float, default=0.01)
 parser.add_argument('--develop', type=bool, default=False)
 args = parser.parse_args()
 
@@ -174,7 +175,7 @@ if not args.develop:
 
 test_acc = []
 for _ in range(30):
-    test_acc.append(run(args.dataset, args.split, args.model, args.device, args.develop))
+    test_acc.append(run(args.dataset, args.split, args.model, args.device, args.learning_rate, args.develop))
 
 print(args)
 print('test accuracies: {:7.3f} ± {:7.3f}'.format(np.mean(test_acc)*100, np.std(test_acc)*100))
