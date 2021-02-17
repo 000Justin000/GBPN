@@ -175,7 +175,7 @@ if not args.develop:
     sys.stderr = open(outpath + '/' + commit + '.err', 'w')
 
 test_acc = []
-for _ in range(30):
+for _ in range(100):
     test_acc.append(run(args.dataset, args.split, args.model, args.num_hidden, args.device, args.learning_rate, args.develop))
 
 print(args)
