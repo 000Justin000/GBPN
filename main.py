@@ -108,7 +108,7 @@ def run(dataset, split, model, num_hidden, device, learning_rate, develop):
     elif model == 'GAT':
         gnn = GAT(num_features, num_classes, 32, 0.6)
     elif model == 'BPGNN':
-        gnn = BPGNN(num_features, num_classes, 128, num_hidden, 0.3, False)
+        gnn = BPGNN(num_features, num_classes, 128, num_hidden, 0.3, True)
     else:
         raise Exception('unexpected model')
     gnn = gnn.to(device)
@@ -164,7 +164,7 @@ parser.add_argument('--model', type=str, default='BPGNN')
 parser.add_argument('--num_hidden', type=int, default=2)
 parser.add_argument('--device', type=str, default='cpu')
 parser.add_argument('--learning_rate', type=float, default=0.01)
-parser.add_argument('--develop', type=bool, default=True)
+parser.add_argument('--develop', type=bool, default=False)
 args = parser.parse_args()
 
 outpath = create_outpath(args.dataset)
