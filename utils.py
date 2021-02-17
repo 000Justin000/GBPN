@@ -168,7 +168,7 @@ def process_edge_index(num_nodes, edge_index):
 
 
 def load_citation(name='Cora', transform=None, split=None):
-    data = Planetoid(root='/tmp/{}'.format(name), name=name)[0]
+    data = Planetoid(root='datasets/{}'.format(name), name=name)[0]
     num_nodes = data.x.shape[0]
 
     if split is not None:
@@ -184,7 +184,7 @@ def load_citation(name='Cora', transform=None, split=None):
 
 
 def load_coauthor(name='CS', transform=None, split=[0.3, 0.2, 0.5]):
-    data = Coauthor(root='/tmp/{}'.format(name), name=name)[0]
+    data = Coauthor(root='datasets/{}'.format(name), name=name)[0]
     num_nodes = data.x.shape[0]
 
     train_idx, val_idx, test_idx = rand_split(num_nodes, split)
@@ -199,8 +199,8 @@ def load_coauthor(name='CS', transform=None, split=[0.3, 0.2, 0.5]):
 
 
 def load_county_facebook(transform=None, split=[0.3, 0.2, 0.5], normalize=True):
-    dat = pd.read_csv('dataset/county_facebook/dat.csv')
-    adj = pd.read_csv('dataset/county_facebook/adj.csv')
+    dat = pd.read_csv('datasets/county_facebook/dat.csv')
+    adj = pd.read_csv('datasets/county_facebook/adj.csv')
 
     x = torch.tensor(dat.values[:, :9], dtype=torch.float32)
     if normalize:
@@ -221,8 +221,8 @@ def load_county_facebook(transform=None, split=[0.3, 0.2, 0.5], normalize=True):
     return data if (transform is None) else transform(data)
 
 
-def load_ogbn_products(transform=None, split=None):
-    dataset = PygNodePropPredDataset(name='ogbn-products')
+def load_ogbn(name='products', transform=None, split=None):
+    dataset = PygNodePropPredDataset(root='datasets/ogbn_{}'.format(name), name='ogbn-'.format(name))
     num_nodes = dataset[0].x.shape[0]
 
     if split is not None:

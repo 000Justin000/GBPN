@@ -90,7 +90,7 @@ def run(dataset, split, model, device, develop):
     elif dataset == 'County_Facebook':
         data = load_county_facebook(split=split)
     elif dataset == 'OGBN_Products':
-        data = load_ogbn_products(split=split)
+        data = load_ogbn('products', split=split)
     else:
         raise Exception('unexpected dataset')
     data = data.to(device)
