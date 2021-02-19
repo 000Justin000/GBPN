@@ -26,14 +26,13 @@ class BPConv(MessagePassing):
         super(BPConv, self).__init__(aggr='add')
         self.learn_coupling = learn_coupling
         dim_param = n_channels*(n_channels+1)//2
-        self.param0 = nn.Parameter(torch.zeros(dim_param))
-        self.transform = nn.Linear(dim_param, dim_param)
+        self.param = nn.Parameter(torch.zeros(dim_param))
         self.n_channels = n_channels
 
     def get_logH(self):
-        logT = torch.zeros(self.n_channels, self.n_channels).to(self.param0.device)
-        rid, cid = torch.tril_indices(self.n_channels, self.n_channels)
-        logT[rid, cid] = F.logsigmoid(self.transform(self.param0))
+        logT = torch.zeros(self.n_channels, self.n_channels).to(self.param.device)
+        rid, cid = torch.tril_indices(self.n_channels, self.n_channels, 0)
+        logT[rid, cid] = F.logsigmoid(self.param * 10.0)
         logH = (logT + logT.transpose(0,1).triu(1))
         return (logH if self.learn_coupling else logH.detach())
 
