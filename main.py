@@ -25,13 +25,15 @@ class BPConv(MessagePassing):
     def __init__(self, n_channels, learn_coupling=False):
         super(BPConv, self).__init__(aggr='add')
         self.learn_coupling = learn_coupling
-        self.weights = nn.Parameter(torch.zeros(n_channels*(n_channels+1)//2))
+        dim_param = n_channels*(n_channels+1)//2
+        self.param0 = nn.Parameter(torch.zeros(dim_param))
+        self.transform = nn.Linear(dim_param, dim_param)
         self.n_channels = n_channels
 
     def get_logH(self):
-        logT = torch.zeros(self.n_channels, self.n_channels).to(self.weights.device)
+        logT = torch.zeros(self.n_channels, self.n_channels).to(self.param0.device)
         rid, cid = torch.tril_indices(self.n_channels, self.n_channels)
-        logT[rid, cid] = F.logsigmoid(self.weights)
+        logT[rid, cid] = F.logsigmoid(self.transform(self.param0))
         logH = (logT + logT.transpose(0,1).triu(1))
         return (logH if self.learn_coupling else logH.detach())
 
@@ -151,6 +153,7 @@ def run(dataset, split, model, num_hidden, device, learning_rate, develop):
             b = gnn(x, edge_index, rv=rv)
             if develop:
                 print('evaluation, train accuracy: {:5.3f}, val accuracy: {:5.3f}, test accuracy: {:5.3f}'.format(acc(b, y, train_mask), acc(b, y, val_mask), acc(b, y, test_mask)), flush=True)
+        print(gnn.conv.get_logH().exp())
         return acc(b, y, val_mask), acc(b, y, test_mask)
 
     best_val, opt_val, opt_test = 0.0, 0.0, 0.0
