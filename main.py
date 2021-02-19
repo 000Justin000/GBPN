@@ -127,7 +127,6 @@ def run(dataset, split, model, num_hidden, device, learning_rate, develop):
     optimizer = torch.optim.AdamW([{'params': gnn.parameters(), 'lr': learning_rate}], weight_decay=2.5e-4)
 
     def train():
-        # print(gnn.conv.get_logH().exp())
         gnn.train()
         optimizer.zero_grad()
         b = gnn(x, edge_index, rv=rv)
