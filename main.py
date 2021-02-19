@@ -40,7 +40,7 @@ class BPConv(MessagePassing):
     def forward(self, x, edge_index, info):
         # x has shape [N, n_channels]
         # edge_index has shape [2, E]
-        # info has 4 fields: 'log_b0', 'log_msg_', 'rv', 'learn_coupling'
+        # info has 3 fields: 'log_b0', 'log_msg_', 'rv'
         return self.propagate(edge_index, x=x, info=info)
 
     def message(self, x_j, info):
