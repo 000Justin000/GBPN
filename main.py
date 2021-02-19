@@ -149,11 +149,11 @@ def run(dataset, split, model, num_hidden, device, learning_rate, develop):
             b = gnn(x, subgraph_edge_index, rv=subgraph_rv, phi=(subgraph_mask, sum_conv(log_e0, edge_index)[subgraph_mask]))
             if develop:
                 print('train accuracy: {:5.3f}, val accuracy: {:5.3f}, test accuracy: {:5.3f}'.format(acc(b, y, train_mask), acc(b, y, val_mask), acc(b, y, test_mask)), flush=True)
+                print(gnn.conv.get_logH().exp())
         else:
             b = gnn(x, edge_index, rv=rv)
             if develop:
                 print('evaluation, train accuracy: {:5.3f}, val accuracy: {:5.3f}, test accuracy: {:5.3f}'.format(acc(b, y, train_mask), acc(b, y, val_mask), acc(b, y, test_mask)), flush=True)
-        print(gnn.conv.get_logH().exp())
         return acc(b, y, val_mask), acc(b, y, test_mask)
 
     best_val, opt_val, opt_test = 0.0, 0.0, 0.0
