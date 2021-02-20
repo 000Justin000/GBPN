@@ -92,7 +92,7 @@ def get_cts(edge_index, y):
     return ctsm, sqrt_deg_inv.view(-1,1) * ctsm * sqrt_deg_inv.view(1,-1)
 
 
-def run(dataset, split, model, num_hidden, device, learning_rate, develop):
+def run(dataset, split, model_name, num_hidden, device, learning_rate, develop):
 
     if dataset == 'Cora':
         data = load_citation('Cora', split=split)
@@ -106,6 +106,8 @@ def run(dataset, split, model, num_hidden, device, learning_rate, develop):
         data = load_coauthor('Physics', split=split)
     elif dataset == 'County_Facebook':
         data = load_county_facebook(split=split)
+    elif dataset == 'Sex':
+        data = load_sexual_interaction(split=split)
     elif dataset == 'Squirrel':
         data = load_wikipedia('Squirrel', split=split)
     elif dataset == 'Chameleon':
@@ -123,24 +125,28 @@ def run(dataset, split, model, num_hidden, device, learning_rate, develop):
     train_mask, val_mask, test_mask = data.train_mask, data.val_mask, data.test_mask
     # edge_index, edge_weight = gcn_norm(edge_index, edge_weight=edge_weight, num_nodes=num_nodes, add_self_loops=False, dtype=x.dtype)
 
-    if model == 'SGC':
-        gnn = SGC(num_features, num_classes)
-    elif model == 'GCN':
-        gnn = GCN(num_features, num_classes, 128, 0.3)
-    elif model == 'GAT':
-        gnn = GAT(num_features, num_classes, 32, 0.6)
-    elif model == 'BPGNN':
-        gnn = BPGNN(num_features, num_classes, 128, num_hidden, 0.3, True)
+    if model_name == 'MLP':
+        model = GMLP(num_features, num_classes, 128, num_hidden, nn.ReLU(), 0.3)
+    elif model_name == 'SGC':
+        model = SGC(num_features, num_classes)
+    elif model_name == 'GCN':
+        model = GCN(num_features, num_classes, 128, 0.3)
+    elif model_name == 'SAGE':
+        model = SAGE(num_features, num_classes, 128, 0.3)
+    elif model_name == 'GAT':
+        model = GAT(num_features, num_classes, 32, 0.6)
+    elif model_name == 'BPGNN':
+        model = BPGNN(num_features, num_classes, 128, num_hidden, 0.3, True)
     else:
-        raise Exception('unexpected model')
-    gnn = gnn.to(device)
+        raise Exception('unexpected model type')
+    model = model.to(device)
 
-    optimizer = torch.optim.AdamW([{'params': gnn.parameters(), 'lr': learning_rate}], weight_decay=2.5e-4)
+    optimizer = torch.optim.AdamW([{'params': model.parameters(), 'lr': learning_rate}], weight_decay=2.5e-4)
 
     def train():
-        gnn.train()
+        model.train()
         optimizer.zero_grad()
-        b = gnn(x, edge_index, edge_weight=edge_weight, rv=rv)
+        b = model(x, edge_index, edge_weight=edge_weight, rv=rv)
         loss = F.nll_loss(b[train_mask], y[train_mask])
         loss.backward()
         optimizer.step()
@@ -149,21 +155,21 @@ def run(dataset, split, model, num_hidden, device, learning_rate, develop):
         return acc(b, y, val_mask)
 
     def evaluation():
-        gnn.eval()
-        if type(gnn) == BPGNN:
+        model.eval()
+        if type(model) == BPGNN:
             sum_conv = SumConv()
             log_e0 = torch.zeros(num_nodes, num_classes).to(device)
-            log_e0[train_mask] = gnn.conv.get_logH()[y[train_mask]]
+            log_e0[train_mask] = model.conv.get_logH()[y[train_mask]]
             subgraph_mask = torch.logical_not(train_mask)
             subgraph_edge_index, subgraph_edge_weight = subgraph(subgraph_mask, edge_index, edge_weight)
             subgraph_edge_index, subgraph_edge_weight, subgraph_rv = process_edge_index(num_nodes, subgraph_edge_index, subgraph_edge_weight)
-            b = gnn(x, subgraph_edge_index, subgraph_edge_weight, rv=subgraph_rv, phi=(subgraph_mask, sum_conv(log_e0, edge_index, edge_weight)[subgraph_mask]))
+            b = model(x, subgraph_edge_index, subgraph_edge_weight, rv=subgraph_rv, phi=(subgraph_mask, sum_conv(log_e0, edge_index, edge_weight)[subgraph_mask]))
             if develop:
                 print('train accuracy: {:5.3f}, val accuracy: {:5.3f}, test accuracy: {:5.3f}'.format(acc(b, y, train_mask), acc(b, y, val_mask), acc(b, y, test_mask)), flush=True)
-                print(gnn.conv.get_logH().exp())
+                print(model.conv.get_logH().exp())
                 print(b.argmax(dim=1).unique(return_counts=True))
         else:
-            b = gnn(x, edge_index, rv=rv)
+            b = model(x, edge_index, rv=rv)
             if develop:
                 print('evaluation, train accuracy: {:5.3f}, val accuracy: {:5.3f}, test accuracy: {:5.3f}'.format(acc(b, y, train_mask), acc(b, y, val_mask), acc(b, y, test_mask)), flush=True)
         return acc(b, y, val_mask), acc(b, y, test_mask)
@@ -181,10 +187,10 @@ def run(dataset, split, model, num_hidden, device, learning_rate, develop):
     return opt_test
 
 
-parser = argparse.ArgumentParser('gnn')
+parser = argparse.ArgumentParser('model')
 parser.add_argument('--dataset', type=str, default='Cora')
 parser.add_argument('--split', metavar='N', type=float, nargs=3, default=None)
-parser.add_argument('--model', type=str, default='BPGNN')
+parser.add_argument('--model_name', type=str, default='BPGNN')
 parser.add_argument('--num_hidden', type=int, default=2)
 parser.add_argument('--device', type=str, default='cpu')
 parser.add_argument('--learning_rate', type=float, default=0.01)
@@ -200,7 +206,7 @@ if not args.develop:
 
 test_acc = []
 for _ in range(100):
-    test_acc.append(run(args.dataset, args.split, args.model, args.num_hidden, args.device, args.learning_rate, args.develop))
+    test_acc.append(run(args.dataset, args.split, args.model_name, args.num_hidden, args.device, args.learning_rate, args.develop))
 
 print(args)
 print('test accuracies: {:7.3f} ± {:7.3f}'.format(np.mean(test_acc)*100, np.std(test_acc)*100))

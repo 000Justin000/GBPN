@@ -6,7 +6,7 @@ import torch.nn.functional as F
 import pandas as pd
 import torch_sparse
 from torch_geometric.nn import MessagePassing
-from torch_geometric.nn import GCNConv, GATConv
+from torch_geometric.nn import GCNConv, SAGEConv, GATConv
 from torch_geometric.nn.conv.gcn_conv import gcn_norm
 from torch_geometric.utils import remove_self_loops, to_undirected, is_undirected, contains_self_loops
 from torch_geometric.data import Data
@@ -16,7 +16,7 @@ from ogb.nodeproppred import PygNodePropPredDataset
 
 class MLP(nn.Module):
 
-    def __init__(self, dim_in, dim_out, dim_hidden=20, num_hidden=0, activation=nn.CELU(), dropout_p=0.0):
+    def __init__(self, dim_in, dim_out, dim_hidden=20, num_hidden=0, activation=nn.ReLU(), dropout_p=0.0):
         super(MLP, self).__init__()
 
         if num_hidden == 0:
@@ -37,6 +37,16 @@ class MLP(nn.Module):
             x = self.activation(m(self.dropout(x)))
 
         return self.linears[-1](self.dropout(x))
+
+
+class GMLP(torch.nn.Module):
+
+    def __init__(self, dim_in, dim_out, dim_hidden=20, num_hidden=0, activation=nn.ReLU(), dropout_p=0.0):
+        super(GMLP, self).__init__()
+        self.mlp = MLP(dim_in, dim_out, dim_hidden, num_hidden, activation, dropout_p)
+
+    def forward(self, x, edge_index, **kwargs):
+        return F.log_softmax(self.mlp(x))
 
 
 class SGConv(MessagePassing):
@@ -73,6 +83,22 @@ class GCN(nn.Module):
         super(GCN, self).__init__()
         self.conv1 = GCNConv(dim_in, dim_hidden, cached=True)
         self.conv2 = GCNConv(dim_hidden, dim_out, cached=True)
+        self.dropout = nn.Dropout(dropout_p)
+
+    def forward(self, x, edge_index, **kwargs):
+        x = self.dropout(x)
+        x = self.conv1(x, edge_index)
+        x = F.relu(x)
+        x = self.dropout(x)
+        x = self.conv2(x, edge_index)
+        return F.log_softmax(x, dim=-1)
+
+
+class SAGE(nn.Module):
+    def __init__(self, dim_in, dim_out, dim_hidden, dropout_p=0.0):
+        super(SAGE, self).__init__()
+        self.conv1 = SAGEConv(dim_in, dim_hidden)
+        self.conv2 = GCNConv(dim_hidden, dim_out)
         self.dropout = nn.Dropout(dropout_p)
 
     def forward(self, x, edge_index, **kwargs):
