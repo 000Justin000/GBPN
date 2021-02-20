@@ -181,7 +181,7 @@ def load_citation(name='Cora', transform=None, split=None):
         data.val_mask = torch.zeros(num_nodes, dtype=bool).scatter_(0, torch.tensor(val_idx), True)
         data.test_mask = torch.zeros(num_nodes, dtype=bool).scatter_(0, torch.tensor(test_idx), True)
 
-    data.edge_index, _, data.rv = process_edge_index(num_nodes, data.edge_index)
+    data.edge_index, data.edge_weight, data.rv = process_edge_index(num_nodes, data.edge_index, data.edge_weight if hasattr(data, 'edge_weight') else None)
 
     return data if (transform is None) else transform(data)
 
@@ -197,7 +197,7 @@ def load_coauthor(name='CS', transform=None, split=[0.3, 0.2, 0.5]):
     data.val_mask = torch.zeros(num_nodes, dtype=bool).scatter_(0, torch.tensor(val_idx), True)
     data.test_mask = torch.zeros(num_nodes, dtype=bool).scatter_(0, torch.tensor(test_idx), True)
 
-    data.edge_index, _, data.rv = process_edge_index(num_nodes, data.edge_index)
+    data.edge_index, data.edge_weight, data.rv = process_edge_index(num_nodes, data.edge_index, data.edge_weight if hasattr(data, 'edge_weight') else None)
 
     return data if (transform is None) else transform(data)
 
@@ -218,7 +218,7 @@ def load_wikipedia(name='Squirrel', transform=None, split=0):
         data.val_mask = torch.zeros(num_nodes, dtype=bool).scatter_(0, torch.tensor(val_idx), True)
         data.test_mask = torch.zeros(num_nodes, dtype=bool).scatter_(0, torch.tensor(test_idx), True)
 
-    data.edge_index, _, data.rv = process_edge_index(num_nodes, data.edge_index)
+    data.edge_index, data.edge_weight, data.rv = process_edge_index(num_nodes, data.edge_index, data.edge_weight if hasattr(data, 'edge_weight') else None)
 
     data.y = data.y.type(torch.LongTensor)
 
@@ -244,7 +244,7 @@ def load_county_facebook(transform=None, split=[0.3, 0.2, 0.5], normalize=True):
     data.val_mask = torch.zeros(num_nodes, dtype=bool).scatter_(0, torch.tensor(val_idx), True)
     data.test_mask = torch.zeros(num_nodes, dtype=bool).scatter_(0, torch.tensor(test_idx), True)
 
-    data.edge_index, data.rv = process_edge_index(num_nodes, data.edge_index)
+    data.edge_index, data.edge_weight, data.rv = process_edge_index(num_nodes, data.edge_index, data.edge_weight if hasattr(data, 'edge_weight') else None)
 
     return data if (transform is None) else transform(data)
 
@@ -266,7 +266,7 @@ def load_ogbn(name='products', transform=None, split=None):
     data.val_mask = torch.zeros(num_nodes, dtype=bool).scatter_(0, torch.tensor(val_idx), True)
     data.test_mask = torch.zeros(num_nodes, dtype=bool).scatter_(0, torch.tensor(test_idx), True)
 
-    data.edge_index, data.rv = process_edge_index(num_nodes, data.edge_index)
+    data.edge_index, data.edge_weight, data.rv = process_edge_index(num_nodes, data.edge_index, data.edge_weight if hasattr(data, 'edge_weight') else None)
 
     return data if (transform is None) else transform(data)
 

@@ -116,13 +116,12 @@ def run(dataset, split, model, num_hidden, device, learning_rate, develop):
         raise Exception('unexpected dataset')
     data = data.to(device)
 
-    edge_index, rv = data.edge_index, data.rv
+    edge_index, edge_weight, rv = data.edge_index, data.edge_weight, data.rv
     x, y = data.x, data.y
     num_nodes, num_features = x.shape
     num_classes = len(torch.unique(y))
     train_mask, val_mask, test_mask = data.train_mask, data.val_mask, data.test_mask
-    # edge_index, edge_weight = gcn_norm(edge_index, num_nodes=num_nodes, add_self_loops=False, dtype=x.dtype)
-    edge_weight = None
+    # edge_index, edge_weight = gcn_norm(edge_index, edge_weight=edge_weight, num_nodes=num_nodes, add_self_loops=False, dtype=x.dtype)
 
     if model == 'SGC':
         gnn = SGC(num_features, num_classes)
