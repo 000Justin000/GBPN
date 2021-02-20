@@ -8,9 +8,9 @@ import torch_sparse
 from torch_geometric.nn import MessagePassing
 from torch_geometric.nn import GCNConv, GATConv
 from torch_geometric.nn.conv.gcn_conv import gcn_norm
-from torch_geometric.utils import remove_self_loops, to_undirected, is_undirected
+from torch_geometric.utils import remove_self_loops, to_undirected, is_undirected, contains_self_loops
 from torch_geometric.data import Data
-from torch_geometric.datasets import Planetoid, Coauthor
+from torch_geometric.datasets import Planetoid, Coauthor, WikipediaNetwork
 from ogb.nodeproppred import PygNodePropPredDataset
 
 
@@ -47,8 +47,8 @@ class SGConv(MessagePassing):
         self.K = K
         self.linear = nn.Linear(dim_in, dim_out)
 
-    def forward(self, x, edge_index, edge_weight=None):
-        edge_index, edge_weight = gcn_norm(edge_index, edge_weight, x.shape[0], False, True, dtype=x.dtype)
+    def forward(self, x, edge_index):
+        edge_index, edge_weight = gcn_norm(edge_index, num_nodes=x.shape[0], add_self_loops=True, dtype=x.dtype)
         x = self.linear(x)
         for k in range(self.K):
             x = self.propagate(edge_index, x=x, edge_weight=edge_weight, size=None)
@@ -152,19 +152,21 @@ def simplex_coordinates_test(m):
     print(torch.mm(x, x.transpose(0,1)))
 
 
-def process_edge_index(num_nodes, edge_index):
+def process_edge_index(num_nodes, edge_index, edge_attr=None):
     def sort_edge(num_nodes, edge_index):
         idx = edge_index[0]*num_nodes+edge_index[1]
         sid, perm = idx.sort()
         assert sid.unique_consecutive().shape == sid.shape
         return edge_index[:,perm], perm
 
-    assert is_undirected(edge_index)
-    edge_index, _ = sort_edge(num_nodes, edge_index)
+    edge_index = to_undirected(remove_self_loops(edge_index)[0])
+    edge_index, od = sort_edge(num_nodes, edge_index)
     _, rv = sort_edge(num_nodes, edge_index.flip(dims=[0]))
+    assert not contains_self_loops(edge_index)
+    assert is_undirected(edge_index)
     assert torch.all(edge_index[:, rv] == edge_index.flip(dims=[0]))
 
-    return edge_index, rv
+    return edge_index, (None if edge_attr is None else edge_attr[...,od]), rv
 
 
 def load_citation(name='Cora', transform=None, split=None):
@@ -172,13 +174,14 @@ def load_citation(name='Cora', transform=None, split=None):
     num_nodes = data.x.shape[0]
 
     if split is not None:
+        assert len(split) == 3
         train_idx, val_idx, test_idx = rand_split(num_nodes, split)
 
         data.train_mask = torch.zeros(num_nodes, dtype=bool).scatter_(0, torch.tensor(train_idx), True)
         data.val_mask = torch.zeros(num_nodes, dtype=bool).scatter_(0, torch.tensor(val_idx), True)
         data.test_mask = torch.zeros(num_nodes, dtype=bool).scatter_(0, torch.tensor(test_idx), True)
 
-    data.edge_index, data.rv = process_edge_index(num_nodes, data.edge_index)
+    data.edge_index, data.edge_weight, data.rv = process_edge_index(num_nodes, data.edge_index, data.edge_weight if hasattr(data, 'edge_weight') else None)
 
     return data if (transform is None) else transform(data)
 
@@ -187,13 +190,37 @@ def load_coauthor(name='CS', transform=None, split=[0.3, 0.2, 0.5]):
     data = Coauthor(root='datasets', name=name)[0]
     num_nodes = data.x.shape[0]
 
+    assert len(split) == 3
     train_idx, val_idx, test_idx = rand_split(num_nodes, split)
 
     data.train_mask = torch.zeros(num_nodes, dtype=bool).scatter_(0, torch.tensor(train_idx), True)
     data.val_mask = torch.zeros(num_nodes, dtype=bool).scatter_(0, torch.tensor(val_idx), True)
     data.test_mask = torch.zeros(num_nodes, dtype=bool).scatter_(0, torch.tensor(test_idx), True)
 
-    data.edge_index, data.rv = process_edge_index(num_nodes, data.edge_index)
+    data.edge_index, data.edge_weight, data.rv = process_edge_index(num_nodes, data.edge_index, data.edge_weight if hasattr(data, 'edge_weight') else None)
+
+    return data if (transform is None) else transform(data)
+
+
+def load_wikipedia(name='Squirrel', transform=None, split=0):
+    data = WikipediaNetwork(root='datasets', name=name)[0]
+    num_nodes = data.x.shape[0]
+
+    if type(split) == int:
+        data.train_mask = data.train_mask[:, split]
+        data.val_mask = data.val_mask[:, split]
+        data.test_mask = data.test_mask[:, split]
+    elif type(split) == list:
+        assert len(split) == 3
+        train_idx, val_idx, test_idx = rand_split(num_nodes, split)
+
+        data.train_mask = torch.zeros(num_nodes, dtype=bool).scatter_(0, torch.tensor(train_idx), True)
+        data.val_mask = torch.zeros(num_nodes, dtype=bool).scatter_(0, torch.tensor(val_idx), True)
+        data.test_mask = torch.zeros(num_nodes, dtype=bool).scatter_(0, torch.tensor(test_idx), True)
+
+    data.edge_index, data.edge_weight, data.rv = process_edge_index(num_nodes, data.edge_index, data.edge_weight if hasattr(data, 'edge_weight') else None)
+
+    data.y = data.y.type(torch.LongTensor)
 
     return data if (transform is None) else transform(data)
 
@@ -206,17 +233,18 @@ def load_county_facebook(transform=None, split=[0.3, 0.2, 0.5], normalize=True):
     if normalize:
         x = (x - x.mean(dim=0)) / x.std(dim=0)
     y = torch.tensor(dat.values[:, 9] < dat.values[:, 10], dtype=torch.int64)
-    edge_index = to_undirected(remove_self_loops(torch.transpose(torch.tensor(adj.values), 0, 1))[0])
+    edge_index = torch.transpose(torch.tensor(adj.values), 0, 1)
 
     data = Data(x=x, y=y, edge_index=edge_index)
     num_nodes = data.x.shape[0]
+    assert len(split) == 3
     train_idx, val_idx, test_idx = rand_split(num_nodes, split)
 
     data.train_mask = torch.zeros(num_nodes, dtype=bool).scatter_(0, torch.tensor(train_idx), True)
     data.val_mask = torch.zeros(num_nodes, dtype=bool).scatter_(0, torch.tensor(val_idx), True)
     data.test_mask = torch.zeros(num_nodes, dtype=bool).scatter_(0, torch.tensor(test_idx), True)
 
-    data.edge_index, data.rv = process_edge_index(num_nodes, data.edge_index)
+    data.edge_index, data.edge_weight, data.rv = process_edge_index(num_nodes, data.edge_index, data.edge_weight if hasattr(data, 'edge_weight') else None)
 
     return data if (transform is None) else transform(data)
 
@@ -226,6 +254,7 @@ def load_ogbn(name='products', transform=None, split=None):
     num_nodes = dataset[0].x.shape[0]
 
     if split is not None:
+        assert len(split) == 3
         train_idx, val_idx, test_idx = rand_split(num_nodes, split)
     else:
         split_idx = dataset.get_idx_split()
@@ -236,9 +265,8 @@ def load_ogbn(name='products', transform=None, split=None):
     data.train_mask = torch.zeros(num_nodes, dtype=bool).scatter_(0, torch.tensor(train_idx), True)
     data.val_mask = torch.zeros(num_nodes, dtype=bool).scatter_(0, torch.tensor(val_idx), True)
     data.test_mask = torch.zeros(num_nodes, dtype=bool).scatter_(0, torch.tensor(test_idx), True)
-    data.edge_index = remove_self_loops(data.edge_index)[0]
 
-    data.edge_index, data.rv = process_edge_index(num_nodes, data.edge_index)
+    data.edge_index, data.edge_weight, data.rv = process_edge_index(num_nodes, data.edge_index, data.edge_weight if hasattr(data, 'edge_weight') else None)
 
     return data if (transform is None) else transform(data)
 
