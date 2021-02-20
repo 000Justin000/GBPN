@@ -1,0 +1,15 @@
+field for dat.csv
+ 0-0  : sex
+ 1-1  : occupational prestige
+ 2-6  : race
+ 7-8  : sexual orientation
+ 9-11 : unemployed
+12-14 : disabled
+15-17 : homeless
+18-20 : retired
+21-23 : is_thief
+24-26 : is_drug_dealer
+27-29 : is_drug_manufacturer
+30-32 : is_pimp
+33-35 : is_john
+36-38 : is_prostitute
