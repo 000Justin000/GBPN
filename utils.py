@@ -249,6 +249,27 @@ def load_county_facebook(transform=None, split=[0.3, 0.2, 0.5], normalize=True):
     return data if (transform is None) else transform(data)
 
 
+def load_sexual_interaction(transform=None, split=[0.3, 0.2, 0.5]):
+    dat = pd.read_csv('datasets/sexual_interaction/dat.csv', header=None)
+    adj = pd.read_csv('datasets/sexual_interaction/adj.csv', header=None)
+
+    y = torch.tensor(dat.values[:, 0], dtype=torch.int64)
+    x = torch.tensor(dat.values[:, 1:], dtype=torch.float32)
+    edge_index = torch.transpose(torch.tensor(adj.values), 0, 1)
+
+    data = Data(x=x, y=y, edge_index=edge_index)
+    num_nodes = data.x.shape[0]
+    assert len(split) == 3
+    train_idx, val_idx, test_idx = rand_split(num_nodes, split)
+
+    data.train_mask = torch.zeros(num_nodes, dtype=bool).scatter_(0, torch.tensor(train_idx), True)
+    data.val_mask = torch.zeros(num_nodes, dtype=bool).scatter_(0, torch.tensor(val_idx), True)
+    data.test_mask = torch.zeros(num_nodes, dtype=bool).scatter_(0, torch.tensor(test_idx), True)
+
+    data.edge_index, data.edge_weight, data.rv = process_edge_index(num_nodes, data.edge_index, data.edge_weight if hasattr(data, 'edge_weight') else None)
+
+    return data if (transform is None) else transform(data)
+
 def load_ogbn(name='products', transform=None, split=None):
     dataset = PygNodePropPredDataset(root='datasets', name='ogbn-{}'.format(name))
     num_nodes = dataset[0].x.shape[0]
