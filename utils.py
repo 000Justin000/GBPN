@@ -49,32 +49,18 @@ class GMLP(torch.nn.Module):
         return F.log_softmax(self.mlp(x))
 
 
-class SGConv(MessagePassing):
-    def __init__(self, dim_in, dim_out, K=1):
-        super(SGConv, self).__init__(aggr='add')
-        self.dim_in = dim_in
-        self.dim_out = dim_out
-        self.K = K
-        self.linear = nn.Linear(dim_in, dim_out)
-
-    def forward(self, x, edge_index):
-        edge_index, edge_weight = gcn_norm(edge_index, num_nodes=x.shape[0], add_self_loops=True, dtype=x.dtype)
-        x = self.linear(x)
-        for k in range(self.K):
-            x = self.propagate(edge_index, x=x, edge_weight=edge_weight, size=None)
-        return x
-
-    def message(self, x_j, edge_weight):
-        return edge_weight.view(-1, 1) * x_j
-
-
 class SGC(torch.nn.Module):
-    def __init__(self, dim_in, dim_out):
+    def __init__(self, dim_in, dim_out, dim_hidden=128, dropout_p=0.0):
         super(SGC, self).__init__()
-        self.conv = SGConv(dim_in, dim_out, K=2)
+        self.conv1 = GCNConv(dim_in, dim_hidden, cached=True)
+        self.conv2 = GCNConv(dim_hidden, dim_out, cached=True)
+        self.dropout = nn.Dropout(dropout_p)
 
     def forward(self, x, edge_index, **kwargs):
-        x = self.conv(x, edge_index)
+        x = self.dropout(x)
+        x = self.conv1(x, edge_index)
+        x = self.dropout(x)
+        x = self.conv2(x, edge_index)
         return F.log_softmax(x, dim=1)
 
 
