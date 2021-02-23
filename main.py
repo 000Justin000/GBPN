@@ -181,7 +181,7 @@ def run(dataset, homo_ratio, split, model_name, num_hidden, device, learning_rat
         return acc(b, y, val_mask), acc(b, y, test_mask)
 
     best_val, opt_val, opt_test = 0.0, 0.0, 0.0
-    for epoch in range(500):
+    for epoch in range(300):
         val = train()
         if best_val < val:
             best_val = val
