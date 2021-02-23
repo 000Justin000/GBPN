@@ -37,7 +37,7 @@ class BPConv(MessagePassing):
     def get_logH(self):
         logT = torch.zeros(self.n_channels, self.n_channels).to(self.param.device)
         rid, cid = torch.tril_indices(self.n_channels, self.n_channels, 0)
-        logT[rid, cid] = F.logsigmoid(self.param * 100.0)
+        logT[rid, cid] = F.logsigmoid(self.param * 10.0)
         logH = (logT + logT.transpose(0,1).triu(1))
         return (logH if self.learn_H else logH.detach().fill_diagonal_(0.0))
 
@@ -217,3 +217,5 @@ for _ in range(10):
 
 print(args)
 print('test accuracies: {:7.3f} ± {:7.3f}'.format(np.mean(test_acc)*100, np.std(test_acc)*100))
+
+print('finished')
