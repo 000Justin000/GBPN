@@ -37,7 +37,7 @@ class BPConv(MessagePassing):
     def get_logH(self):
         logT = torch.zeros(self.n_channels, self.n_channels).to(self.param.device)
         rid, cid = torch.tril_indices(self.n_channels, self.n_channels, 0)
-        logT[rid, cid] = F.logsigmoid(self.param * 10.0)
+        logT[rid, cid] = F.logsigmoid(self.param * 100.0)
         logH = (logT + logT.transpose(0,1).triu(1))
         return (logH if self.learn_H else logH.detach().fill_diagonal_(0.0))
 
@@ -132,13 +132,13 @@ def run(dataset, homo_ratio, split, model_name, num_hidden, device, learning_rat
     if model_name == 'MLP':
         model = GMLP(num_features, num_classes, 128, num_hidden, nn.ReLU(), 0.3)
     elif model_name == 'SGC':
-        model = SGC(num_features, num_classes)
+        model = SGC(num_features, num_classes, 128, 0.3)
     elif model_name == 'GCN':
         model = GCN(num_features, num_classes, 128, 0.3)
     elif model_name == 'SAGE':
         model = SAGE(num_features, num_classes, 128, 0.3)
     elif model_name == 'GAT':
-        model = GAT(num_features, num_classes, 32, 0.6)
+        model = GAT(num_features, num_classes, 8, 0.6)
     elif model_name == 'BPGNN':
         model = BPGNN(num_features, num_classes, 128, num_hidden, 0.3, True)
     else:
