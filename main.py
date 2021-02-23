@@ -92,7 +92,7 @@ def get_cts(edge_index, y):
     return ctsm, sqrt_deg_inv.view(-1,1) * ctsm * sqrt_deg_inv.view(1,-1)
 
 
-def run(dataset, split, model_name, num_hidden, device, learning_rate, develop):
+def run(dataset, homo_ratio, split, model_name, num_hidden, device, learning_rate, develop):
 
     if dataset == 'Cora':
         data = load_citation('Cora', split=split)
@@ -108,6 +108,10 @@ def run(dataset, split, model_name, num_hidden, device, learning_rate, develop):
         data = load_county_facebook(split=split)
     elif dataset == 'Sex':
         data = load_sexual_interaction(split=split)
+    elif dataset == 'Cats_Dogs':
+        data = load_cats_dogs(homo_ratio=homo_ratio, split=split)
+    elif dataset == 'Animals':
+        data = load_animals(homo_ratio=homo_ratio, split=split)
     elif dataset == 'Squirrel':
         data = load_wikipedia('Squirrel', split=split)
     elif dataset == 'Chameleon':
@@ -151,6 +155,8 @@ def run(dataset, split, model_name, num_hidden, device, learning_rate, develop):
         loss.backward()
         optimizer.step()
         if develop:
+            with torch.no_grad():
+                b = model(x, edge_index, edge_weight=edge_weight, rv=rv)
             print('step {:5d}, train accuracy: {:5.3f}, val accuracy: {:5.3f}, test accuracy: {:5.3f}'.format(epoch, acc(b, y, train_mask), acc(b, y, val_mask), acc(b, y, test_mask)), flush=True)
         return acc(b, y, val_mask)
 
@@ -169,13 +175,13 @@ def run(dataset, split, model_name, num_hidden, device, learning_rate, develop):
                 print(model.conv.get_logH().exp())
                 print(b.argmax(dim=1).unique(return_counts=True))
         else:
-            b = model(x, edge_index, rv=rv)
+            b = model(x, edge_index, edge_weight=edge_weight, rv=rv)
             if develop:
                 print('evaluation, train accuracy: {:5.3f}, val accuracy: {:5.3f}, test accuracy: {:5.3f}'.format(acc(b, y, train_mask), acc(b, y, val_mask), acc(b, y, test_mask)), flush=True)
         return acc(b, y, val_mask), acc(b, y, test_mask)
 
     best_val, opt_val, opt_test = 0.0, 0.0, 0.0
-    for epoch in range(300):
+    for epoch in range(500):
         val = train()
         if best_val < val:
             best_val = val
@@ -189,6 +195,7 @@ def run(dataset, split, model_name, num_hidden, device, learning_rate, develop):
 
 parser = argparse.ArgumentParser('model')
 parser.add_argument('--dataset', type=str, default='Cora')
+parser.add_argument('--homo_ratio', type=float, default=0.5)
 parser.add_argument('--split', metavar='N', type=float, nargs=3, default=None)
 parser.add_argument('--model_name', type=str, default='BPGNN')
 parser.add_argument('--num_hidden', type=int, default=2)
@@ -206,7 +213,7 @@ if not args.develop:
 
 test_acc = []
 for _ in range(100):
-    test_acc.append(run(args.dataset, args.split, args.model_name, args.num_hidden, args.device, args.learning_rate, args.develop))
+    test_acc.append(run(args.dataset, args.homo_ratio, args.split, args.model_name, args.num_hidden, args.device, args.learning_rate, args.develop))
 
 print(args)
 print('test accuracies: {:7.3f} ± {:7.3f}'.format(np.mean(test_acc)*100, np.std(test_acc)*100))
