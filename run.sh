@@ -1,6 +1,6 @@
-make run_cora
-make run_citeseer
-make run_pubmed
-make run_coauthor_cs
-make run_coauthor_physics
-make run_county_facebook
+make run_MLP
+make run_SGC
+make run_GCN
+make run_SAGE
+make run_GAT
+make run_BPGNN
