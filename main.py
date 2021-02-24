@@ -67,7 +67,7 @@ class BPGNN(nn.Module):
         self.transform = nn.Sequential(MLP(dim_in, dim_out, dim_hidden, num_hidden, nn.ReLU(), dropout_p), nn.LogSoftmax(dim=-1))
         self.conv = BPConv(dim_out, learn_H)
 
-    def forward(self, x, edge_index, edge_weight=None, rv=None, phi=None):
+    def forward(self, x, edge_index, edge_weight=None, rv=None, phi=None, K=5):
         log_b0 = self.transform(x)
         if phi is not None:
             log_b0[phi[0]] += phi[1]
@@ -78,7 +78,7 @@ class BPGNN(nn.Module):
                 'log_msg_': (-np.log(num_classes)) * torch.ones(edge_index.shape[1], num_classes).to(x.device),
                 'rv': rv}
         log_b = log_b0
-        for _ in range(5):
+        for _ in range(K):
             log_b = self.conv(log_b, edge_index, edge_weight, info)
 
         return log_b
@@ -147,18 +147,18 @@ def run(dataset, homo_ratio, split, model_name, num_hidden, device, learning_rat
 
     optimizer = torch.optim.AdamW([{'params': model.parameters(), 'lr': learning_rate}], weight_decay=2.5e-4)
 
-    def train():
+    def train(K=5):
         model.train()
         optimizer.zero_grad()
-        b = model(x, edge_index, edge_weight=edge_weight, rv=rv)
-        loss = F.nll_loss(b[train_mask], y[train_mask])
+        log_b = model(x, edge_index, edge_weight=edge_weight, rv=rv, K=K)
+        loss = F.nll_loss(log_b[train_mask], y[train_mask])
         loss.backward()
         optimizer.step()
         if develop:
             with torch.no_grad():
-                b = model(x, edge_index, edge_weight=edge_weight, rv=rv)
-            print('step {:5d}, train accuracy: {:5.3f}, val accuracy: {:5.3f}, test accuracy: {:5.3f}'.format(epoch, acc(b, y, train_mask), acc(b, y, val_mask), acc(b, y, test_mask)), flush=True)
-        return acc(b, y, val_mask)
+                log_b = model(x, edge_index, edge_weight=edge_weight, rv=rv)
+            print('step {:5d}, train accuracy: {:5.3f}, val accuracy: {:5.3f}, test accuracy: {:5.3f}'.format(epoch, acc(log_b, y, train_mask), acc(log_b, y, val_mask), acc(log_b, y, test_mask)), flush=True)
+        return acc(log_b, y, val_mask)
 
     def evaluation():
         model.eval()
@@ -169,23 +169,28 @@ def run(dataset, homo_ratio, split, model_name, num_hidden, device, learning_rat
             subgraph_mask = torch.logical_not(train_mask)
             subgraph_edge_index, subgraph_edge_weight = subgraph(subgraph_mask, edge_index, edge_weight)
             subgraph_edge_index, subgraph_edge_weight, subgraph_rv = process_edge_index(num_nodes, subgraph_edge_index, subgraph_edge_weight)
-            b = model(x, subgraph_edge_index, subgraph_edge_weight, rv=subgraph_rv, phi=(subgraph_mask, sum_conv(log_e0, edge_index, edge_weight)[subgraph_mask]))
+            log_b = model(x, subgraph_edge_index, subgraph_edge_weight, rv=subgraph_rv, phi=(subgraph_mask, sum_conv(log_e0, edge_index, edge_weight)[subgraph_mask]))
             if develop:
-                print('train accuracy: {:5.3f}, val accuracy: {:5.3f}, test accuracy: {:5.3f}'.format(acc(b, y, train_mask), acc(b, y, val_mask), acc(b, y, test_mask)), flush=True)
+                print('train accuracy: {:5.3f}, val accuracy: {:5.3f}, test accuracy: {:5.3f}'.format(acc(log_b, y, train_mask), acc(log_b, y, val_mask), acc(log_b, y, test_mask)), flush=True)
                 print(model.conv.get_logH().exp())
-                print(b.argmax(dim=1).unique(return_counts=True))
+                print(log_b.argmax(dim=1).unique(return_counts=True))
         else:
-            b = model(x, edge_index, edge_weight=edge_weight, rv=rv)
+            log_b = model(x, edge_index, edge_weight=edge_weight, rv=rv)
             if develop:
-                print('evaluation, train accuracy: {:5.3f}, val accuracy: {:5.3f}, test accuracy: {:5.3f}'.format(acc(b, y, train_mask), acc(b, y, val_mask), acc(b, y, test_mask)), flush=True)
-        return acc(b, y, val_mask), acc(b, y, test_mask)
+                print('evaluation, train accuracy: {:5.3f}, val accuracy: {:5.3f}, test accuracy: {:5.3f}'.format(acc(log_b, y, train_mask), acc(log_b, y, val_mask), acc(log_b, y, test_mask)), flush=True)
+        return acc(log_b, y, val_mask), acc(log_b, y, test_mask)
 
     best_val, opt_val, opt_test = 0.0, 0.0, 0.0
     for epoch in range(300):
-        val = train()
+        val = train(K=(0 if epoch < 50 else 5))
         if best_val < val:
             best_val = val
             opt_val, opt_test = evaluation()
+            if opt_val < (val - 0.10):
+                model.train()
+                log_b = model(x, edge_index, edge_weight=edge_weight, rv=rv)
+                print('step {:5d}, train accuracy: {:5.3f}, val accuracy: {:5.3f}, test accuracy: {:5.3f}'.format(epoch, acc(log_b, y, train_mask), acc(log_b, y, val_mask), acc(log_b, y, test_mask)), flush=True)
+                evaluation()
 
     if develop:
         print('optimal val accuracy: {:7.5f}, optimal test accuracy: {:7.5f}'.format(opt_val, opt_test))
@@ -204,7 +209,7 @@ parser.add_argument('--learning_rate', type=float, default=0.01)
 parser.add_argument('--develop', type=bool, default=False)
 args = parser.parse_args()
 
-outpath = create_outpath(args.dataset)
+outpath = create_outpath(args.dataset, args.model_name)
 commit = subprocess.check_output("git log --pretty=format:\'%h\' -n 1", shell=True).decode()
 if not args.develop:
     matplotlib.use('agg')

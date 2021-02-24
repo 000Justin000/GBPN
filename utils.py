@@ -408,7 +408,7 @@ def exp_loss(projection, target, reduction='mean'):
     return loss
 
 
-def create_outpath(dataset):
+def create_outpath(dataset, model_name):
     path = os.getcwd()
     pid = os.getpid()
 
@@ -416,7 +416,7 @@ def create_outpath(dataset):
     if not os.path.isdir(wsppath):
         os.mkdir(wsppath)
 
-    outpath = os.path.join(wsppath, 'dataset:'+dataset + '-' + 'pid:'+str(pid))
+    outpath = os.path.join(wsppath, dataset + '-' + model_name + '-' + str(pid))
     assert not os.path.isdir(outpath), 'output directory already exist (process id coincidentally the same), please retry'
     os.mkdir(outpath)
 
