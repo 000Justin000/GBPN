@@ -154,7 +154,7 @@ def run(dataset, homo_ratio, split, model_name, num_hidden, device, learning_rat
         loss = F.nll_loss(log_b[train_mask], y[train_mask])
         loss.backward()
         optimizer.step()
-        if develop:
+        if develop or True:
             with torch.no_grad():
                 log_b = model(x, edge_index, edge_weight=edge_weight, rv=rv)
             print('step {:5d}, train accuracy: {:5.3f}, val accuracy: {:5.3f}, test accuracy: {:5.3f}'.format(epoch, acc(log_b, y, train_mask), acc(log_b, y, val_mask), acc(log_b, y, test_mask)), flush=True)
@@ -170,13 +170,13 @@ def run(dataset, homo_ratio, split, model_name, num_hidden, device, learning_rat
             subgraph_edge_index, subgraph_edge_weight = subgraph(subgraph_mask, edge_index, edge_weight)
             subgraph_edge_index, subgraph_edge_weight, subgraph_rv = process_edge_index(num_nodes, subgraph_edge_index, subgraph_edge_weight)
             log_b = model(x, subgraph_edge_index, subgraph_edge_weight, rv=subgraph_rv, phi=(subgraph_mask, sum_conv(log_e0, edge_index, edge_weight)[subgraph_mask]))
-            if develop:
+            if develop or True:
                 print('train accuracy: {:5.3f}, val accuracy: {:5.3f}, test accuracy: {:5.3f}'.format(acc(log_b, y, train_mask), acc(log_b, y, val_mask), acc(log_b, y, test_mask)), flush=True)
                 print(model.conv.get_logH().exp())
                 print(log_b.argmax(dim=1).unique(return_counts=True))
         else:
             log_b = model(x, edge_index, edge_weight=edge_weight, rv=rv)
-            if develop:
+            if develop or True:
                 print('evaluation, train accuracy: {:5.3f}, val accuracy: {:5.3f}, test accuracy: {:5.3f}'.format(acc(log_b, y, train_mask), acc(log_b, y, val_mask), acc(log_b, y, test_mask)), flush=True)
         return acc(log_b, y, val_mask), acc(log_b, y, test_mask)
 
@@ -192,7 +192,7 @@ def run(dataset, homo_ratio, split, model_name, num_hidden, device, learning_rat
                 print('step {:5d}, train accuracy: {:5.3f}, val accuracy: {:5.3f}, test accuracy: {:5.3f}'.format(epoch, acc(log_b, y, train_mask), acc(log_b, y, val_mask), acc(log_b, y, test_mask)), flush=True)
                 evaluation()
 
-    if develop:
+    if develop or True:
         print('optimal val accuracy: {:7.5f}, optimal test accuracy: {:7.5f}'.format(opt_val, opt_test))
 
     return opt_test
@@ -221,6 +221,4 @@ for _ in range(10):
     test_acc.append(run(args.dataset, args.homo_ratio, args.split, args.model_name, args.num_hidden, args.device, args.learning_rate, args.develop))
 
 print(args)
-print('test accuracies: {:7.3f} ± {:7.3f}'.format(np.mean(test_acc)*100, np.std(test_acc)*100))
-
-print('finished')
+print('overall test accuracies: {:7.3f} ± {:7.3f}'.format(np.mean(test_acc)*100, np.std(test_acc)*100))
