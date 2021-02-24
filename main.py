@@ -130,17 +130,17 @@ def run(dataset, homo_ratio, split, model_name, num_hidden, device, learning_rat
     # edge_index, edge_weight = gcn_norm(edge_index, edge_weight=edge_weight, num_nodes=num_nodes, add_self_loops=False, dtype=x.dtype)
 
     if model_name == 'MLP':
-        model = GMLP(num_features, num_classes, dim_hidden=128, num_hidden=num_hidden, activation=nn.LeakyReLU(), dropout_p=0.3)
+        model = GMLP(num_features, num_classes, dim_hidden=256, num_hidden=num_hidden, activation=nn.LeakyReLU(), dropout_p=0.3)
     elif model_name == 'SGC':
-        model = SGC(num_features, num_classes, dim_hidden=128, activation=nn.LeakyReLU(), dropout_p=0.3)
+        model = SGC(num_features, num_classes, dim_hidden=256, dropout_p=0.3)
     elif model_name == 'GCN':
-        model = GCN(num_features, num_classes, dim_hidden=128, activation=nn.LeakyReLU(), dropout_p=0.3)
+        model = GCN(num_features, num_classes, dim_hidden=256, activation=nn.LeakyReLU(), dropout_p=0.3)
     elif model_name == 'SAGE':
-        model = SAGE(num_features, num_classes, dim_hidden=128, activation=nn.LeakyReLU(), dropout_p=0.3)
+        model = SAGE(num_features, num_classes, dim_hidden=256, activation=nn.LeakyReLU(), dropout_p=0.3)
     elif model_name == 'GAT':
-        model = GAT(num_features, num_classes, dim_hidden=8, activation=nn.ELU(), dropout_p=0.6)
+        model = GAT(num_features, num_classes, dim_hidden=16, activation=nn.ELU(), dropout_p=0.6)
     elif model_name == 'BPGNN':
-        model = BPGNN(num_features, num_classes, dim_hidden=128, num_hidden=num_hidden, activation=nn.LeakyReLU(), dropout_p=0.3, learn_H=learn_H)
+        model = BPGNN(num_features, num_classes, dim_hidden=256, num_hidden=num_hidden, activation=nn.LeakyReLU(), dropout_p=0.3, learn_H=learn_H)
     else:
         raise Exception('unexpected model type')
     model = model.to(device)
