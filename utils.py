@@ -65,49 +65,52 @@ class SGC(torch.nn.Module):
 
 
 class GCN(nn.Module):
-    def __init__(self, dim_in, dim_out, dim_hidden=128, dropout_p=0.0):
+    def __init__(self, dim_in, dim_out, dim_hidden=128, activation=nn.ReLU(), dropout_p=0.0):
         super(GCN, self).__init__()
         self.conv1 = GCNConv(dim_in, dim_hidden, cached=True)
         self.conv2 = GCNConv(dim_hidden, dim_out, cached=True)
+        self.activation = activation
         self.dropout = nn.Dropout(dropout_p)
 
     def forward(self, x, edge_index, **kwargs):
         x = self.dropout(x)
         x = self.conv1(x, edge_index)
-        x = F.relu(x)
+        x = self.activation(x)
         x = self.dropout(x)
         x = self.conv2(x, edge_index)
         return F.log_softmax(x, dim=-1)
 
 
 class SAGE(nn.Module):
-    def __init__(self, dim_in, dim_out, dim_hidden, dropout_p=0.0):
+    def __init__(self, dim_in, dim_out, dim_hidden=128, activation=nn.ReLU(), dropout_p=0.0):
         super(SAGE, self).__init__()
         self.conv1 = SAGEConv(dim_in, dim_hidden)
-        self.conv2 = GCNConv(dim_hidden, dim_out)
+        self.conv2 = SAGEConv(dim_hidden, dim_out)
+        self.activation = activation
         self.dropout = nn.Dropout(dropout_p)
 
     def forward(self, x, edge_index, **kwargs):
         x = self.dropout(x)
         x = self.conv1(x, edge_index)
-        x = F.relu(x)
+        x = self.activation(x)
         x = self.dropout(x)
         x = self.conv2(x, edge_index)
         return F.log_softmax(x, dim=-1)
 
 
 class GAT(nn.Module):
-    def __init__(self, dim_in, dim_out, dim_hidden=128, dropout_p=0.0, num_heads=8):
+    def __init__(self, dim_in, dim_out, dim_hidden=128, activation=nn.ELU(), dropout_p=0.0, num_heads=8):
         super(GAT, self).__init__()
         self.conv1 = GATConv(dim_in, dim_hidden, heads=num_heads, dropout=dropout_p)
         # On the Pubmed dataset, use heads=8 in conv2.
         self.conv2 = GATConv(dim_hidden*num_heads, dim_out, heads=num_heads, concat=False, dropout=dropout_p)
+        self.activation = activation
         self.dropout = nn.Dropout(dropout_p)
 
     def forward(self, x, edge_index, **kwargs):
         x = self.dropout(x)
         x = self.conv1(x, edge_index)
-        x = F.elu(x)
+        x = self.activation(x)
         x = self.dropout(x)
         x = self.conv2(x, edge_index)
         return F.log_softmax(x, dim=-1)
