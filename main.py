@@ -202,7 +202,7 @@ parser.add_argument('--num_hidden', type=int, default=2)
 parser.add_argument('--device', type=str, default='cpu')
 parser.add_argument('--learning_rate', type=float, default=0.01)
 parser.add_argument('--train_BP', type=bool, default=False)
-parser.add_argument('--learn_H', type=float, default=False)
+parser.add_argument('--learn_H', type=bool, default=False)
 parser.add_argument('--develop', type=bool, default=False)
 args = parser.parse_args()
 
@@ -215,7 +215,7 @@ if not args.develop:
 
 test_acc = []
 for _ in range(30):
-    test_acc.append(run(args.dataset, args.homo_ratio, args.split, args.model_name, args.num_hidden, args.device, args.learning_rate, args.develop))
+    test_acc.append(run(args.dataset, args.homo_ratio, args.split, args.model_name, args.num_hidden, args.device, args.learning_rate, args.train_BP, args.learn_H, args.develop))
 
 print(args)
 print('overall test accuracies: {:7.3f} ± {:7.3f}'.format(np.mean(test_acc)*100, np.std(test_acc)*100))
