@@ -46,7 +46,7 @@ class GMLP(torch.nn.Module):
         self.mlp = MLP(dim_in, dim_out, dim_hidden, num_hidden, activation, dropout_p)
 
     def forward(self, x, edge_index, **kwargs):
-        return F.log_softmax(self.mlp(x))
+        return F.log_softmax(self.mlp(x), dim=-1)
 
 
 class SGC(torch.nn.Module):
@@ -61,7 +61,7 @@ class SGC(torch.nn.Module):
         x = self.conv1(x, edge_index)
         x = self.dropout(x)
         x = self.conv2(x, edge_index)
-        return F.log_softmax(x, dim=1)
+        return F.log_softmax(x, dim=-1)
 
 
 class GCN(nn.Module):
