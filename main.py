@@ -92,7 +92,7 @@ def get_cts(edge_index, y):
     return ctsm, sqrt_deg_inv.view(-1,1) * ctsm * sqrt_deg_inv.view(1,-1)
 
 
-def run(dataset, homo_ratio, split, model_name, num_hidden, device, learning_rate, train_BP, learn_H, develop):
+def run(dataset, homo_ratio, split, model_name, num_hidden, device, learning_rate, train_BP, learn_H, eval_C, develop):
 
     if dataset == 'Cora':
         data = load_citation('Cora', split=split)
@@ -163,6 +163,9 @@ def run(dataset, homo_ratio, split, model_name, num_hidden, device, learning_rat
     def evaluation():
         model.eval()
         if type(model) == BPGNN:
+            print(model.conv.get_logH().exp())
+
+        if type(model) == BPGNN and eval_C:
             sum_conv = SumConv()
             log_e0 = torch.zeros(num_nodes, num_classes).to(device)
             log_e0[train_mask] = model.conv.get_logH()[y[train_mask]]
@@ -171,9 +174,7 @@ def run(dataset, homo_ratio, split, model_name, num_hidden, device, learning_rat
             subgraph_edge_index, subgraph_edge_weight, subgraph_rv = process_edge_index(num_nodes, subgraph_edge_index, subgraph_edge_weight)
             log_b = model(x, subgraph_edge_index, subgraph_edge_weight, rv=subgraph_rv, phi=(subgraph_mask, sum_conv(log_e0, edge_index, edge_weight)[subgraph_mask]))
             if develop or True:
-                print('train accuracy: {:5.3f}, val accuracy: {:5.3f}, test accuracy: {:5.3f}'.format(acc(log_b, y, train_mask), acc(log_b, y, val_mask), acc(log_b, y, test_mask)), flush=True)
-                print(model.conv.get_logH().exp())
-                print(log_b.argmax(dim=1).unique(return_counts=True))
+                print('evaluation, train accuracy: {:5.3f}, val accuracy: {:5.3f}, test accuracy: {:5.3f}'.format(acc(log_b, y, train_mask), acc(log_b, y, val_mask), acc(log_b, y, test_mask)), flush=True)
         else:
             log_b = model(x, edge_index, edge_weight=edge_weight, rv=rv)
             if develop or True:
@@ -203,6 +204,7 @@ parser.add_argument('--device', type=str, default='cpu')
 parser.add_argument('--learning_rate', type=float, default=0.01)
 parser.add_argument('--train_BP', type=bool, default=False)
 parser.add_argument('--learn_H', type=bool, default=False)
+parser.add_argument('--eval_C', type=bool, default=False)
 parser.add_argument('--develop', type=bool, default=False)
 args = parser.parse_args()
 
@@ -215,7 +217,7 @@ if not args.develop:
 
 test_acc = []
 for _ in range(30):
-    test_acc.append(run(args.dataset, args.homo_ratio, args.split, args.model_name, args.num_hidden, args.device, args.learning_rate, args.train_BP, args.learn_H, args.develop))
+    test_acc.append(run(args.dataset, args.homo_ratio, args.split, args.model_name, args.num_hidden, args.device, args.learning_rate, args.train_BP, args.learn_H, args.eval_C, args.develop))
 
 print(args)
 print('overall test accuracies: {:7.3f} ± {:7.3f}'.format(np.mean(test_acc)*100, np.std(test_acc)*100))
