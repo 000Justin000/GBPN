@@ -154,7 +154,7 @@ def run(dataset, homo_ratio, split, model_name, num_hidden, device, learning_rat
         loss = F.nll_loss(log_b[train_mask], y[train_mask])
         loss.backward()
         optimizer.step()
-        if develop or True:
+        if develop:
             with torch.no_grad():
                 log_b = model(x, edge_index, edge_weight=edge_weight, rv=rv)
             print('step {:5d}, train accuracy: {:5.3f}, val accuracy: {:5.3f}, test accuracy: {:5.3f}'.format(epoch, acc(log_b, y, train_mask), acc(log_b, y, val_mask), acc(log_b, y, test_mask)), flush=True)
@@ -173,11 +173,11 @@ def run(dataset, homo_ratio, split, model_name, num_hidden, device, learning_rat
             subgraph_edge_index, subgraph_edge_weight = subgraph(subgraph_mask, edge_index, edge_weight)
             subgraph_edge_index, subgraph_edge_weight, subgraph_rv = process_edge_index(num_nodes, subgraph_edge_index, subgraph_edge_weight)
             log_b = model(x, subgraph_edge_index, subgraph_edge_weight, rv=subgraph_rv, phi=(subgraph_mask, sum_conv(log_e0, edge_index, edge_weight)[subgraph_mask]))
-            if develop or True:
+            if develop:
                 print('evaluation, train accuracy: {:5.3f}, val accuracy: {:5.3f}, test accuracy: {:5.3f}'.format(acc(log_b, y, train_mask), acc(log_b, y, val_mask), acc(log_b, y, test_mask)), flush=True)
         else:
             log_b = model(x, edge_index, edge_weight=edge_weight, rv=rv)
-            if develop or True:
+            if develop:
                 print('evaluation, train accuracy: {:5.3f}, val accuracy: {:5.3f}, test accuracy: {:5.3f}'.format(acc(log_b, y, train_mask), acc(log_b, y, val_mask), acc(log_b, y, test_mask)), flush=True)
         return acc(log_b, y, val_mask), acc(log_b, y, test_mask)
 
@@ -188,7 +188,7 @@ def run(dataset, homo_ratio, split, model_name, num_hidden, device, learning_rat
             best_val = val
             opt_val, opt_test = evaluation()
 
-    if develop or True:
+    if develop:
         print('optimal val accuracy: {:7.5f}, optimal test accuracy: {:7.5f}'.format(opt_val, opt_test))
 
     return opt_test
