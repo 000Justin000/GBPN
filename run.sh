@@ -1,4 +1,4 @@
-make run_Animals
+# make run_Animals
 make run_SGC
 make run_GCN
 make run_SAGE

@@ -162,7 +162,7 @@ def run(dataset, homo_ratio, split, model_name, num_hidden, device, learning_rat
 
     def evaluation():
         model.eval()
-        if type(model) == BPGNN:
+        if type(model) == BPGNN and develop:
             print(model.conv.get_logH().exp())
 
         if type(model) == BPGNN and eval_C:
