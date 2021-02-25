@@ -26,9 +26,9 @@ class SumConv(MessagePassing):
         return edge_weight.view(-1,1) * x_j
 
 
-class SPConv(MessagePassing):
+class BPConv(MessagePassing):
     def __init__(self, n_channels, learn_H=False):
-        super(SPConv, self).__init__(aggr='add')
+        super(BPConv, self).__init__(aggr='add')
         self.learn_H = learn_H
         dim_param = n_channels*(n_channels+1)//2
         self.param = nn.Parameter(torch.zeros(dim_param))
@@ -61,11 +61,11 @@ class SPConv(MessagePassing):
         return log_b
 
 
-class SPGNN(nn.Module):
+class BPGNN(nn.Module):
     def __init__(self, dim_in, dim_out, dim_hidden=32, num_hidden=0, activation=nn.ReLU(), dropout_p=0.0, learn_H=False):
-        super(SPGNN, self).__init__()
+        super(BPGNN, self).__init__()
         self.transform = nn.Sequential(MLP(dim_in, dim_out, dim_hidden, num_hidden, activation, dropout_p), nn.LogSoftmax(dim=-1))
-        self.conv = SPConv(dim_out, learn_H)
+        self.conv = BPConv(dim_out, learn_H)
 
     def forward(self, x, edge_index, edge_weight=None, rv=None, phi=None, K=5):
         log_b0 = self.transform(x)
@@ -92,7 +92,7 @@ def get_cts(edge_index, y):
     return ctsm, sqrt_deg_inv.view(-1,1) * ctsm * sqrt_deg_inv.view(1,-1)
 
 
-def run(dataset, homo_ratio, split, model_name, num_hidden, device, learning_rate, train_SP, learn_H, eval_C, develop):
+def run(dataset, homo_ratio, split, model_name, num_hidden, device, learning_rate, train_BP, learn_H, eval_C, develop):
 
     if dataset == 'Cora':
         data = load_citation('Cora', split=split)
@@ -139,8 +139,8 @@ def run(dataset, homo_ratio, split, model_name, num_hidden, device, learning_rat
         model = SAGE(num_features, num_classes, dim_hidden=128, activation=nn.LeakyReLU(), dropout_p=0.3)
     elif model_name == 'GAT':
         model = GAT(num_features, num_classes, dim_hidden=16, activation=nn.ELU(), dropout_p=0.6)
-    elif model_name == 'SPGNN':
-        model = SPGNN(num_features, num_classes, dim_hidden=128, num_hidden=num_hidden, activation=nn.LeakyReLU(), dropout_p=0.3, learn_H=learn_H)
+    elif model_name == 'BPGNN':
+        model = BPGNN(num_features, num_classes, dim_hidden=128, num_hidden=num_hidden, activation=nn.LeakyReLU(), dropout_p=0.3, learn_H=learn_H)
     else:
         raise Exception('unexpected model type')
     model = model.to(device)
@@ -162,10 +162,10 @@ def run(dataset, homo_ratio, split, model_name, num_hidden, device, learning_rat
 
     def evaluation():
         model.eval()
-        if type(model) == SPGNN:
+        if type(model) == BPGNN:
             print(model.conv.get_logH().exp())
 
-        if type(model) == SPGNN and eval_C:
+        if type(model) == BPGNN and eval_C:
             sum_conv = SumConv()
             log_e0 = torch.zeros(num_nodes, num_classes).to(device)
             log_e0[train_mask] = model.conv.get_logH()[y[train_mask]]
@@ -183,7 +183,7 @@ def run(dataset, homo_ratio, split, model_name, num_hidden, device, learning_rat
 
     best_val, opt_val, opt_test = 0.0, 0.0, 0.0
     for epoch in range(300):
-        val = train(K=(np.random.choice([3,4,5,6,7]) if train_SP else 0))
+        val = train(K=(np.random.choice([3,4,5,6,7]) if train_BP else 0))
         if (best_val < val) or (opt_val < val):
             best_val = val
             opt_val, opt_test = evaluation()
@@ -198,11 +198,11 @@ parser = argparse.ArgumentParser('model')
 parser.add_argument('--dataset', type=str, default='Cora')
 parser.add_argument('--homo_ratio', type=float, default=0.5)
 parser.add_argument('--split', metavar='N', type=float, nargs=3, default=None)
-parser.add_argument('--model_name', type=str, default='SPGNN')
+parser.add_argument('--model_name', type=str, default='BPGNN')
 parser.add_argument('--num_hidden', type=int, default=2)
 parser.add_argument('--device', type=str, default='cpu')
 parser.add_argument('--learning_rate', type=float, default=0.01)
-parser.add_argument('--train_SP', type=bool, default=False)
+parser.add_argument('--train_BP', type=bool, default=False)
 parser.add_argument('--learn_H', type=bool, default=False)
 parser.add_argument('--eval_C', type=bool, default=False)
 parser.add_argument('--develop', type=bool, default=False)
@@ -217,7 +217,7 @@ if not args.develop:
 
 test_acc = []
 for _ in range(30):
-    test_acc.append(run(args.dataset, args.homo_ratio, args.split, args.model_name, args.num_hidden, args.device, args.learning_rate, args.train_SP, args.learn_H, args.eval_C, args.develop))
+    test_acc.append(run(args.dataset, args.homo_ratio, args.split, args.model_name, args.num_hidden, args.device, args.learning_rate, args.train_BP, args.learn_H, args.eval_C, args.develop))
 
 print(args)
 print('overall test accuracies: {:7.3f} ± {:7.3f}'.format(np.mean(test_acc)*100, np.std(test_acc)*100))
