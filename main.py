@@ -138,7 +138,7 @@ def run(dataset, homo_ratio, split, model_name, num_hidden, device, learning_rat
     elif model_name == 'SAGE':
         model = SAGE(num_features, num_classes, dim_hidden=128, activation=nn.LeakyReLU(), dropout_p=0.3)
     elif model_name == 'GAT':
-        model = GAT(num_features, num_classes, dim_hidden=16, activation=nn.ELU(), dropout_p=0.6)
+        model = GAT(num_features, num_classes, dim_hidden=8, activation=nn.ELU(), dropout_p=0.6)
     elif model_name == 'BPGNN':
         model = BPGNN(num_features, num_classes, dim_hidden=128, num_hidden=num_hidden, activation=nn.LeakyReLU(), dropout_p=0.3, learn_H=learn_H)
     else:
