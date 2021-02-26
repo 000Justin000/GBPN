@@ -177,8 +177,8 @@ def process_edge_index(num_nodes, edge_index, edge_attr=None):
     edge_index = to_undirected(remove_self_loops(edge_index)[0])
     edge_index, od = sort_edge(num_nodes, edge_index)
     _, rv = sort_edge(num_nodes, edge_index.flip(dims=[0]))
-    assert not contains_self_loops(edge_index)
-    assert is_undirected(edge_index)
+    # assert not contains_self_loops(edge_index)
+    # assert is_undirected(edge_index)
     assert torch.all(edge_index[:, rv] == edge_index.flip(dims=[0]))
 
     return edge_index, (None if edge_attr is None else edge_attr[...,od]), rv
@@ -419,7 +419,7 @@ def create_outpath(dataset, model_name):
     if not os.path.isdir(wsppath):
         os.mkdir(wsppath)
 
-    outpath = os.path.join(wsppath, dataset + '-' + model_name + '-' + str(pid))
+    outpath = os.path.join(wsppath, model_name + '-' + dataset + '-' + str(pid))
     assert not os.path.isdir(outpath), 'output directory already exist (process id coincidentally the same), please retry'
     os.mkdir(outpath)
 

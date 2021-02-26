@@ -70,7 +70,7 @@ class BPGNN(nn.Module):
     def forward(self, x, edge_index, edge_weight=None, rv=None, phi=None, K=5):
         log_b0 = self.transform(x)
         if phi is not None:
-            log_b0[phi[0]] += phi[1]
+            log_b0 += phi
         if edge_weight is None:
             edge_weight = torch.ones(edge_index.shape[1]).to(x.device)
         num_classes = log_b0.shape[-1]
@@ -167,12 +167,15 @@ def run(dataset, homo_ratio, split, model_name, num_hidden, device, learning_rat
 
         if type(model) == BPGNN and eval_C:
             sum_conv = SumConv()
-            log_e0 = torch.zeros(num_nodes, num_classes).to(device)
-            log_e0[train_mask] = model.conv.get_logH()[y[train_mask]]
             subgraph_mask = torch.logical_not(train_mask)
-            subgraph_edge_index, subgraph_edge_weight = subgraph(subgraph_mask, edge_index, edge_weight)
+            log_c = torch.zeros(num_nodes, num_classes).to(device)
+            log_c[train_mask] = model.conv.get_logH()[y[train_mask]]
+            subgraph_phi = sum_conv(log_c, edge_index, edge_weight)[subgraph_mask]
+            subgraph_edge_index, subgraph_edge_weight = subgraph(subgraph_mask, edge_index, edge_weight, relabel_nodes=True)
             subgraph_edge_index, subgraph_edge_weight, subgraph_rv = process_edge_index(num_nodes, subgraph_edge_index, subgraph_edge_weight)
-            log_b = model(x, subgraph_edge_index, subgraph_edge_weight, rv=subgraph_rv, phi=(subgraph_mask, sum_conv(log_e0, edge_index, edge_weight)[subgraph_mask]))
+            log_b = torch.zeros(num_nodes, num_classes).to(device)
+            log_b[train_mask] = F.one_hot(y[train_mask], num_classes).float().to(device)
+            log_b[subgraph_mask] = model(x[subgraph_mask], subgraph_edge_index, subgraph_edge_weight, rv=subgraph_rv, phi=subgraph_phi)
             if develop:
                 print('evaluation, train accuracy: {:5.3f}, val accuracy: {:5.3f}, test accuracy: {:5.3f}'.format(acc(log_b, y, train_mask), acc(log_b, y, val_mask), acc(log_b, y, test_mask)), flush=True)
         else:
@@ -202,10 +205,11 @@ parser.add_argument('--model_name', type=str, default='BPGNN')
 parser.add_argument('--num_hidden', type=int, default=2)
 parser.add_argument('--device', type=str, default='cpu')
 parser.add_argument('--learning_rate', type=float, default=0.01)
-parser.add_argument('--train_BP', type=bool, default=False)
-parser.add_argument('--learn_H', type=bool, default=False)
-parser.add_argument('--eval_C', type=bool, default=False)
-parser.add_argument('--develop', type=bool, default=False)
+parser.add_argument('--train_BP', action='store_true')
+parser.add_argument('--learn_H', action='store_true')
+parser.add_argument('--eval_C', action='store_true')
+parser.add_argument('--develop', action='store_true')
+parser.set_defaults(train_BP=False, learn_H=False, eval_C=False, develop=False)
 args = parser.parse_args()
 
 outpath = create_outpath(args.dataset, args.model_name)
