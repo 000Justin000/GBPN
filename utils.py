@@ -1,14 +1,16 @@
 import os
+import math
 import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import pandas as pd
 import torch_sparse
+from torch_sparse import SparseTensor
 from torch_geometric.nn import MessagePassing
 from torch_geometric.nn import GCNConv, SAGEConv, GATConv
 from torch_geometric.nn.conv.gcn_conv import gcn_norm
-from torch_geometric.utils import remove_self_loops, to_undirected, is_undirected, contains_self_loops, stochastic_blockmodel_graph
+from torch_geometric.utils import degree, subgraph, remove_self_loops, to_undirected, is_undirected, contains_self_loops, stochastic_blockmodel_graph
 from torch_geometric.data import Data
 from torch_geometric.datasets import Planetoid, Coauthor, WikipediaNetwork
 from ogb.nodeproppred import PygNodePropPredDataset
@@ -419,8 +421,51 @@ def create_outpath(dataset, model_name):
     if not os.path.isdir(wsppath):
         os.mkdir(wsppath)
 
-    outpath = os.path.join(wsppath, model_name + '-' + dataset + '-' + str(pid))
+    outpath = os.path.join(wsppath, model_name + '-' + dataset + '-' + '{:05d}'.format(pid))
     assert not os.path.isdir(outpath), 'output directory already exist (process id coincidentally the same), please retry'
     os.mkdir(outpath)
 
     return outpath
+
+
+class SubgraphSampler:
+
+    def __init__(self, num_nodes, edge_index, edge_weight=None):
+        self.device = edge_index.device
+        self.num_nodes = num_nodes
+        self.edge_index = edge_index.to('cpu')
+        self.edge_weight = None if (edge_weight is None) else edge_weight.to('cpu')
+        self.adj_t = SparseTensor(row=edge_index[0], col=edge_index[1], sparse_sizes=(num_nodes, num_nodes)).t().to('cpu')
+        self.deg = degree(edge_index[1], num_nodes).to('cpu')
+    
+    def get_generator(self, mask, batch_size, num_hops, size):
+        idx = mask.nonzero(as_tuple=True)[0].to('cpu')
+        n_batch = math.ceil(idx.shape[0] / batch_size)
+
+        def generator():
+            for batch_nodes in idx[torch.randperm(idx.shape[0])].chunk(n_batch):
+                batch_size = batch_nodes.shape[0]
+
+                # create subgraph from neighborhood
+                subgraph_nodes = batch_nodes
+                for _ in range(num_hops):
+                    _, subgraph_nodes = self.adj_t.sample_adj(subgraph_nodes, size, replace=False)
+                subgraph_size = subgraph_nodes.shape[0]
+
+                assert torch.all(subgraph_nodes[:batch_size] == batch_nodes)
+                subgraph_edge_index, subgraph_edge_weight = subgraph(subgraph_nodes, self.edge_index, self.edge_weight, relabel_nodes=True)
+                subgraph_edge_index, subgraph_edge_weight, subgraph_rv = process_edge_index(subgraph_nodes.shape[0], subgraph_edge_index, subgraph_edge_weight)
+
+                subgraph_deg0 = self.deg[subgraph_nodes]
+
+                yield batch_size, batch_nodes.to(self.device), subgraph_size, subgraph_nodes.to(self.device), \
+                      subgraph_edge_index.to(self.device), None if (subgraph_edge_weight is None) else subgraph_edge_weight.to(self.device), subgraph_rv.to(self.device), subgraph_deg0.to(self.device)
+
+        return generator()
+
+
+def get_scaling(deg0, deg1):
+    assert deg0.shape == deg1.shape
+    scaling = torch.ones(deg0.shape[0]).to(deg0.device)
+    scaling[deg1 != 0] = (deg0 / deg1)[deg1 != 0]
+    return scaling

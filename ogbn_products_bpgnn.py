@@ -1,4 +1,5 @@
 import sys
+import math
 import subprocess
 import argparse
 import torch.nn as nn
@@ -8,7 +9,7 @@ from torch_geometric.data import NeighborSampler
 from torch_geometric.nn import GCNConv
 from torch_geometric.transforms import ToSparseTensor
 from torch_geometric.nn import MessagePassing
-from torch_geometric.utils import sort_edge_index, is_undirected, subgraph
+from torch_geometric.utils import degree, sort_edge_index, is_undirected, subgraph, k_hop_subgraph
 from utils import *
 import matplotlib
 import matplotlib.pyplot as plt
@@ -24,14 +25,14 @@ class SumConv(MessagePassing):
         return self.propagate(edge_index, x=x, edge_weight=edge_weight)
 
     def message(self, x_j, edge_weight):
-        return edge_weight.view(-1,1) * x_j
+        return edge_weight.view(-1, 1) * x_j
 
 
 class BPConv(MessagePassing):
     def __init__(self, n_channels, learn_H=False):
         super(BPConv, self).__init__(aggr='add')
         self.learn_H = learn_H
-        dim_param = n_channels*(n_channels+1)//2
+        dim_param = n_channels * (n_channels + 1) // 2
         self.param = nn.Parameter(torch.zeros(dim_param))
         self.n_channels = n_channels
 
@@ -39,7 +40,7 @@ class BPConv(MessagePassing):
         logT = torch.zeros(self.n_channels, self.n_channels).to(self.param.device)
         rid, cid = torch.tril_indices(self.n_channels, self.n_channels, 0)
         logT[rid, cid] = F.logsigmoid(self.param * 10.0)
-        logH = (logT + logT.transpose(0,1).triu(1))
+        logH = (logT + logT.transpose(0, 1).triu(1))
         return (logH if self.learn_H else logH.detach().fill_diagonal_(0.0))
 
     def forward(self, x, edge_index, edge_weight, info):
@@ -56,8 +57,8 @@ class BPConv(MessagePassing):
         info['log_msg_'] = log_msg
         return log_msg
 
-    def update(self, inputs, info):
-        log_b_raw = inputs + info['log_b0']
+    def update(self, agg_log_msg, info):
+        log_b_raw = info['log_b0'] + agg_log_msg + (info['scaling']-1.0).unsqueeze(-1) * agg_log_msg.detach()
         log_b = log_normalize(log_b_raw)
         return log_b
 
@@ -68,33 +69,36 @@ class BPGNN(nn.Module):
         self.transform = nn.Sequential(MLP(dim_in, dim_out, dim_hidden, num_hidden, activation, dropout_p), nn.LogSoftmax(dim=-1))
         self.conv = BPConv(dim_out, learn_H)
 
-    def forward(self, x, edge_index, edge_weight=None, rv=None, phi=None, K=5):
+    def forward(self, x, edge_index, edge_weight=None, rv=None, phi=None, scaling=None, K=5):
         log_b0 = self.transform(x)
-        if phi is not None:
-            log_b0 += phi
         if edge_weight is None:
             edge_weight = torch.ones(edge_index.shape[1]).to(x.device)
+        if rv is None:
+            edge_index, edge_weight, rv = process_edge_index(x.shape[0], edge_index, edge_weight)
+        if phi is not None:
+            log_b0 += phi
+        if scaling is None:
+            scaling = torch.ones(x.shape[0]).to(x.device)
         num_classes = log_b0.shape[-1]
         info = {'log_b0': log_b0,
                 'log_msg_': (-np.log(num_classes)) * torch.ones(edge_index.shape[1], num_classes).to(x.device),
-                'rv': rv}
+                'rv': rv,
+                'scaling': scaling}
         log_b = log_b0
         for _ in range(K):
             log_b = self.conv(log_b, edge_index, edge_weight, info)
-
         return log_b
 
 
 def get_cts(edge_index, y):
     idx, cts = torch.stack((y[edge_index[0]], y[edge_index[1]]), dim=0).unique(dim=1, return_counts=True)
-    ctsm = torch.zeros(y.max()+1, y.max()+1, device=y.device)
+    ctsm = torch.zeros(y.max() + 1, y.max() + 1, device=y.device)
     ctsm[idx[0], idx[1]] = cts.float()
-    sqrt_deg_inv = ctsm.sum(dim=1)**-0.5
-    return ctsm, sqrt_deg_inv.view(-1,1) * ctsm * sqrt_deg_inv.view(1,-1)
+    sqrt_deg_inv = ctsm.sum(dim=1) ** -0.5
+    return ctsm, sqrt_deg_inv.view(-1, 1) * ctsm * sqrt_deg_inv.view(1, -1)
 
 
 def run(dataset, homo_ratio, split, model_name, num_hidden, device, learning_rate, train_BP, learn_H, eval_C, develop):
-
     if dataset == 'Cora':
         data = load_citation('Cora', split=split)
     elif dataset == 'CiteSeer':
@@ -122,12 +126,14 @@ def run(dataset, homo_ratio, split, model_name, num_hidden, device, learning_rat
     else:
         raise Exception('unexpected dataset')
     data = data.to(device)
-    
+
     edge_index, edge_weight, rv = data.edge_index, data.edge_weight, data.rv
     x, y = data.x, data.y
     num_nodes, num_features = x.shape
     num_classes = len(torch.unique(y))
     train_mask, val_mask, test_mask = data.train_mask, data.val_mask, data.test_mask
+    subgraph_sampler = SubgraphSampler(num_nodes, edge_index, edge_weight)
+    max_batch_size = 256
 
     if model_name == 'MLP':
         model = GMLP(num_features, num_classes, dim_hidden=128, num_hidden=num_hidden, activation=nn.LeakyReLU(), dropout_p=0.3)
@@ -144,53 +150,67 @@ def run(dataset, homo_ratio, split, model_name, num_hidden, device, learning_rat
     else:
         raise Exception('unexpected model type')
     model = model.to(device)
-
     optimizer = torch.optim.AdamW([{'params': model.parameters(), 'lr': learning_rate}], weight_decay=2.5e-4)
 
-    def train(K=5):
+    def train(num_hops=3, max_neighbors=5):
         model.train()
-        optimizer.zero_grad()
-        log_b = model(x, edge_index, edge_weight=edge_weight, rv=rv, K=K)
-        loss = F.nll_loss(log_b[train_mask], y[train_mask])
-        loss.backward()
-        optimizer.step()
-        if develop:
-            with torch.no_grad():
-                log_b = model(x, edge_index, edge_weight=edge_weight, rv=rv)
-            print('step {:5d}, train accuracy: {:5.3f}, val accuracy: {:5.3f}, test accuracy: {:5.3f}'.format(epoch, acc(log_b, y, train_mask), acc(log_b, y, val_mask), acc(log_b, y, test_mask)), flush=True)
-        return acc(log_b, y, val_mask)
+        n_batch = total_loss = total_correct = 0.0
+        for batch_size, batch_nodes, subgraph_size, subgraph_nodes, subgraph_edge_index, subgraph_edge_weight, subgraph_rv, subgraph_deg0 in subgraph_sampler.get_generator(train_mask, max_batch_size, num_hops, max_neighbors):
+            optimizer.zero_grad()
+            subgraph_log_b = model(x[subgraph_nodes], subgraph_edge_index, edge_weight=subgraph_edge_weight, rv=subgraph_rv, scaling=get_scaling(subgraph_deg0, degree(subgraph_edge_index[1], subgraph_size)), K=num_hops)
+            loss = F.nll_loss(subgraph_log_b[:batch_size], y[batch_nodes])
+            loss.backward()
+            optimizer.step()
 
-    def evaluation():
+            n_batch += 1
+            total_loss += float(loss)
+            total_correct += (subgraph_log_b[:batch_size].argmax(-1) == y[batch_nodes]).sum().item()
+
+        if develop:
+            print('step {:5d}, train loss: {:5.3f}, train accuracy: {:5.3f}'.format(epoch, total_loss/n_batch, total_correct/train_mask.sum().item()), flush=True)
+
+        return total_correct/train_mask.sum().item()
+
+    def evaluation(mask, num_hops=3, max_neighbors=5):
         model.eval()
         if type(model) == BPGNN and develop:
             print(model.conv.get_logH().exp())
-
-        log_b = model(x, edge_index, edge_weight=edge_weight, rv=rv)
+        total_correct = 0.0
+        for batch_size, batch_nodes, subgraph_size, subgraph_nodes, subgraph_edge_index, subgraph_edge_weight, subgraph_rv, subgraph_deg0 in subgraph_sampler.get_generator(mask, max_batch_size, num_hops, max_neighbors):
+            subgraph_log_b = model(x[subgraph_nodes], subgraph_edge_index, edge_weight=subgraph_edge_weight, rv=subgraph_rv, scaling=get_scaling(subgraph_deg0, degree(subgraph_edge_index[1], subgraph_size)), K=num_hops)
+            total_correct += (subgraph_log_b[:batch_size].argmax(-1) == y[batch_nodes]).sum().item()
         if develop:
-            print('evaluation, train accuracy: {:5.3f}, val accuracy: {:5.3f}, test accuracy: {:5.3f}'.format(acc(log_b, y, train_mask), acc(log_b, y, val_mask), acc(log_b, y, test_mask)), flush=True)
+            print('accuracy: {:5.3f}'.format(total_correct/mask.sum().item()), flush=True)
 
         if type(model) == BPGNN and eval_C:
             sum_conv = SumConv()
-            subgraph_mask = torch.logical_not(train_mask)
-            log_c = torch.zeros(num_nodes, num_classes).to(device)
-            log_c[train_mask] = model.conv.get_logH()[y[train_mask]]
-            subgraph_phi = sum_conv(log_c, edge_index, edge_weight)[subgraph_mask]
-            subgraph_edge_index, subgraph_edge_weight = subgraph(subgraph_mask, edge_index, edge_weight, relabel_nodes=True)
-            subgraph_edge_index, subgraph_edge_weight, subgraph_rv = process_edge_index(num_nodes, subgraph_edge_index, subgraph_edge_weight)
-            log_b = torch.zeros(num_nodes, num_classes).to(device)
-            log_b[train_mask] = F.one_hot(y[train_mask], num_classes).float().to(device)
-            log_b[subgraph_mask] = model(x[subgraph_mask], subgraph_edge_index, subgraph_edge_weight, rv=subgraph_rv, phi=subgraph_phi)
+            total_correct = 0.0
+            for batch_size, batch_nodes, subgraph_size, subgraph_nodes, subgraph_edge_index, subgraph_edge_weight, subgraph_rv, subgraph_deg0 in subgraph_sampler.get_generator(mask, max_batch_size, num_hops, max_neighbors):
+                subgraphC_mask = train_mask[subgraph_nodes]
+                subgraphR_mask = torch.logical_not(subgraphC_mask)
+                log_c = torch.zeros(subgraph_size, num_classes).to(device)
+                log_c[subgraphC_mask] = model.conv.get_logH()[y[subgraph_nodes][subgraphC_mask]]
+                subgraphR_phi = sum_conv(log_c, subgraph_edge_index, subgraph_edge_weight)[subgraphR_mask]
+                subgraphR_edge_index, subgraphR_edge_weight = subgraph(subgraphR_mask, subgraph_edge_index, subgraph_edge_weight, relabel_nodes=True)
+                subgraphR_edge_index, subgraphR_edge_weight, subgraphR_rv = process_edge_index(subgraphR_mask.sum().item(), subgraphR_edge_index, subgraphR_edge_weight)
+                subgraph_log_b = torch.zeros(subgraph_size, num_classes).to(device)
+                subgraph_log_b[subgraphC_mask] = F.one_hot(y[subgraph_nodes][subgraphC_mask], num_classes).float().to(device)
+                subgraph_log_b[subgraphR_mask] = model(x[subgraph_nodes][subgraphR_mask], subgraphR_edge_index, subgraphR_edge_weight, rv=subgraphR_rv, phi=subgraphR_phi,
+                                                       scaling=get_scaling(subgraph_deg0[subgraphR_mask], degree(subgraphR_edge_index[1], subgraphR_mask.sum().item())), K=num_hops)
+                total_correct += (subgraph_log_b[:batch_size].argmax(-1) == y[batch_nodes]).sum().item()
             if develop:
-                print('conditioning, train accuracy: {:5.3f}, val accuracy: {:5.3f}, test accuracy: {:5.3f}'.format(acc(log_b, y, train_mask), acc(log_b, y, val_mask), acc(log_b, y, test_mask)), flush=True)
+                print('accuracy: {:5.3f}'.format(total_correct/mask.sum().item()), flush=True)
 
-        return acc(log_b, y, val_mask), acc(log_b, y, test_mask)
+            return total_correct/mask.sum().item()
 
     best_val, opt_val, opt_test = 0.0, 0.0, 0.0
-    for epoch in range(300):
-        val = train(K=(5 if (epoch > 30 and train_BP) else 5))
-        if (best_val < val) or (opt_val < val):
-            best_val = val
-            opt_val, opt_test = evaluation()
+    for epoch in range(50):
+        num_hops = (3 if (epoch > 30 and train_BP) else 3)
+        train(num_hops=num_hops, max_neighbors=5)
+        val = evaluation(val_mask, num_hops=num_hops, max_neighbors=5)
+        if val > opt_val:
+            opt_val = val
+            opt_test = evaluation(test_mask, num_hops=5, max_neighbors=10)
 
     if develop:
         print('optimal val accuracy: {:7.5f}, optimal test accuracy: {:7.5f}'.format(opt_val, opt_test))
@@ -198,7 +218,7 @@ def run(dataset, homo_ratio, split, model_name, num_hidden, device, learning_rat
     return opt_test
 
 
-torch.set_printoptions(precision=4, threshold=None, edgeitems=15, linewidth=500, profile=None, sci_mode=False)
+torch.set_printoptions(precision=4, threshold=None, edgeitems=15, linewidth=200, profile=None, sci_mode=False)
 parser = argparse.ArgumentParser('model')
 parser.add_argument('--dataset', type=str, default='Cora')
 parser.add_argument('--homo_ratio', type=float, default=0.5)
@@ -226,4 +246,4 @@ for _ in range(100):
     test_acc.append(run(args.dataset, args.homo_ratio, args.split, args.model_name, args.num_hidden, args.device, args.learning_rate, args.train_BP, args.learn_H, args.eval_C, args.develop))
 
 print(args)
-print('overall test accuracies: {:7.3f} ± {:7.3f}'.format(np.mean(test_acc)*100, np.std(test_acc)*100))
+print('overall test accuracies: {:7.3f} ± {:7.3f}'.format(np.mean(test_acc) * 100, np.std(test_acc) * 100))
