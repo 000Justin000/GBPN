@@ -98,7 +98,7 @@ def get_cts(edge_index, y):
     return ctsm, sqrt_deg_inv.view(-1, 1) * ctsm * sqrt_deg_inv.view(1, -1)
 
 
-def run(dataset, homo_ratio, split, model_name, num_hidden, device, learning_rate, train_BP, learn_H, eval_C, develop):
+def run(dataset, homo_ratio, split, model_name, num_hidden, device, learning_rate, train_BP, learn_H, eval_C, verbose):
     if dataset == 'Cora':
         data = load_citation('Cora', split=split)
     elif dataset == 'CiteSeer':
@@ -132,7 +132,7 @@ def run(dataset, homo_ratio, split, model_name, num_hidden, device, learning_rat
     num_classes = len(torch.unique(y))
     train_mask, val_mask, test_mask = data.train_mask, data.val_mask, data.test_mask
     subgraph_sampler = SubgraphSampler(num_nodes, x, y, edge_index, edge_weight)
-    max_batch_size = min(1024, num_nodes)
+    max_batch_size = min(512, num_nodes)
 
     if model_name == 'MLP':
         model = GMLP(num_features, num_classes, dim_hidden=128, num_hidden=num_hidden, activation=nn.LeakyReLU(), dropout_p=0.3)
@@ -166,14 +166,14 @@ def run(dataset, homo_ratio, split, model_name, num_hidden, device, learning_rat
             total_loss += float(loss)
             total_correct += (subgraph_log_b[:batch_size].argmax(-1) == batch_y).sum().item()
 
-        if develop:
+        if verbose:
             print('step {:5d}, train loss: {:5.3f}, train accuracy: {:5.3f}'.format(epoch, total_loss/n_batch, total_correct/train_mask.sum().item()), flush=True)
 
         return total_correct/train_mask.sum().item()
 
     def evaluation(mask, num_hops=2, num_nbrs=5):
         model.eval()
-        if type(model) == BPGNN and develop:
+        if type(model) == BPGNN and verbose:
             print(model.conv.get_logH().exp())
         total_correct = 0.0
         for batch_size, batch_nodes, batch_x, batch_y, batch_deg0, \
@@ -181,7 +181,7 @@ def run(dataset, homo_ratio, split, model_name, num_hidden, device, learning_rat
             subgraph_edge_index, subgraph_edge_weight, subgraph_rv in subgraph_sampler.get_generator(mask, max_batch_size, num_hops, num_nbrs, device):
             subgraph_log_b = model(subgraph_x, subgraph_edge_index, edge_weight=subgraph_edge_weight, rv=subgraph_rv, scaling=get_scaling(subgraph_deg0, degree(subgraph_edge_index[1], subgraph_size)), K=num_hops)
             total_correct += (subgraph_log_b[:batch_size].argmax(-1) == batch_y).sum().item()
-        if develop:
+        if verbose:
             print('inductive accuracy: {:5.3f}'.format(total_correct/mask.sum().item()), flush=True)
 
         if type(model) == BPGNN and eval_C:
@@ -202,14 +202,14 @@ def run(dataset, homo_ratio, split, model_name, num_hidden, device, learning_rat
                 subgraph_log_b[subgraphR_mask] = model(subgraph_x[subgraphR_mask], subgraphR_edge_index, subgraphR_edge_weight, rv=subgraphR_rv, phi=subgraphR_phi,
                                                        scaling=get_scaling(subgraph_deg0[subgraphR_mask], degree(subgraphR_edge_index[1], subgraphR_mask.sum().item())), K=num_hops)
                 total_correct += (subgraph_log_b[:batch_size].argmax(-1) == batch_y).sum().item()
-            if develop:
+            if verbose:
                 print('transductive accuracy: {:5.3f}'.format(total_correct/mask.sum().item()), flush=True)
 
         return total_correct/mask.sum().item()
 
     best_val, opt_val, opt_test = 0.0, 0.0, 0.0
     for epoch in range(30):
-        num_hops = (0 if (train_BP and epoch < 3) else 2)
+        num_hops = (2 if (train_BP and epoch < 3) else 2)
         num_nbrs = 5
         train(num_hops=num_hops, num_nbrs=num_nbrs)
         val = evaluation(val_mask, num_hops=num_hops, num_nbrs=num_nbrs)
@@ -217,7 +217,7 @@ def run(dataset, homo_ratio, split, model_name, num_hidden, device, learning_rat
             opt_val = val
             opt_test = evaluation(test_mask, num_hops=num_hops, num_nbrs=num_nbrs)
 
-    if develop:
+    if verbose:
         print('optimal val accuracy: {:7.5f}, optimal test accuracy: {:7.5f}'.format(opt_val, opt_test))
 
     return opt_test
@@ -235,20 +235,20 @@ parser.add_argument('--learning_rate', type=float, default=0.01)
 parser.add_argument('--train_BP', action='store_true')
 parser.add_argument('--learn_H', action='store_true')
 parser.add_argument('--eval_C', action='store_true')
+parser.add_argument('--verbose', action='store_true')
 parser.add_argument('--develop', action='store_true')
-parser.set_defaults(train_BP=False, learn_H=False, eval_C=False, develop=False)
+parser.set_defaults(train_BP=False, learn_H=False, eval_C=False, verbose=False, develop=False)
 args = parser.parse_args()
 
 outpath = create_outpath(args.dataset, args.model_name)
 commit = subprocess.check_output("git log --pretty=format:\'%h\' -n 1", shell=True).decode()
-if not args.develop:
-    matplotlib.use('agg')
+if args.develop:
     sys.stdout = open(outpath + '/' + commit + '.log', 'w')
     sys.stderr = open(outpath + '/' + commit + '.err', 'w')
 
 test_acc = []
 for _ in range(30):
-    test_acc.append(run(args.dataset, args.homo_ratio, args.split, args.model_name, args.num_hidden, args.device, args.learning_rate, args.train_BP, args.learn_H, args.eval_C, args.develop))
+    test_acc.append(run(args.dataset, args.homo_ratio, args.split, args.model_name, args.num_hidden, args.device, args.learning_rate, args.train_BP, args.learn_H, args.eval_C, args.verbose))
 
 print(args)
 print('overall test accuracies: {:7.3f} ± {:7.3f}'.format(np.mean(test_acc) * 100, np.std(test_acc) * 100))

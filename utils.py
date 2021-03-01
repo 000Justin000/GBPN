@@ -450,13 +450,16 @@ class SubgraphSampler:
 
                 # create subgraph from neighborhood
                 subgraph_nodes = batch_nodes
+                print(subgraph_nodes.shape[0])
                 for _ in range(num_hops):
                     _, subgraph_nodes = self.adj_t.sample_adj(subgraph_nodes, size, replace=False)
+                    print(subgraph_nodes.shape[0])
                 subgraph_size = subgraph_nodes.shape[0]
 
                 assert torch.all(subgraph_nodes[:batch_size] == batch_nodes)
                 subgraph_edge_index, subgraph_edge_weight = subgraph(subgraph_nodes, self.edge_index, self.edge_weight, relabel_nodes=True)
                 subgraph_edge_index, subgraph_edge_weight, subgraph_rv = process_edge_index(subgraph_nodes.shape[0], subgraph_edge_index, subgraph_edge_weight)
+                print(subgraph_edge_index.shape)
 
                 yield batch_size, batch_nodes.to(device), self.x[batch_nodes].to(device), self.y[batch_nodes].to(device), self.deg[batch_nodes].to(device), \
                       subgraph_size, subgraph_nodes.to(device), self.x[subgraph_nodes].to(device), self.y[subgraph_nodes].to(device), self.deg[subgraph_nodes].to(device), \
