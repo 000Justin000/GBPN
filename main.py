@@ -125,14 +125,13 @@ def run(dataset, homo_ratio, split, model_name, num_hidden, device, learning_rat
         data = load_ogbn('products', split=split)
     else:
         raise Exception('unexpected dataset')
-    data = data.to(device)
 
     edge_index, edge_weight, rv = data.edge_index, data.edge_weight, data.rv
     x, y = data.x, data.y
     num_nodes, num_features = x.shape
     num_classes = len(torch.unique(y))
     train_mask, val_mask, test_mask = data.train_mask, data.val_mask, data.test_mask
-    subgraph_sampler = SubgraphSampler(num_nodes, edge_index, edge_weight)
+    subgraph_sampler = SubgraphSampler(num_nodes, x, y, edge_index, edge_weight)
     max_batch_size = 32
 
     if model_name == 'MLP':
@@ -155,16 +154,18 @@ def run(dataset, homo_ratio, split, model_name, num_hidden, device, learning_rat
     def train(num_hops=3, max_neighbors=5):
         model.train()
         n_batch = total_loss = total_correct = 0.0
-        for batch_size, batch_nodes, subgraph_size, subgraph_nodes, subgraph_edge_index, subgraph_edge_weight, subgraph_rv, subgraph_deg0 in subgraph_sampler.get_generator(train_mask, max_batch_size, num_hops, max_neighbors):
+        for batch_size, batch_nodes, batch_x, batch_y, batch_deg0, \
+            subgraph_size, subgraph_nodes, subgraph_x, subgraph_y, subgraph_deg0, \
+            subgraph_edge_index, subgraph_edge_weight, subgraph_rv in subgraph_sampler.get_generator(train_mask, max_batch_size, num_hops, max_neighbors, device):
             optimizer.zero_grad()
-            subgraph_log_b = model(x[subgraph_nodes], subgraph_edge_index, edge_weight=subgraph_edge_weight, rv=subgraph_rv, scaling=get_scaling(subgraph_deg0, degree(subgraph_edge_index[1], subgraph_size)), K=num_hops)
-            loss = F.nll_loss(subgraph_log_b[:batch_size], y[batch_nodes])
+            subgraph_log_b = model(subgraph_x, subgraph_edge_index, edge_weight=subgraph_edge_weight, rv=subgraph_rv, scaling=get_scaling(subgraph_deg0, degree(subgraph_edge_index[1], subgraph_size)), K=num_hops)
+            loss = F.nll_loss(subgraph_log_b[:batch_size], batch_y)
             loss.backward()
             optimizer.step()
 
             n_batch += 1
             total_loss += float(loss)
-            total_correct += (subgraph_log_b[:batch_size].argmax(-1) == y[batch_nodes]).sum().item()
+            total_correct += (subgraph_log_b[:batch_size].argmax(-1) == batch_y).sum().item()
 
         if develop:
             print('step {:5d}, train loss: {:5.3f}, train accuracy: {:5.3f}'.format(epoch, total_loss/n_batch, total_correct/train_mask.sum().item()), flush=True)
@@ -176,28 +177,32 @@ def run(dataset, homo_ratio, split, model_name, num_hidden, device, learning_rat
         if type(model) == BPGNN and develop:
             print(model.conv.get_logH().exp())
         total_correct = 0.0
-        for batch_size, batch_nodes, subgraph_size, subgraph_nodes, subgraph_edge_index, subgraph_edge_weight, subgraph_rv, subgraph_deg0 in subgraph_sampler.get_generator(mask, max_batch_size, num_hops, max_neighbors):
-            subgraph_log_b = model(x[subgraph_nodes], subgraph_edge_index, edge_weight=subgraph_edge_weight, rv=subgraph_rv, scaling=get_scaling(subgraph_deg0, degree(subgraph_edge_index[1], subgraph_size)), K=num_hops)
-            total_correct += (subgraph_log_b[:batch_size].argmax(-1) == y[batch_nodes]).sum().item()
+        for batch_size, batch_nodes, batch_x, batch_y, batch_deg0, \
+            subgraph_size, subgraph_nodes, subgraph_x, subgraph_y, subgraph_deg0, \
+            subgraph_edge_index, subgraph_edge_weight, subgraph_rv in subgraph_sampler.get_generator(mask, max_batch_size, num_hops, max_neighbors, device):
+            subgraph_log_b = model(subgraph_x, subgraph_edge_index, edge_weight=subgraph_edge_weight, rv=subgraph_rv, scaling=get_scaling(subgraph_deg0, degree(subgraph_edge_index[1], subgraph_size)), K=num_hops)
+            total_correct += (subgraph_log_b[:batch_size].argmax(-1) == batch_y).sum().item()
         if develop:
             print('accuracy: {:5.3f}'.format(total_correct/mask.sum().item()), flush=True)
 
         if type(model) == BPGNN and eval_C:
             sum_conv = SumConv()
             total_correct = 0.0
-            for batch_size, batch_nodes, subgraph_size, subgraph_nodes, subgraph_edge_index, subgraph_edge_weight, subgraph_rv, subgraph_deg0 in subgraph_sampler.get_generator(mask, max_batch_size, num_hops, max_neighbors):
+            for batch_size, batch_nodes, batch_x, batch_y, batch_deg0, \
+                subgraph_size, subgraph_nodes, subgraph_x, subgraph_y, subgraph_deg0, \
+                subgraph_edge_index, subgraph_edge_weight, subgraph_rv in subgraph_sampler.get_generator(mask, max_batch_size, num_hops, max_neighbors, device):
                 subgraphC_mask = train_mask[subgraph_nodes]
                 subgraphR_mask = torch.logical_not(subgraphC_mask)
                 log_c = torch.zeros(subgraph_size, num_classes).to(device)
-                log_c[subgraphC_mask] = model.conv.get_logH()[y[subgraph_nodes][subgraphC_mask]]
+                log_c[subgraphC_mask] = model.conv.get_logH()[subgraph_y[subgraphC_mask]]
                 subgraphR_phi = sum_conv(log_c, subgraph_edge_index, subgraph_edge_weight)[subgraphR_mask]
                 subgraphR_edge_index, subgraphR_edge_weight = subgraph(subgraphR_mask, subgraph_edge_index, subgraph_edge_weight, relabel_nodes=True)
                 subgraphR_edge_index, subgraphR_edge_weight, subgraphR_rv = process_edge_index(subgraphR_mask.sum().item(), subgraphR_edge_index, subgraphR_edge_weight)
                 subgraph_log_b = torch.zeros(subgraph_size, num_classes).to(device)
-                subgraph_log_b[subgraphC_mask] = F.one_hot(y[subgraph_nodes][subgraphC_mask], num_classes).float().to(device)
-                subgraph_log_b[subgraphR_mask] = model(x[subgraph_nodes][subgraphR_mask], subgraphR_edge_index, subgraphR_edge_weight, rv=subgraphR_rv, phi=subgraphR_phi,
+                subgraph_log_b[subgraphC_mask] = F.one_hot(subgraph_y[subgraphC_mask], num_classes).float().to(device)
+                subgraph_log_b[subgraphR_mask] = model(subgraph_x[subgraphR_mask], subgraphR_edge_index, subgraphR_edge_weight, rv=subgraphR_rv, phi=subgraphR_phi,
                                                        scaling=get_scaling(subgraph_deg0[subgraphR_mask], degree(subgraphR_edge_index[1], subgraphR_mask.sum().item())), K=num_hops)
-                total_correct += (subgraph_log_b[:batch_size].argmax(-1) == y[batch_nodes]).sum().item()
+                total_correct += (subgraph_log_b[:batch_size].argmax(-1) == batch_y).sum().item()
             if develop:
                 print('accuracy: {:5.3f}'.format(total_correct/mask.sum().item()), flush=True)
 

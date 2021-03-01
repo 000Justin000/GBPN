@@ -430,16 +430,18 @@ def create_outpath(dataset, model_name):
 
 class SubgraphSampler:
 
-    def __init__(self, num_nodes, edge_index, edge_weight=None):
+    def __init__(self, num_nodes, x, y, edge_index, edge_weight=None):
         self.device = edge_index.device
         self.num_nodes = num_nodes
-        self.edge_index = edge_index.to('cpu')
-        self.edge_weight = None if (edge_weight is None) else edge_weight.to('cpu')
-        self.adj_t = SparseTensor(row=edge_index[0], col=edge_index[1], sparse_sizes=(num_nodes, num_nodes)).t().to('cpu')
-        self.deg = degree(edge_index[1], num_nodes).to('cpu')
+        self.x = x
+        self.y = y
+        self.edge_index = edge_index
+        self.edge_weight = None if (edge_weight is None) else edge_weight
+        self.adj_t = SparseTensor(row=edge_index[0], col=edge_index[1], sparse_sizes=(num_nodes, num_nodes)).t()
+        self.deg = degree(edge_index[1], num_nodes)
 
-    def get_generator(self, mask, batch_size, num_hops, size):
-        idx = mask.nonzero(as_tuple=True)[0].to('cpu')
+    def get_generator(self, mask, batch_size, num_hops, size, device):
+        idx = mask.nonzero(as_tuple=True)[0]
         n_batch = math.ceil(idx.shape[0] / batch_size)
 
         def generator():
@@ -459,10 +461,9 @@ class SubgraphSampler:
                 print(subgraph_edge_index.shape)
                 subgraph_edge_index, subgraph_edge_weight, subgraph_rv = process_edge_index(subgraph_nodes.shape[0], subgraph_edge_index, subgraph_edge_weight)
 
-                subgraph_deg0 = self.deg[subgraph_nodes]
-
-                yield batch_size, batch_nodes.to(self.device), subgraph_size, subgraph_nodes.to(self.device), \
-                      subgraph_edge_index.to(self.device), None if (subgraph_edge_weight is None) else subgraph_edge_weight.to(self.device), subgraph_rv.to(self.device), subgraph_deg0.to(self.device)
+                yield batch_size, batch_nodes.to(device), self.x[batch_nodes].to(device), self.y[batch_nodes].to(device), self.deg[batch_nodes].to(device), \
+                      subgraph_size, subgraph_nodes.to(device), self.x[subgraph_nodes].to(device), self.y[subgraph_nodes].to(device), self.deg[subgraph_nodes].to(device), \
+                      subgraph_edge_index.to(device), None if (subgraph_edge_weight is None) else subgraph_edge_weight.to(device), subgraph_rv.to(device)
 
         return generator()
 
