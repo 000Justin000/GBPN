@@ -54,8 +54,8 @@ class GMLP(torch.nn.Module):
 class SGC(torch.nn.Module):
     def __init__(self, dim_in, dim_out, dim_hidden=128, dropout_p=0.0):
         super(SGC, self).__init__()
-        self.conv1 = GCNConv(dim_in, dim_hidden, cached=True)
-        self.conv2 = GCNConv(dim_hidden, dim_out, cached=True)
+        self.conv1 = GCNConv(dim_in, dim_hidden)
+        self.conv2 = GCNConv(dim_hidden, dim_out)
         self.dropout = nn.Dropout(dropout_p)
 
     def forward(self, x, edge_index, **kwargs):
@@ -69,8 +69,8 @@ class SGC(torch.nn.Module):
 class GCN(nn.Module):
     def __init__(self, dim_in, dim_out, dim_hidden=128, activation=nn.ReLU(), dropout_p=0.0):
         super(GCN, self).__init__()
-        self.conv1 = GCNConv(dim_in, dim_hidden, cached=True)
-        self.conv2 = GCNConv(dim_hidden, dim_out, cached=True)
+        self.conv1 = GCNConv(dim_in, dim_hidden)
+        self.conv2 = GCNConv(dim_hidden, dim_out)
         self.activation = activation
         self.dropout = nn.Dropout(dropout_p)
 

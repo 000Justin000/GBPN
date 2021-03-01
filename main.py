@@ -132,7 +132,7 @@ def run(dataset, homo_ratio, split, model_name, num_hidden, device, learning_rat
     num_classes = len(torch.unique(y))
     train_mask, val_mask, test_mask = data.train_mask, data.val_mask, data.test_mask
     subgraph_sampler = SubgraphSampler(num_nodes, x, y, edge_index, edge_weight)
-    max_batch_size = 128
+    max_batch_size = 64
 
     if model_name == 'MLP':
         model = GMLP(num_features, num_classes, dim_hidden=128, num_hidden=num_hidden, activation=nn.LeakyReLU(), dropout_p=0.3)
@@ -182,7 +182,7 @@ def run(dataset, homo_ratio, split, model_name, num_hidden, device, learning_rat
             subgraph_log_b = model(subgraph_x, subgraph_edge_index, edge_weight=subgraph_edge_weight, rv=subgraph_rv, scaling=get_scaling(subgraph_deg0, degree(subgraph_edge_index[1], subgraph_size)), K=num_hops)
             total_correct += (subgraph_log_b[:batch_size].argmax(-1) == batch_y).sum().item()
         if develop:
-            print('accuracy: {:5.3f}'.format(total_correct/mask.sum().item()), flush=True)
+            print('inductive accuracy: {:5.3f}'.format(total_correct/mask.sum().item()), flush=True)
 
         if type(model) == BPGNN and eval_C:
             sum_conv = SumConv()
@@ -203,13 +203,13 @@ def run(dataset, homo_ratio, split, model_name, num_hidden, device, learning_rat
                                                        scaling=get_scaling(subgraph_deg0[subgraphR_mask], degree(subgraphR_edge_index[1], subgraphR_mask.sum().item())), K=num_hops)
                 total_correct += (subgraph_log_b[:batch_size].argmax(-1) == batch_y).sum().item()
             if develop:
-                print('accuracy: {:5.3f}'.format(total_correct/mask.sum().item()), flush=True)
+                print('transductive accuracy: {:5.3f}'.format(total_correct/mask.sum().item()), flush=True)
 
-            return total_correct/mask.sum().item()
+        return total_correct/mask.sum().item()
 
     best_val, opt_val, opt_test = 0.0, 0.0, 0.0
     for epoch in range(30):
-        num_hops = (3 if (epoch >= 3 and train_BP) else 0)
+        num_hops = (0 if (train_BP and epoch < 3) else 3)
         max_neighbors = 5
         train(num_hops=num_hops, max_neighbors=max_neighbors)
         val = evaluation(val_mask, num_hops=num_hops, max_neighbors=max_neighbors)
