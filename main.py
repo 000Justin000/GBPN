@@ -10,6 +10,7 @@ from torch_geometric.nn import GCNConv
 from torch_geometric.transforms import ToSparseTensor
 from torch_geometric.nn import MessagePassing
 from torch_geometric.utils import degree, sort_edge_index, is_undirected, subgraph, k_hop_subgraph
+from tqdm import tqdm
 from utils import *
 import matplotlib
 import matplotlib.pyplot as plt
@@ -132,7 +133,7 @@ def run(dataset, homo_ratio, split, model_name, num_hidden, device, learning_rat
     num_classes = len(torch.unique(y))
     train_mask, val_mask, test_mask = data.train_mask, data.val_mask, data.test_mask
     subgraph_sampler = SubgraphSampler(num_nodes, x, y, edge_index, edge_weight)
-    max_batch_size = 96
+    max_batch_size = 32
 
     if model_name == 'MLP':
         model = GMLP(num_features, num_classes, dim_hidden=128, num_hidden=num_hidden, activation=nn.LeakyReLU(), dropout_p=0.3)
@@ -154,6 +155,8 @@ def run(dataset, homo_ratio, split, model_name, num_hidden, device, learning_rat
     def train(num_hops=3, max_neighbors=5):
         model.train()
         n_batch = total_loss = total_correct = 0.0
+        pbar = tqdm(total=train_mask.sum().item())
+        pbar.set_description('Training')
         for batch_size, batch_nodes, batch_x, batch_y, batch_deg0, \
             subgraph_size, subgraph_nodes, subgraph_x, subgraph_y, subgraph_deg0, \
             subgraph_edge_index, subgraph_edge_weight, subgraph_rv in subgraph_sampler.get_generator(train_mask, max_batch_size, num_hops, max_neighbors, device):
@@ -162,10 +165,11 @@ def run(dataset, homo_ratio, split, model_name, num_hidden, device, learning_rat
             loss = F.nll_loss(subgraph_log_b[:batch_size], batch_y)
             loss.backward()
             optimizer.step()
-
             n_batch += 1
             total_loss += float(loss)
             total_correct += (subgraph_log_b[:batch_size].argmax(-1) == batch_y).sum().item()
+            pbar.update(batch_size)
+        pbar.close()
 
         if develop:
             print('step {:5d}, train loss: {:5.3f}, train accuracy: {:5.3f}'.format(epoch, total_loss/n_batch, total_correct/train_mask.sum().item()), flush=True)
@@ -177,17 +181,23 @@ def run(dataset, homo_ratio, split, model_name, num_hidden, device, learning_rat
         if type(model) == BPGNN and develop:
             print(model.conv.get_logH().exp())
         total_correct = 0.0
+        pbar = tqdm(total=train_mask.sum().item())
+        pbar.set_description('Evaluating')
         for batch_size, batch_nodes, batch_x, batch_y, batch_deg0, \
             subgraph_size, subgraph_nodes, subgraph_x, subgraph_y, subgraph_deg0, \
             subgraph_edge_index, subgraph_edge_weight, subgraph_rv in subgraph_sampler.get_generator(mask, max_batch_size, num_hops, max_neighbors, device):
             subgraph_log_b = model(subgraph_x, subgraph_edge_index, edge_weight=subgraph_edge_weight, rv=subgraph_rv, scaling=get_scaling(subgraph_deg0, degree(subgraph_edge_index[1], subgraph_size)), K=num_hops)
             total_correct += (subgraph_log_b[:batch_size].argmax(-1) == batch_y).sum().item()
+            pbar.update(batch_size)
+        pbar.close()
         if develop:
             print('accuracy: {:5.3f}'.format(total_correct/mask.sum().item()), flush=True)
 
         if type(model) == BPGNN and eval_C:
             sum_conv = SumConv()
             total_correct = 0.0
+            pbar = tqdm(total=train_mask.sum().item())
+            pbar.set_description('Conditioning')
             for batch_size, batch_nodes, batch_x, batch_y, batch_deg0, \
                 subgraph_size, subgraph_nodes, subgraph_x, subgraph_y, subgraph_deg0, \
                 subgraph_edge_index, subgraph_edge_weight, subgraph_rv in subgraph_sampler.get_generator(mask, max_batch_size, num_hops, max_neighbors, device):
@@ -203,13 +213,15 @@ def run(dataset, homo_ratio, split, model_name, num_hidden, device, learning_rat
                 subgraph_log_b[subgraphR_mask] = model(subgraph_x[subgraphR_mask], subgraphR_edge_index, subgraphR_edge_weight, rv=subgraphR_rv, phi=subgraphR_phi,
                                                        scaling=get_scaling(subgraph_deg0[subgraphR_mask], degree(subgraphR_edge_index[1], subgraphR_mask.sum().item())), K=num_hops)
                 total_correct += (subgraph_log_b[:batch_size].argmax(-1) == batch_y).sum().item()
+                pbar.update(batch_size)
+            pbar.close()
             if develop:
                 print('accuracy: {:5.3f}'.format(total_correct/mask.sum().item()), flush=True)
 
             return total_correct/mask.sum().item()
 
     best_val, opt_val, opt_test = 0.0, 0.0, 0.0
-    for epoch in range(50):
+    for epoch in range(30):
         num_hops = (3 if (epoch > 5 and train_BP) else 3)
         max_neighbors = 5
         train(num_hops=num_hops, max_neighbors=max_neighbors)
