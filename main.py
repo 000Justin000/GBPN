@@ -219,7 +219,7 @@ def run(dataset, homo_ratio, split, model_name, num_hidden, device, learning_rat
 
     best_val, opt_val, opt_test = 0.0, 0.0, 0.0
     for epoch in range(30):
-        num_hops = (0 if (train_BP and epoch < 0) else 2)
+        num_hops = (0 if (train_BP and epoch < 1) else 2)
         num_nbrs = 5
         train(num_hops=num_hops, num_nbrs=num_nbrs)
         val = evaluation(val_mask, num_hops=num_hops, num_nbrs=num_nbrs, partition='val')
