@@ -176,7 +176,7 @@ def process_edge_index(num_nodes, edge_index, edge_attr=None):
         assert sid.unique_consecutive().shape == sid.shape
         return edge_index[:,perm], perm
 
-    edge_index = to_undirected(remove_self_loops(edge_index)[0])
+    edge_index = to_undirected(remove_self_loops(edge_index)[0], num_nodes)
     edge_index, od = sort_edge(num_nodes, edge_index)
     _, rv = sort_edge(num_nodes, edge_index.flip(dims=[0]))
     # assert not contains_self_loops(edge_index)
@@ -437,7 +437,7 @@ class SubgraphSampler:
         self.edge_weight = None if (edge_weight is None) else edge_weight.to('cpu')
         self.adj_t = SparseTensor(row=edge_index[0], col=edge_index[1], sparse_sizes=(num_nodes, num_nodes)).t().to('cpu')
         self.deg = degree(edge_index[1], num_nodes).to('cpu')
-    
+
     def get_generator(self, mask, batch_size, num_hops, size):
         idx = mask.nonzero(as_tuple=True)[0].to('cpu')
         n_batch = math.ceil(idx.shape[0] / batch_size)
@@ -448,12 +448,15 @@ class SubgraphSampler:
 
                 # create subgraph from neighborhood
                 subgraph_nodes = batch_nodes
+                print(subgraph_nodes.shape)
                 for _ in range(num_hops):
                     _, subgraph_nodes = self.adj_t.sample_adj(subgraph_nodes, size, replace=False)
+                    print(subgraph_nodes.shape)
                 subgraph_size = subgraph_nodes.shape[0]
 
                 assert torch.all(subgraph_nodes[:batch_size] == batch_nodes)
                 subgraph_edge_index, subgraph_edge_weight = subgraph(subgraph_nodes, self.edge_index, self.edge_weight, relabel_nodes=True)
+                print(subgraph_edge_index.shape)
                 subgraph_edge_index, subgraph_edge_weight, subgraph_rv = process_edge_index(subgraph_nodes.shape[0], subgraph_edge_index, subgraph_edge_weight)
 
                 subgraph_deg0 = self.deg[subgraph_nodes]

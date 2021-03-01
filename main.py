@@ -133,7 +133,7 @@ def run(dataset, homo_ratio, split, model_name, num_hidden, device, learning_rat
     num_classes = len(torch.unique(y))
     train_mask, val_mask, test_mask = data.train_mask, data.val_mask, data.test_mask
     subgraph_sampler = SubgraphSampler(num_nodes, edge_index, edge_weight)
-    max_batch_size = 256
+    max_batch_size = 32
 
     if model_name == 'MLP':
         model = GMLP(num_features, num_classes, dim_hidden=128, num_hidden=num_hidden, activation=nn.LeakyReLU(), dropout_p=0.3)
@@ -205,8 +205,8 @@ def run(dataset, homo_ratio, split, model_name, num_hidden, device, learning_rat
 
     best_val, opt_val, opt_test = 0.0, 0.0, 0.0
     for epoch in range(50):
-        num_hops = (5 if (epoch > 5 and train_BP) else 0)
-        max_neighbors = 10
+        num_hops = (3 if (epoch > 5 and train_BP) else 3)
+        max_neighbors = 5
         train(num_hops=num_hops, max_neighbors=max_neighbors)
         val = evaluation(val_mask, num_hops=num_hops, max_neighbors=max_neighbors)
         if val > opt_val:
@@ -243,7 +243,7 @@ if not args.develop:
     sys.stderr = open(outpath + '/' + commit + '.err', 'w')
 
 test_acc = []
-for _ in range(100):
+for _ in range(10):
     test_acc.append(run(args.dataset, args.homo_ratio, args.split, args.model_name, args.num_hidden, args.device, args.learning_rate, args.train_BP, args.learn_H, args.eval_C, args.develop))
 
 print(args)
