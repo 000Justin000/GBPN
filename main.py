@@ -132,7 +132,7 @@ def run(dataset, homo_ratio, split, model_name, num_hidden, device, learning_rat
     num_classes = len(torch.unique(y))
     train_mask, val_mask, test_mask = data.train_mask, data.val_mask, data.test_mask
     subgraph_sampler = SubgraphSampler(num_nodes, x, y, edge_index, edge_weight)
-    max_batch_size = min(1024, num_nodes)
+    max_batch_size = 1024
 
     if model_name == 'MLP':
         model = GMLP(num_features, num_classes, dim_hidden=128, num_hidden=num_hidden, activation=nn.LeakyReLU(), dropout_p=0.3)
@@ -151,12 +151,14 @@ def run(dataset, homo_ratio, split, model_name, num_hidden, device, learning_rat
     model = model.to(device)
     optimizer = torch.optim.AdamW([{'params': model.parameters(), 'lr': learning_rate}], weight_decay=2.5e-4)
 
+
     def train(num_hops=2, num_nbrs=5):
         model.train()
         n_batch = total_loss = total_correct = 0.0
         for batch_size, batch_nodes, batch_x, batch_y, batch_deg0, \
             subgraph_size, subgraph_nodes, subgraph_x, subgraph_y, subgraph_deg0, \
             subgraph_edge_index, subgraph_edge_weight, subgraph_rv in subgraph_sampler.get_generator(train_mask, max_batch_size, num_hops, num_nbrs, device):
+            # print("reserved mem: {:5.3f},    allocated mem: {:5.3f}".format(torch.cuda.memory_reserved(0) / 1024.0**3, torch.cuda.memory_allocated(0) / 1024.0**3))
             optimizer.zero_grad()
             subgraph_log_b = model(subgraph_x, subgraph_edge_index, edge_weight=subgraph_edge_weight, rv=subgraph_rv, scaling=get_scaling(subgraph_deg0, degree(subgraph_edge_index[1], subgraph_size)), K=num_hops)
             loss = F.nll_loss(subgraph_log_b[:batch_size], batch_y)
@@ -171,51 +173,59 @@ def run(dataset, homo_ratio, split, model_name, num_hidden, device, learning_rat
 
         return total_correct/train_mask.sum().item()
 
-    def evaluation(mask, num_hops=2, num_nbrs=5):
+
+    def evaluation(mask, num_hops=2, num_nbrs=5, partition='train'):
         model.eval()
-        if type(model) == BPGNN and verbose:
-            print(model.conv.get_logH().exp())
+
         total_correct = 0.0
-        for batch_size, batch_nodes, batch_x, batch_y, batch_deg0, \
-            subgraph_size, subgraph_nodes, subgraph_x, subgraph_y, subgraph_deg0, \
-            subgraph_edge_index, subgraph_edge_weight, subgraph_rv in subgraph_sampler.get_generator(mask, max_batch_size, num_hops, num_nbrs, device):
-            subgraph_log_b = model(subgraph_x, subgraph_edge_index, edge_weight=subgraph_edge_weight, rv=subgraph_rv, scaling=get_scaling(subgraph_deg0, degree(subgraph_edge_index[1], subgraph_size)), K=num_hops)
-            total_correct += (subgraph_log_b[:batch_size].argmax(-1) == batch_y).sum().item()
+        with torch.no_grad():
+            for batch_size, batch_nodes, batch_x, batch_y, batch_deg0, \
+                subgraph_size, subgraph_nodes, subgraph_x, subgraph_y, subgraph_deg0, \
+                subgraph_edge_index, subgraph_edge_weight, subgraph_rv in subgraph_sampler.get_generator(mask, max_batch_size, num_hops, num_nbrs, device):
+                # print("reserved mem: {:5.3f},    allocated mem: {:5.3f}".format(torch.cuda.memory_reserved(0) / 1024.0**3, torch.cuda.memory_allocated(0) / 1024.0**3))
+                subgraph_log_b = model(subgraph_x, subgraph_edge_index, edge_weight=subgraph_edge_weight, rv=subgraph_rv, scaling=get_scaling(subgraph_deg0, degree(subgraph_edge_index[1], subgraph_size)), K=num_hops)
+                total_correct += (subgraph_log_b[:batch_size].argmax(-1) == batch_y).sum().item()
         if verbose:
-            print('inductive accuracy: {:5.3f}'.format(total_correct/mask.sum().item()), flush=True)
+            print('{:>5s} inductive accuracy: {:5.3f}'.format(partition, total_correct/mask.sum().item()), flush=True)
 
         if type(model) == BPGNN and eval_C:
             sum_conv = SumConv()
             total_correct = 0.0
-            for batch_size, batch_nodes, batch_x, batch_y, batch_deg0, \
-                subgraph_size, subgraph_nodes, subgraph_x, subgraph_y, subgraph_deg0, \
-                subgraph_edge_index, subgraph_edge_weight, subgraph_rv in subgraph_sampler.get_generator(mask, max_batch_size, num_hops, num_nbrs, device):
-                subgraphC_mask = train_mask[subgraph_nodes]
-                subgraphR_mask = torch.logical_not(subgraphC_mask)
-                log_c = torch.zeros(subgraph_size, num_classes).to(device)
-                log_c[subgraphC_mask] = model.conv.get_logH()[subgraph_y[subgraphC_mask]]
-                subgraphR_phi = sum_conv(log_c, subgraph_edge_index, subgraph_edge_weight)[subgraphR_mask]
-                subgraphR_edge_index, subgraphR_edge_weight = subgraph(subgraphR_mask, subgraph_edge_index, subgraph_edge_weight, relabel_nodes=True)
-                subgraphR_edge_index, subgraphR_edge_weight, subgraphR_rv = process_edge_index(subgraphR_mask.sum().item(), subgraphR_edge_index, subgraphR_edge_weight)
-                subgraph_log_b = torch.zeros(subgraph_size, num_classes).to(device)
-                subgraph_log_b[subgraphC_mask] = F.one_hot(subgraph_y[subgraphC_mask], num_classes).float().to(device)
-                subgraph_log_b[subgraphR_mask] = model(subgraph_x[subgraphR_mask], subgraphR_edge_index, subgraphR_edge_weight, rv=subgraphR_rv, phi=subgraphR_phi,
-                                                       scaling=get_scaling(subgraph_deg0[subgraphR_mask], degree(subgraphR_edge_index[1], subgraphR_mask.sum().item())), K=num_hops)
-                total_correct += (subgraph_log_b[:batch_size].argmax(-1) == batch_y).sum().item()
+            with torch.no_grad():
+                for batch_size, batch_nodes, batch_x, batch_y, batch_deg0, \
+                    subgraph_size, subgraph_nodes, subgraph_x, subgraph_y, subgraph_deg0, \
+                    subgraph_edge_index, subgraph_edge_weight, subgraph_rv in subgraph_sampler.get_generator(mask, max_batch_size, num_hops, num_nbrs, device):
+                    # print("reserved mem: {:5.3f},    allocated mem: {:5.3f}".format(torch.cuda.memory_reserved(0) / 1024.0**3, torch.cuda.memory_allocated(0) / 1024.0**3))
+                    subgraphC_mask = train_mask[subgraph_nodes]
+                    subgraphR_mask = torch.logical_not(subgraphC_mask)
+                    log_c = torch.zeros(subgraph_size, num_classes).to(device)
+                    log_c[subgraphC_mask] = model.conv.get_logH()[subgraph_y[subgraphC_mask]]
+                    subgraphR_phi = sum_conv(log_c, subgraph_edge_index, subgraph_edge_weight)[subgraphR_mask]
+                    subgraphR_edge_index, subgraphR_edge_weight = subgraph(subgraphR_mask, subgraph_edge_index, subgraph_edge_weight, relabel_nodes=True)
+                    subgraphR_edge_index, subgraphR_edge_weight, subgraphR_rv = process_edge_index(subgraphR_mask.sum().item(), subgraphR_edge_index, subgraphR_edge_weight)
+                    subgraph_log_b = torch.zeros(subgraph_size, num_classes).to(device)
+                    subgraph_log_b[subgraphC_mask] = F.one_hot(subgraph_y[subgraphC_mask], num_classes).float().to(device)
+                    subgraph_log_b[subgraphR_mask] = model(subgraph_x[subgraphR_mask], subgraphR_edge_index, subgraphR_edge_weight, rv=subgraphR_rv, phi=subgraphR_phi,
+                                                           scaling=get_scaling(subgraph_deg0[subgraphR_mask], degree(subgraphR_edge_index[1], subgraphR_mask.sum().item())), K=num_hops)
+                    total_correct += (subgraph_log_b[:batch_size].argmax(-1) == batch_y).sum().item()
             if verbose:
-                print('transductive accuracy: {:5.3f}'.format(total_correct/mask.sum().item()), flush=True)
+                print('{:>5s} transductive accuracy: {:5.3f}'.format(partition, total_correct/mask.sum().item()), flush=True)
+
+        if type(model) == BPGNN and verbose:
+            print(model.conv.get_logH().exp())
 
         return total_correct/mask.sum().item()
 
+
     best_val, opt_val, opt_test = 0.0, 0.0, 0.0
     for epoch in range(30):
-        num_hops = (0 if (train_BP and epoch < 3) else 2)
+        num_hops = (0 if (train_BP and epoch < 0) else 2)
         num_nbrs = 5
         train(num_hops=num_hops, num_nbrs=num_nbrs)
-        val = evaluation(val_mask, num_hops=num_hops, num_nbrs=num_nbrs)
+        val = evaluation(val_mask, num_hops=num_hops, num_nbrs=num_nbrs, partition='val')
         if val > opt_val:
             opt_val = val
-            opt_test = evaluation(test_mask, num_hops=num_hops, num_nbrs=num_nbrs)
+            opt_test = evaluation(test_mask, num_hops=num_hops, num_nbrs=num_nbrs, partition='test')
 
     if verbose:
         print('optimal val accuracy: {:7.5f}, optimal test accuracy: {:7.5f}'.format(opt_val, opt_test))
