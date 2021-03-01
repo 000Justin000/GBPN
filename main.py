@@ -205,12 +205,13 @@ def run(dataset, homo_ratio, split, model_name, num_hidden, device, learning_rat
 
     best_val, opt_val, opt_test = 0.0, 0.0, 0.0
     for epoch in range(50):
-        num_hops = (3 if (epoch > 30 and train_BP) else 3)
-        train(num_hops=num_hops, max_neighbors=5)
-        val = evaluation(val_mask, num_hops=num_hops, max_neighbors=5)
+        num_hops = (5 if (epoch > 5 and train_BP) else 0)
+        max_neighbors = 10
+        train(num_hops=num_hops, max_neighbors=max_neighbors)
+        val = evaluation(val_mask, num_hops=num_hops, max_neighbors=max_neighbors)
         if val > opt_val:
             opt_val = val
-            opt_test = evaluation(test_mask, num_hops=5, max_neighbors=10)
+            opt_test = evaluation(test_mask, num_hops=num_hops, max_neighbors=max_neighbors)
 
     if develop:
         print('optimal val accuracy: {:7.5f}, optimal test accuracy: {:7.5f}'.format(opt_val, opt_test))
