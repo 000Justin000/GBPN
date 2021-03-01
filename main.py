@@ -132,7 +132,7 @@ def run(dataset, homo_ratio, split, model_name, num_hidden, device, learning_rat
     num_classes = len(torch.unique(y))
     train_mask, val_mask, test_mask = data.train_mask, data.val_mask, data.test_mask
     subgraph_sampler = SubgraphSampler(num_nodes, x, y, edge_index, edge_weight)
-    max_batch_size = min(512, num_nodes)
+    max_batch_size = min(1024, num_nodes)
 
     if model_name == 'MLP':
         model = GMLP(num_features, num_classes, dim_hidden=128, num_hidden=num_hidden, activation=nn.LeakyReLU(), dropout_p=0.3)
@@ -209,7 +209,7 @@ def run(dataset, homo_ratio, split, model_name, num_hidden, device, learning_rat
 
     best_val, opt_val, opt_test = 0.0, 0.0, 0.0
     for epoch in range(30):
-        num_hops = (2 if (train_BP and epoch < 3) else 2)
+        num_hops = (0 if (train_BP and epoch < 3) else 2)
         num_nbrs = 5
         train(num_hops=num_hops, num_nbrs=num_nbrs)
         val = evaluation(val_mask, num_hops=num_hops, num_nbrs=num_nbrs)
@@ -242,7 +242,8 @@ args = parser.parse_args()
 
 outpath = create_outpath(args.dataset, args.model_name)
 commit = subprocess.check_output("git log --pretty=format:\'%h\' -n 1", shell=True).decode()
-if args.develop:
+if not args.develop:
+    matplotlib.use('agg')
     sys.stdout = open(outpath + '/' + commit + '.log', 'w')
     sys.stderr = open(outpath + '/' + commit + '.err', 'w')
 
