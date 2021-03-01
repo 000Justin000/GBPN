@@ -39,7 +39,7 @@ class BPConv(MessagePassing):
     def get_logH(self):
         logT = torch.zeros(self.n_channels, self.n_channels).to(self.param.device)
         rid, cid = torch.tril_indices(self.n_channels, self.n_channels, 0)
-        logT[rid, cid] = F.logsigmoid(self.param)
+        logT[rid, cid] = F.logsigmoid(self.param * 10.0)
         logH = (logT + logT.transpose(0, 1).triu(1))
         return (logH if self.learn_H else logH.detach().fill_diagonal_(0.0))
 
@@ -132,7 +132,7 @@ def run(dataset, homo_ratio, split, model_name, num_hidden, device, learning_rat
     num_classes = len(torch.unique(y))
     train_mask, val_mask, test_mask = data.train_mask, data.val_mask, data.test_mask
     subgraph_sampler = SubgraphSampler(num_nodes, x, y, edge_index, edge_weight)
-    max_batch_size = 64
+    max_batch_size = min(1024, num_nodes)
 
     if model_name == 'MLP':
         model = GMLP(num_features, num_classes, dim_hidden=128, num_hidden=num_hidden, activation=nn.LeakyReLU(), dropout_p=0.3)
@@ -151,12 +151,12 @@ def run(dataset, homo_ratio, split, model_name, num_hidden, device, learning_rat
     model = model.to(device)
     optimizer = torch.optim.AdamW([{'params': model.parameters(), 'lr': learning_rate}], weight_decay=2.5e-4)
 
-    def train(num_hops=3, max_neighbors=5):
+    def train(num_hops=2, num_nbrs=5):
         model.train()
         n_batch = total_loss = total_correct = 0.0
         for batch_size, batch_nodes, batch_x, batch_y, batch_deg0, \
             subgraph_size, subgraph_nodes, subgraph_x, subgraph_y, subgraph_deg0, \
-            subgraph_edge_index, subgraph_edge_weight, subgraph_rv in subgraph_sampler.get_generator(train_mask, max_batch_size, num_hops, max_neighbors, device):
+            subgraph_edge_index, subgraph_edge_weight, subgraph_rv in subgraph_sampler.get_generator(train_mask, max_batch_size, num_hops, num_nbrs, device):
             optimizer.zero_grad()
             subgraph_log_b = model(subgraph_x, subgraph_edge_index, edge_weight=subgraph_edge_weight, rv=subgraph_rv, scaling=get_scaling(subgraph_deg0, degree(subgraph_edge_index[1], subgraph_size)), K=num_hops)
             loss = F.nll_loss(subgraph_log_b[:batch_size], batch_y)
@@ -171,14 +171,14 @@ def run(dataset, homo_ratio, split, model_name, num_hidden, device, learning_rat
 
         return total_correct/train_mask.sum().item()
 
-    def evaluation(mask, num_hops=3, max_neighbors=5):
+    def evaluation(mask, num_hops=2, num_nbrs=5):
         model.eval()
         if type(model) == BPGNN and develop:
             print(model.conv.get_logH().exp())
         total_correct = 0.0
         for batch_size, batch_nodes, batch_x, batch_y, batch_deg0, \
             subgraph_size, subgraph_nodes, subgraph_x, subgraph_y, subgraph_deg0, \
-            subgraph_edge_index, subgraph_edge_weight, subgraph_rv in subgraph_sampler.get_generator(mask, max_batch_size, num_hops, max_neighbors, device):
+            subgraph_edge_index, subgraph_edge_weight, subgraph_rv in subgraph_sampler.get_generator(mask, max_batch_size, num_hops, num_nbrs, device):
             subgraph_log_b = model(subgraph_x, subgraph_edge_index, edge_weight=subgraph_edge_weight, rv=subgraph_rv, scaling=get_scaling(subgraph_deg0, degree(subgraph_edge_index[1], subgraph_size)), K=num_hops)
             total_correct += (subgraph_log_b[:batch_size].argmax(-1) == batch_y).sum().item()
         if develop:
@@ -189,7 +189,7 @@ def run(dataset, homo_ratio, split, model_name, num_hidden, device, learning_rat
             total_correct = 0.0
             for batch_size, batch_nodes, batch_x, batch_y, batch_deg0, \
                 subgraph_size, subgraph_nodes, subgraph_x, subgraph_y, subgraph_deg0, \
-                subgraph_edge_index, subgraph_edge_weight, subgraph_rv in subgraph_sampler.get_generator(mask, max_batch_size, num_hops, max_neighbors, device):
+                subgraph_edge_index, subgraph_edge_weight, subgraph_rv in subgraph_sampler.get_generator(mask, max_batch_size, num_hops, num_nbrs, device):
                 subgraphC_mask = train_mask[subgraph_nodes]
                 subgraphR_mask = torch.logical_not(subgraphC_mask)
                 log_c = torch.zeros(subgraph_size, num_classes).to(device)
@@ -209,13 +209,13 @@ def run(dataset, homo_ratio, split, model_name, num_hidden, device, learning_rat
 
     best_val, opt_val, opt_test = 0.0, 0.0, 0.0
     for epoch in range(30):
-        num_hops = (0 if (train_BP and epoch < 3) else 3)
-        max_neighbors = 5
-        train(num_hops=num_hops, max_neighbors=max_neighbors)
-        val = evaluation(val_mask, num_hops=num_hops, max_neighbors=max_neighbors)
+        num_hops = (0 if (train_BP and epoch < 3) else 2)
+        num_nbrs = 5
+        train(num_hops=num_hops, num_nbrs=num_nbrs)
+        val = evaluation(val_mask, num_hops=num_hops, num_nbrs=num_nbrs)
         if val > opt_val:
             opt_val = val
-            opt_test = evaluation(test_mask, num_hops=num_hops, max_neighbors=max_neighbors)
+            opt_test = evaluation(test_mask, num_hops=num_hops, num_nbrs=num_nbrs)
 
     if develop:
         print('optimal val accuracy: {:7.5f}, optimal test accuracy: {:7.5f}'.format(opt_val, opt_test))
