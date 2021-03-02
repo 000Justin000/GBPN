@@ -211,9 +211,6 @@ def run(dataset, homo_ratio, split, model_name, num_hidden, device, learning_rat
             if verbose:
                 print('{:>5s} transductive accuracy: {:5.3f}'.format(partition, total_correct/mask.sum().item()), flush=True)
 
-        if type(model) == BPGNN and verbose:
-            print(model.conv.get_logH().exp())
-
         return total_correct/mask.sum().item()
 
 
@@ -226,6 +223,9 @@ def run(dataset, homo_ratio, split, model_name, num_hidden, device, learning_rat
         if val > opt_val:
             opt_val = val
             opt_test = evaluation(test_mask, num_hops=num_hops, num_nbrs=num_nbrs, partition='test')
+
+        if type(model) == BPGNN and verbose:
+            print(model.conv.get_logH().exp())
 
     if verbose:
         print('optimal val accuracy: {:7.5f}, optimal test accuracy: {:7.5f}'.format(opt_val, opt_test))
