@@ -138,7 +138,7 @@ def run(dataset, homo_ratio, split, model_name, num_hidden, device, learning_rat
     train_mask, val_mask, test_mask = data.train_mask, data.val_mask, data.test_mask
     subgraph_sampler = SubgraphSampler(num_nodes, x, y, edge_index, edge_weight)
     # max_batch_size = 1024
-    max_batch_size = num_nodes
+    max_batch_size = min(math.ceil(num_nodes/10), 1024)
 
     if model_name == 'MLP':
         model = GMLP(num_features, num_classes, dim_hidden=128, num_hidden=num_hidden, activation=nn.LeakyReLU(), dropout_p=0.3)
@@ -221,8 +221,8 @@ def run(dataset, homo_ratio, split, model_name, num_hidden, device, learning_rat
 
 
     best_val, opt_val, opt_test = 0.0, 0.0, 0.0
-    for epoch in range(300):
-        num_hops = (0 if ((not train_BP) or (learn_H and epoch < 10)) else 2)
+    for epoch in range(50):
+        num_hops = (0 if ((not train_BP) or (learn_H and epoch < 3)) else 2)
         num_nbrs = 5
         train(num_hops=num_hops, num_nbrs=num_nbrs)
         val = evaluation(val_mask, num_hops=num_hops, num_nbrs=num_nbrs, partition='val')
@@ -265,8 +265,10 @@ if not args.develop:
     sys.stderr = open(outpath + '/' + commit + '.err', 'w')
 
 test_acc = []
-for _ in range(100):
+for _ in range(30):
     test_acc.append(run(args.dataset, args.homo_ratio, args.split, args.model_name, args.num_hidden, args.device, args.learning_rate, args.train_BP, args.learn_H, args.eval_C, args.verbose))
 
 print(args)
 print('overall test accuracies: {:7.3f} ± {:7.3f}'.format(np.mean(test_acc) * 100, np.std(test_acc) * 100))
+
+print('finish')
