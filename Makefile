@@ -61,6 +61,15 @@ run_BPGNN_TFF:
 	python main.py --dataset County_Facebook  --split 0.6 0.2 0.2 --model_name BPGNN --learning_rate 1.0e-2 --device cuda --num_hidden 1 --train_BP 
 	python main.py --dataset Sex              --split 0.6 0.2 0.2 --model_name BPGNN --learning_rate 1.0e-2 --device cuda --num_hidden 1 --train_BP 
 
+run_BPGNN_TFT:
+	python main.py --dataset Cora             --split 0.6 0.2 0.2 --model_name BPGNN --learning_rate 1.0e-2 --device cuda --num_hidden 0 --train_BP --eval_C 
+	python main.py --dataset CiteSeer         --split 0.6 0.2 0.2 --model_name BPGNN --learning_rate 1.0e-2 --device cuda --num_hidden 0 --train_BP --eval_C 
+	python main.py --dataset PubMed           --split 0.6 0.2 0.2 --model_name BPGNN --learning_rate 1.0e-2 --device cuda --num_hidden 1 --train_BP --eval_C 
+	python main.py --dataset Coauthor_CS      --split 0.6 0.2 0.2 --model_name BPGNN --learning_rate 1.0e-2 --device cuda --num_hidden 1 --train_BP --eval_C 
+	python main.py --dataset Coauthor_Physics --split 0.6 0.2 0.2 --model_name BPGNN --learning_rate 1.0e-2 --device cuda --num_hidden 1 --train_BP --eval_C 
+	python main.py --dataset County_Facebook  --split 0.6 0.2 0.2 --model_name BPGNN --learning_rate 1.0e-2 --device cuda --num_hidden 1 --train_BP --eval_C 
+	python main.py --dataset Sex              --split 0.6 0.2 0.2 --model_name BPGNN --learning_rate 1.0e-2 --device cuda --num_hidden 1 --train_BP --eval_C 
+
 run_BPGNN_TTF:
 	python main.py --dataset Cora             --split 0.6 0.2 0.2 --model_name BPGNN --learning_rate 1.0e-2 --device cuda --num_hidden 0 --train_BP --learn_H 
 	python main.py --dataset CiteSeer         --split 0.6 0.2 0.2 --model_name BPGNN --learning_rate 1.0e-2 --device cuda --num_hidden 0 --train_BP --learn_H 
