@@ -58,35 +58,40 @@ class BPConv(MessagePassing):
         return log_msg
 
     def update(self, agg_log_msg, info):
-        log_b_raw = info['log_b0'] + agg_log_msg + (info['scaling']-1.0).unsqueeze(-1) * agg_log_msg.detach()
+        log_b_raw = info['log_b0'] + agg_log_msg + (info['agg_scaling']-1.0).unsqueeze(-1) * agg_log_msg.detach()
         log_b = log_normalize(log_b_raw)
         return log_b
 
 
 class BPGNN(nn.Module):
-    def __init__(self, dim_in, dim_out, dim_hidden=32, num_hidden=0, activation=nn.ReLU(), dropout_p=0.0, learn_H=False):
+    def __init__(self, dim_in, dim_out, dim_hidden=32, num_hidden=0, activation=nn.ReLU(), dropout_p=0.0, nbr_connection=False, learn_H=False):
         super(BPGNN, self).__init__()
-        self.transform = nn.Sequential(MLP(dim_in, dim_out, dim_hidden, num_hidden, activation, dropout_p), nn.LogSoftmax(dim=-1))
-        self.conv = BPConv(dim_out, learn_H)
+        self.transform_ego = nn.Sequential(MLP(dim_in, dim_out, dim_hidden, num_hidden, activation, dropout_p), nn.LogSoftmax(dim=-1))
+        if nbr_connection:
+            self.sum_conv = SumConv()
+            self.transform_nbr = nn.Sequential(MLP(dim_in, dim_out, dim_hidden, num_hidden, activation, dropout_p), nn.LogSoftmax(dim=-1))
+        self.bp_conv = BPConv(dim_out, learn_H)
 
-    def forward(self, x, edge_index, edge_weight=None, rv=None, phi=None, scaling=None, K=5):
-        log_b0 = self.transform(x)
+    def forward(self, x, edge_index, edge_weight=None, agg_scaling=None, rv=None, phi=None, K=5):
+        log_b0 = self.transform_ego(x)
         if edge_weight is None:
             edge_weight = torch.ones(edge_index.shape[1]).to(x.device)
+        if agg_scaling is None:
+            agg_scaling = torch.ones(x.shape[0]).to(x.device)
         if rv is None:
             edge_index, edge_weight, rv = process_edge_index(x.shape[0], edge_index, edge_weight)
         if phi is not None:
-            log_b0 += phi
-        if scaling is None:
-            scaling = torch.ones(x.shape[0]).to(x.device)
+            log_b0 = log_b0 + phi * agg_scaling.unsqueeze(-1)
+        if hasattr(self, 'transform_nbr'):
+            log_b0 = log_b0 + self.sum_conv(self.transform_nbr(x), edge_index, edge_weight) * agg_scaling.unsqueeze(-1)
         num_classes = log_b0.shape[-1]
         info = {'log_b0': log_b0,
                 'log_msg_': (-np.log(num_classes)) * torch.ones(edge_index.shape[1], num_classes).to(x.device),
                 'rv': rv,
-                'scaling': scaling}
+                'agg_scaling': agg_scaling}
         log_b = log_b0
         for _ in range(K):
-            log_b = self.conv(log_b, edge_index, edge_weight, info)
+            log_b = self.bp_conv(log_b, edge_index, edge_weight, info)
         return log_b
 
 
@@ -146,7 +151,7 @@ def run(dataset, homo_ratio, split, model_name, num_hidden, device, learning_rat
     elif model_name == 'GAT':
         model = GAT(num_features, num_classes, dim_hidden=8, activation=nn.ELU(), dropout_p=0.6)
     elif model_name == 'BPGNN':
-        model = BPGNN(num_features, num_classes, dim_hidden=128, num_hidden=num_hidden, activation=nn.LeakyReLU(), dropout_p=0.3, learn_H=learn_H)
+        model = BPGNN(num_features, num_classes, dim_hidden=128, num_hidden=num_hidden, activation=nn.LeakyReLU(), dropout_p=0.3, nbr_connection=False, learn_H=learn_H)
     else:
         raise Exception('unexpected model type')
     model = model.to(device)
@@ -161,7 +166,7 @@ def run(dataset, homo_ratio, split, model_name, num_hidden, device, learning_rat
             subgraph_edge_index, subgraph_edge_weight, subgraph_rv in subgraph_sampler.get_generator(train_mask, max_batch_size, num_hops, num_nbrs, device):
             # print("reserved mem: {:5.3f},    allocated mem: {:5.3f}".format(torch.cuda.memory_reserved(0) / 1024.0**3, torch.cuda.memory_allocated(0) / 1024.0**3))
             optimizer.zero_grad()
-            subgraph_log_b = model(subgraph_x, subgraph_edge_index, edge_weight=subgraph_edge_weight, rv=subgraph_rv, scaling=get_scaling(subgraph_deg0, degree(subgraph_edge_index[1], subgraph_size)), K=num_hops)
+            subgraph_log_b = model(subgraph_x, subgraph_edge_index, edge_weight=subgraph_edge_weight, agg_scaling=get_scaling(subgraph_deg0, degree(subgraph_edge_index[1], subgraph_size)), rv=subgraph_rv, K=num_hops)
             loss = F.nll_loss(subgraph_log_b[:batch_size], batch_y)
             loss.backward()
             optimizer.step()
@@ -184,7 +189,7 @@ def run(dataset, homo_ratio, split, model_name, num_hidden, device, learning_rat
                 subgraph_size, subgraph_nodes, subgraph_x, subgraph_y, subgraph_deg0, \
                 subgraph_edge_index, subgraph_edge_weight, subgraph_rv in subgraph_sampler.get_generator(mask, max_batch_size, num_hops, num_nbrs, device):
                 # print("reserved mem: {:5.3f},    allocated mem: {:5.3f}".format(torch.cuda.memory_reserved(0) / 1024.0**3, torch.cuda.memory_allocated(0) / 1024.0**3))
-                subgraph_log_b = model(subgraph_x, subgraph_edge_index, edge_weight=subgraph_edge_weight, rv=subgraph_rv, scaling=get_scaling(subgraph_deg0, degree(subgraph_edge_index[1], subgraph_size)), K=num_hops)
+                subgraph_log_b = model(subgraph_x, subgraph_edge_index, edge_weight=subgraph_edge_weight, agg_scaling=get_scaling(subgraph_deg0, degree(subgraph_edge_index[1], subgraph_size)), rv=subgraph_rv, K=num_hops)
                 total_correct += (subgraph_log_b[:batch_size].argmax(-1) == batch_y).sum().item()
         if verbose:
             print('{:>5s} inductive accuracy: {:5.3f}'.format(partition, total_correct/mask.sum().item()), flush=True)
@@ -200,14 +205,14 @@ def run(dataset, homo_ratio, split, model_name, num_hidden, device, learning_rat
                     subgraphC_mask = train_mask[subgraph_nodes]
                     subgraphR_mask = torch.logical_not(subgraphC_mask)
                     log_c = torch.zeros(subgraph_size, num_classes).to(device)
-                    log_c[subgraphC_mask] = model.conv.get_logH()[subgraph_y[subgraphC_mask]]
+                    log_c[subgraphC_mask] = model.bp_conv.get_logH()[subgraph_y[subgraphC_mask]]
                     subgraphR_phi = sum_conv(log_c, subgraph_edge_index, subgraph_edge_weight)[subgraphR_mask]
                     subgraphR_edge_index, subgraphR_edge_weight = subgraph(subgraphR_mask, subgraph_edge_index, subgraph_edge_weight, relabel_nodes=True)
                     subgraphR_edge_index, subgraphR_edge_weight, subgraphR_rv = process_edge_index(subgraphR_mask.sum().item(), subgraphR_edge_index, subgraphR_edge_weight)
                     subgraph_log_b = torch.zeros(subgraph_size, num_classes).to(device)
                     subgraph_log_b[subgraphC_mask] = F.one_hot(subgraph_y[subgraphC_mask], num_classes).float().to(device)
-                    subgraph_log_b[subgraphR_mask] = model(subgraph_x[subgraphR_mask], subgraphR_edge_index, subgraphR_edge_weight, rv=subgraphR_rv, phi=subgraphR_phi,
-                                                           scaling=get_scaling(subgraph_deg0[subgraphR_mask], degree(subgraphR_edge_index[1], subgraphR_mask.sum().item())), K=num_hops)
+                    subgraph_log_b[subgraphR_mask] = model(subgraph_x[subgraphR_mask], subgraphR_edge_index, subgraphR_edge_weight,
+                                                           agg_scaling=get_scaling(subgraph_deg0, degree(subgraph_edge_index[1], subgraph_size))[subgraphR_mask], rv=subgraphR_rv, phi=subgraphR_phi, K=num_hops)
                     total_correct += (subgraph_log_b[:batch_size].argmax(-1) == batch_y).sum().item()
             if verbose:
                 print('{:>5s} transductive accuracy: {:5.3f}'.format(partition, total_correct/mask.sum().item()), flush=True)
@@ -226,12 +231,13 @@ def run(dataset, homo_ratio, split, model_name, num_hidden, device, learning_rat
             opt_test = evaluation(test_mask, num_hops=num_hops, num_nbrs=num_nbrs, partition='test')
 
         if type(model) == BPGNN and verbose:
-            print(model.conv.get_logH().exp())
+            print(model.bp_conv.get_logH().exp())
 
     if verbose:
         print('optimal val accuracy: {:7.5f}, optimal test accuracy: {:7.5f}'.format(opt_val, opt_test))
 
     return opt_test
+
 
 
 torch.set_printoptions(precision=4, threshold=None, edgeitems=15, linewidth=200, profile=None, sci_mode=False)
