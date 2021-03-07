@@ -126,6 +126,8 @@ def run(dataset, homo_ratio, split, model_name, num_hidden, device, learning_rat
         data = load_wikipedia('Squirrel', split=split)
     elif dataset == 'Chameleon':
         data = load_wikipedia('Chameleon', split=split)
+    elif dataset == 'OGBN_arXiv':
+        data = load_ogbn('arxiv', split=split)
     elif dataset == 'OGBN_Products':
         data = load_ogbn('products', split=split)
     else:
@@ -137,11 +139,11 @@ def run(dataset, homo_ratio, split, model_name, num_hidden, device, learning_rat
     num_classes = len(torch.unique(y))
     train_mask, val_mask, test_mask = data.train_mask, data.val_mask, data.test_mask
     subgraph_sampler = SubgraphSampler(num_nodes, x, y, edge_index, edge_weight)
-    # max_batch_size = 1024
-    max_batch_size = min(math.ceil(num_nodes/10), 1024)
+    # max_batch_size = num_nodes
+    max_batch_size = min(math.ceil(num_nodes/10), 256)
 
     if model_name == 'MLP':
-        model = GMLP(num_features, num_classes, dim_hidden=128, num_hidden=num_hidden, activation=nn.LeakyReLU(), dropout_p=0.3)
+        model = GMLP(num_features, num_classes, dim_hidden=256, num_hidden=num_hidden, activation=nn.LeakyReLU(), dropout_p=0.1)
     elif model_name == 'SGC':
         model = SGC(num_features, num_classes, dim_hidden=128, dropout_p=0.3)
     elif model_name == 'GCN':
@@ -151,7 +153,7 @@ def run(dataset, homo_ratio, split, model_name, num_hidden, device, learning_rat
     elif model_name == 'GAT':
         model = GAT(num_features, num_classes, dim_hidden=8, activation=nn.ELU(), dropout_p=0.6)
     elif model_name == 'BPGNN':
-        model = BPGNN(num_features, num_classes, dim_hidden=128, num_hidden=num_hidden, activation=nn.LeakyReLU(), dropout_p=0.3, nbr_connection=False, learn_H=learn_H)
+        model = BPGNN(num_features, num_classes, dim_hidden=256, num_hidden=num_hidden, activation=nn.LeakyReLU(), dropout_p=0.1, nbr_connection=False, learn_H=learn_H)
     else:
         raise Exception('unexpected model type')
     model = model.to(device)
@@ -221,7 +223,7 @@ def run(dataset, homo_ratio, split, model_name, num_hidden, device, learning_rat
 
 
     best_val, opt_val, opt_test = 0.0, 0.0, 0.0
-    for epoch in range(50):
+    for epoch in range(500):
         num_hops = (0 if ((not train_BP) or (learn_H and epoch < 3)) else 2)
         num_nbrs = 5
         train(num_hops=num_hops, num_nbrs=num_nbrs)
@@ -230,14 +232,13 @@ def run(dataset, homo_ratio, split, model_name, num_hidden, device, learning_rat
             opt_val = val
             opt_test = evaluation(test_mask, num_hops=num_hops, num_nbrs=num_nbrs, partition='test')
 
-        if type(model) == BPGNN and verbose:
+        if type(model) == BPGNN and learn_H and verbose:
             print(model.bp_conv.get_logH().exp())
 
     if verbose:
         print('optimal val accuracy: {:7.5f}, optimal test accuracy: {:7.5f}'.format(opt_val, opt_test))
 
     return opt_test
-
 
 
 torch.set_printoptions(precision=4, threshold=None, edgeitems=15, linewidth=200, profile=None, sci_mode=False)
