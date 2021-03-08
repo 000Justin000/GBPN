@@ -9,90 +9,17 @@ from torch_geometric.data import NeighborSampler
 from torch_geometric.nn import GCNConv
 from torch_geometric.transforms import ToSparseTensor
 from torch_geometric.nn import MessagePassing
-from torch_geometric.utils import degree, sort_edge_index, is_undirected, subgraph, k_hop_subgraph
+from torch_geometric.utils import degree, is_undirected, subgraph
 from utils import *
 import matplotlib
 import matplotlib.pyplot as plt
 
 
-class SumConv(MessagePassing):
-    def __init__(self):
-        super(SumConv, self).__init__(aggr='add')
-
-    def forward(self, x, edge_index, edge_weight):
-        if edge_weight is None:
-            edge_weight = torch.ones(edge_index.shape[1]).to(x.device)
-        return self.propagate(edge_index, x=x, edge_weight=edge_weight)
-
-    def message(self, x_j, edge_weight):
-        return edge_weight.view(-1, 1) * x_j
-
-
-class BPConv(MessagePassing):
-    def __init__(self, n_channels, learn_H=False):
-        super(BPConv, self).__init__(aggr='add')
-        self.learn_H = learn_H
-        dim_param = n_channels * (n_channels + 1) // 2
-        self.param = nn.Parameter(torch.zeros(dim_param))
-        self.n_channels = n_channels
-
-    def get_logH(self):
-        logT = torch.zeros(self.n_channels, self.n_channels).to(self.param.device)
-        rid, cid = torch.tril_indices(self.n_channels, self.n_channels, 0)
-        logT[rid, cid] = F.logsigmoid(self.param * 10.0)
-        logH = (logT + logT.transpose(0, 1).triu(1))
-        return (logH if self.learn_H else logH.detach().fill_diagonal_(0.0))
-
-    def forward(self, x, edge_index, edge_weight, info):
-        # x has shape [N, n_channels]
-        # edge_index has shape [2, E]
-        # info has 3 fields: 'log_b0', 'log_msg_', 'rv'
-        return self.propagate(edge_index, edge_weight=edge_weight, x=x, info=info)
-
-    def message(self, x_j, edge_weight, info):
-        # x_j has shape [E, n_channels]
-        logC = edge_weight.unsqueeze(-1).unsqueeze(-1) * self.get_logH().unsqueeze(0)
-        log_msg_raw = torch.logsumexp((x_j - info['log_msg_'][info['rv']]).unsqueeze(-1) + logC, dim=-2)
-        log_msg = log_normalize(log_msg_raw)
-        info['log_msg_'] = log_msg
-        return log_msg
-
-    def update(self, agg_log_msg, info):
-        log_b_raw = info['log_b0'] + agg_log_msg + (info['agg_scaling']-1.0).unsqueeze(-1) * agg_log_msg.detach()
-        log_b = log_normalize(log_b_raw)
-        return log_b
-
-
-class BPGNN(nn.Module):
-    def __init__(self, dim_in, dim_out, dim_hidden=32, num_hidden=0, activation=nn.ReLU(), dropout_p=0.0, nbr_connection=False, learn_H=False):
-        super(BPGNN, self).__init__()
-        self.transform_ego = nn.Sequential(MLP(dim_in, dim_out, dim_hidden, num_hidden, activation, dropout_p), nn.LogSoftmax(dim=-1))
-        if nbr_connection:
-            self.sum_conv = SumConv()
-            self.transform_nbr = nn.Sequential(MLP(dim_in, dim_out, dim_hidden, num_hidden, activation, dropout_p), nn.LogSoftmax(dim=-1))
-        self.bp_conv = BPConv(dim_out, learn_H)
-
-    def forward(self, x, edge_index, edge_weight=None, agg_scaling=None, rv=None, phi=None, K=5):
-        log_b0 = self.transform_ego(x)
-        if edge_weight is None:
-            edge_weight = torch.ones(edge_index.shape[1]).to(x.device)
-        if agg_scaling is None:
-            agg_scaling = torch.ones(x.shape[0]).to(x.device)
-        if rv is None:
-            edge_index, edge_weight, rv = process_edge_index(x.shape[0], edge_index, edge_weight)
-        if phi is not None:
-            log_b0 = log_b0 + phi * agg_scaling.unsqueeze(-1)
-        if hasattr(self, 'transform_nbr'):
-            log_b0 = log_b0 + self.sum_conv(self.transform_nbr(x), edge_index, edge_weight) * agg_scaling.unsqueeze(-1)
-        num_classes = log_b0.shape[-1]
-        info = {'log_b0': log_b0,
-                'log_msg_': (-np.log(num_classes)) * torch.ones(edge_index.shape[1], num_classes).to(x.device),
-                'rv': rv,
-                'agg_scaling': agg_scaling}
-        log_b = log_b0
-        for _ in range(K):
-            log_b = self.bp_conv(log_b, edge_index, edge_weight, info)
-        return log_b
+def get_scaling(deg0, deg1):
+    assert deg0.shape == deg1.shape
+    scaling = torch.ones(deg0.shape[0]).to(deg0.device)
+    scaling[deg1 != 0] = (deg0 / deg1)[deg1 != 0]
+    return scaling
 
 
 def get_cts(edge_index, y):
