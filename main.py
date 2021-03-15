@@ -93,7 +93,6 @@ def run(dataset, homo_ratio, split, model_name, num_hidden, device, learning_rat
         for batch_size, batch_nodes, batch_x, batch_y, batch_deg0, \
             subgraph_size, subgraph_nodes, subgraph_x, subgraph_y, subgraph_deg0, \
             subgraph_edge_index, subgraph_edge_weight, subgraph_rv in subgraph_sampler.get_generator(train_mask, max_batch_size, num_hops, num_nbrs, device):
-            # print("reserved mem: {:5.3f},    allocated mem: {:5.3f}".format(torch.cuda.memory_reserved(0) / 1024.0**3, torch.cuda.memory_allocated(0) / 1024.0**3))
             optimizer.zero_grad()
             subgraph_log_b = model(subgraph_x, subgraph_edge_index, edge_weight=subgraph_edge_weight, agg_scaling=get_scaling(subgraph_deg0, degree(subgraph_edge_index[1], subgraph_size)), rv=subgraph_rv, K=num_hops)
             loss = F.nll_loss(subgraph_log_b[:batch_size], batch_y)
@@ -117,7 +116,6 @@ def run(dataset, homo_ratio, split, model_name, num_hidden, device, learning_rat
             for batch_size, batch_nodes, batch_x, batch_y, batch_deg0, \
                 subgraph_size, subgraph_nodes, subgraph_x, subgraph_y, subgraph_deg0, \
                 subgraph_edge_index, subgraph_edge_weight, subgraph_rv in subgraph_sampler.get_generator(mask, max_batch_size, num_hops, num_nbrs, device):
-                # print("reserved mem: {:5.3f},    allocated mem: {:5.3f}".format(torch.cuda.memory_reserved(0) / 1024.0**3, torch.cuda.memory_allocated(0) / 1024.0**3))
                 subgraph_log_b = model(subgraph_x, subgraph_edge_index, edge_weight=subgraph_edge_weight, agg_scaling=get_scaling(subgraph_deg0, degree(subgraph_edge_index[1], subgraph_size)), rv=subgraph_rv, K=num_hops)
                 total_correct += (subgraph_log_b[:batch_size].argmax(-1) == batch_y).sum().item()
         if verbose:
@@ -130,7 +128,6 @@ def run(dataset, homo_ratio, split, model_name, num_hidden, device, learning_rat
                 for batch_size, batch_nodes, batch_x, batch_y, batch_deg0, \
                     subgraph_size, subgraph_nodes, subgraph_x, subgraph_y, subgraph_deg0, \
                     subgraph_edge_index, subgraph_edge_weight, subgraph_rv in subgraph_sampler.get_generator(mask, max_batch_size, num_hops, num_nbrs, device):
-                    # print("reserved mem: {:5.3f},    allocated mem: {:5.3f}".format(torch.cuda.memory_reserved(0) / 1024.0**3, torch.cuda.memory_allocated(0) / 1024.0**3))
                     subgraphC_mask = train_mask[subgraph_nodes]
                     subgraphR_mask = torch.logical_not(subgraphC_mask)
                     log_c = torch.zeros(subgraph_size, num_classes).to(device)
@@ -150,8 +147,8 @@ def run(dataset, homo_ratio, split, model_name, num_hidden, device, learning_rat
 
 
     best_val, opt_val, opt_test = 0.0, 0.0, 0.0
-    for epoch in range(500):
-        num_hops = (0 if ((not train_BP) or (learn_H and epoch < 3)) else 2)
+    for epoch in range(30):
+        num_hops = (0 if ((not train_BP) or (learn_H and epoch < 1)) else 2)
         num_nbrs = 5
         train(num_hops=num_hops, num_nbrs=num_nbrs)
         val = evaluation(val_mask, num_hops=num_hops, num_nbrs=num_nbrs, partition='val')

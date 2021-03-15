@@ -465,7 +465,7 @@ def load_cats_dogs(homo_ratio=0.5, transform=None, split=[0.3, 0.2, 0.5]):
     data.val_mask = torch.zeros(num_nodes, dtype=bool).scatter_(0, torch.tensor(val_idx), True)
     data.test_mask = torch.zeros(num_nodes, dtype=bool).scatter_(0, torch.tensor(test_idx), True)
 
-    data.edge_index, data.edge_weight, data.rv = process_edge_index(num_nodes, data.edge_index, data.edge_weight if hasattr(data, 'edge_weight') else None)
+    data.edge_index, data.edge_weight, data.rv = process_edge_index(num_nodes, data.edge_index, None)
 
     return data if (transform is None) else transform(data)
 
@@ -583,8 +583,7 @@ def preprocess_rnn_jpmc_fraud(feature, label, info, previous_label_as_feature=Fa
     return feature_padded, label_padded, feature_mask
 
 
-def load_gnn_jpmc_fraud(transform=None, split=[0.3,0.2,0.5]):
-    feature, label, info = load_jpmc_fraud()
+def preprocess_gnn_jpmc_fraud(feature, label, info, transform=None, split=[0.3, 0.2, 0.5]):
     last_seen = defaultdict(lambda: -1)
     edge_idx_list = []
     for i in range(info.shape[0]):
@@ -600,14 +599,16 @@ def load_gnn_jpmc_fraud(transform=None, split=[0.3,0.2,0.5]):
             last_seen[bene_id] = i
 
     edge_index = to_undirected(remove_self_loops(torch.tensor(edge_idx_list).transpose(0,1))[0])
-    data = Data(x=feature, y=label, edge_index=edge_index)
+    data = Data(x=torch.tensor(feature, dtype=torch.float32), y=torch.tensor(label, dtype=torch.int64), edge_index=edge_index)
     num_nodes = data.x.shape[0]
     assert len(split) == 3
     train_idx, val_idx, test_idx = rand_split(num_nodes, split)
 
-    data.train_mask = torch.zeros(num_nodes).scatter(0, torch.tensor(train_idx), torch.ones(train_idx.shape[0]))
-    data.val_mask = torch.zeros(num_nodes).scatter(0, torch.tensor(val_idx), torch.ones(val_idx.shape[0]))
-    data.test_mask = torch.zeros(num_nodes).scatter(0, torch.tensor(test_idx), torch.ones(test_idx.shape[0]))
+    data.train_mask = torch.zeros(num_nodes, dtype=bool).scatter(0, torch.tensor(train_idx), True)
+    data.val_mask = torch.zeros(num_nodes, dtype=bool).scatter(0, torch.tensor(val_idx), True)
+    data.test_mask = torch.zeros(num_nodes, dtype=bool).scatter(0, torch.tensor(test_idx), True)
+
+    data.edge_index, data.edge_weight, data.rv = process_edge_index(num_nodes, data.edge_index, None)
 
     return data if (transform is None) else transform(data)
 
