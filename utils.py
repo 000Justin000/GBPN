@@ -6,7 +6,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import pandas as pd
-import networkx as nx
+import cnetworkx as nx
 import numba
 import torch_sparse
 from torch_sparse import SparseTensor, coalesce
@@ -251,9 +251,9 @@ class SubtreeSampler:
         self.edge_weight = edge_weight
         self.G = nx.empty_graph(num_nodes)
         if edge_weight is None:
-            self.G.add_edges_from(zip(edge_index[0].tolist(), edge_index[1].tolist()))
+            self.G.add_edges_from(list(zip(edge_index[0].tolist(), edge_index[1].tolist())))
         else:
-            self.G.add_weighted_edges_from(zip(edge_index[0].tolist(), edge_index[1].tolist(), edge_weight.tolist()))
+            self.G.add_weighted_edges_from(list(zip(edge_index[0].tolist(), edge_index[1].tolist(), edge_weight.tolist())))
         self.deg = degree(edge_index[1], num_nodes)
 
     def get_generator(self, mask, batch_size, num_hops, size, device):
@@ -289,12 +289,57 @@ class SubtreeSampler:
                 subgraph_nodes = torch.tensor(subgraph_nodes, dtype=torch.int64)
                 subgraph_size = subgraph_nodes.shape[0]
                 if self.edge_weight is None:
-                    T_edge_index = torch.zeros(2, 0, dtype=torch.int64) if len(T.edges) == 0 else torch.tensor(list(T.edges), dtype=torch.int64).t()
+                    T_edge_index = torch.tensor(list(T.edges), dtype=torch.int64).t() if len(T.edges) == 0 else torch.zeros(2, 0, dtype=torch.int64) 
                     T_edge_weight = None
                 else:
                     T_ew = nx.get_edge_attributes(T, 'weight')
-                    T_edge_index = torch.zeros(2, 0, dtype=torch.int64) if len(T_ew.keys()) == 0 else torch.tensor(list(T_ew.keys()), dtype=torch.int64).t()
+                    T_edge_index = torch.tensor(list(T_ew.keys()), dtype=torch.int64).t() if len(T_ew.keys()) == 0 else torch.zeros(2, 0, dtype=torch.int64) 
                     T_edge_weight = torch.tensor(list(T_ew.values()))
+                subgraph_edge_index, subgraph_edge_weight = T_edge_index, T_edge_weight
+                subgraph_edge_index, subgraph_edge_weight, subgraph_rv = process_edge_index(subgraph_nodes.shape[0], subgraph_edge_index, subgraph_edge_weight)
+
+                yield batch_size, batch_nodes.to(device), self.x[batch_nodes].to(device), self.y[batch_nodes].to(device), self.deg[batch_nodes].to(device), \
+                      subgraph_size, subgraph_nodes.to(device), self.x[subgraph_nodes].to(device), self.y[subgraph_nodes].to(device), self.deg[subgraph_nodes].to(device), \
+                      subgraph_edge_index.to(device), None if (subgraph_edge_weight is None) else subgraph_edge_weight.to(device), subgraph_rv.to(device)
+
+        return generator()
+
+
+class CSubtreeSampler:
+
+    def __init__(self, num_nodes, x, y, edge_index, edge_weight=None):
+        self.device = edge_index.device
+        self.num_nodes = num_nodes
+        self.x = x
+        self.y = y
+        self.edge_index = edge_index
+        self.edge_weight = edge_weight
+        self.G = nx.empty_graph(num_nodes)
+        if edge_weight is None:
+            self.G.add_edges_from(list(zip(edge_index[0].tolist(), edge_index[1].tolist())))
+        else:
+            self.G.add_weighted_edges_from(list(zip(edge_index[0].tolist(), edge_index[1].tolist(), edge_weight.tolist())))
+        self.deg = degree(edge_index[1], num_nodes)
+
+    def get_generator(self, mask, batch_size, num_hops, size, device):
+        idx = mask.nonzero(as_tuple=True)[0]
+        n_batch = math.ceil(idx.shape[0] / batch_size)
+
+        def generator():
+            for batch_nodes in idx[torch.randperm(idx.shape[0])].chunk(n_batch):
+                batch_size = batch_nodes.shape[0]
+
+                T = nx.sample_subtree(self.G, batch_nodes.tolist(), num_hops, size)
+                subgraph_nodes = torch.tensor(T.get_nodes(), dtype=torch.int64)
+                subgraph_size = subgraph_nodes.shape[0]
+                if self.edge_weight is None:
+                    T_edge_index = torch.tensor(T.get_edges(), dtype=torch.int64).t() if len(T.get_edges()) > 0 else torch.zeros(2, 0, dtype=torch.int64)
+                    T_edge_weight = None
+                else:
+                    T_ew = T.get_weigted_edges()
+                    T_edge_index = torch.tensor(list(map(lambda tp: tp[0:2], T_ew)), dtype=torch.int64).t() if len(T_ew) > 0 else torch.zeros(2, 0, dtype=torch.int64)
+                    T_edge_weight = torch.tensor(list(map(lambda tp: tp[2], T_ew)), dtype=torch.float32) if len(T_ew) > 0 else torch.zeros(0, dtype=torch.int64)
+
                 subgraph_edge_index, subgraph_edge_weight = T_edge_index, T_edge_weight
                 subgraph_edge_index, subgraph_edge_weight, subgraph_rv = process_edge_index(subgraph_nodes.shape[0], subgraph_edge_index, subgraph_edge_weight)
 
