@@ -1,12 +1,15 @@
 import os
 import math
 import numpy as np
+import random
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import pandas as pd
+import networkx as nx
+import numba
 import torch_sparse
-from torch_sparse import SparseTensor
+from torch_sparse import SparseTensor, coalesce
 from torch_geometric.nn import MessagePassing
 from torch_geometric.nn import GCNConv, SAGEConv, GATConv
 from torch_geometric.nn.conv.gcn_conv import gcn_norm
@@ -237,6 +240,71 @@ class SubgraphSampler:
         return generator()
 
 
+class SubtreeSampler:
+
+    def __init__(self, num_nodes, x, y, edge_index, edge_weight=None):
+        self.device = edge_index.device
+        self.num_nodes = num_nodes
+        self.x = x
+        self.y = y
+        self.edge_index = edge_index
+        self.edge_weight = edge_weight
+        self.G = nx.empty_graph(num_nodes)
+        if edge_weight is None:
+            self.G.add_edges_from(zip(edge_index[0].tolist(), edge_index[1].tolist()))
+        else:
+            self.G.add_weighted_edges_from(zip(edge_index[0].tolist(), edge_index[1].tolist(), edge_weight.tolist()))
+        self.deg = degree(edge_index[1], num_nodes)
+
+    def get_generator(self, mask, batch_size, num_hops, size, device):
+        idx = mask.nonzero(as_tuple=True)[0]
+        n_batch = math.ceil(idx.shape[0] / batch_size)
+
+        def generator():
+            for batch_nodes in idx[torch.randperm(idx.shape[0])].chunk(n_batch):
+                batch_size = batch_nodes.shape[0]
+
+                T = nx.empty_graph(batch_size)
+                subgraph_nodes = batch_nodes.tolist()
+
+                def dfs(r, rid):
+                    stack = [(r, rid, 0, -1)] if num_hops > 0 else []
+                    while len(stack) > 0:
+                        u, uid, d, p = stack.pop()
+                        nbrs = set(self.G.neighbors(u)) - set([p])
+                        for v in random.sample(nbrs, min(len(nbrs), size)):
+                            subgraph_nodes.append(v)
+                            vid = T.number_of_nodes()
+                            T.add_node(vid)
+                            if self.edge_weight is None:
+                                T.add_edge(uid, vid)
+                            else:
+                                T.add_edge(uid, vid, weight=self.G[u][v]['weight'])
+                            if num_hops > d+1:
+                                stack.append((v, vid, d+1, u))
+
+                for (rid, r) in enumerate(batch_nodes.tolist()):
+                    dfs(r, rid)
+
+                subgraph_nodes = torch.tensor(subgraph_nodes, dtype=torch.int64)
+                subgraph_size = subgraph_nodes.shape[0]
+                if self.edge_weight is None:
+                    T_edge_index = torch.zeros(2, 0, dtype=torch.int64) if len(T.edges) == 0 else torch.tensor(list(T.edges), dtype=torch.int64).t()
+                    T_edge_weight = None
+                else:
+                    T_ew = nx.get_edge_attributes(T, 'weight')
+                    T_edge_index = torch.zeros(2, 0, dtype=torch.int64) if len(T_ew.keys()) == 0 else torch.tensor(list(T_ew.keys()), dtype=torch.int64).t()
+                    T_edge_weight = torch.tensor(list(T_ew.values()))
+                subgraph_edge_index, subgraph_edge_weight = T_edge_index, T_edge_weight
+                subgraph_edge_index, subgraph_edge_weight, subgraph_rv = process_edge_index(subgraph_nodes.shape[0], subgraph_edge_index, subgraph_edge_weight)
+
+                yield batch_size, batch_nodes.to(device), self.x[batch_nodes].to(device), self.y[batch_nodes].to(device), self.deg[batch_nodes].to(device), \
+                      subgraph_size, subgraph_nodes.to(device), self.x[subgraph_nodes].to(device), self.y[subgraph_nodes].to(device), self.deg[subgraph_nodes].to(device), \
+                      subgraph_edge_index.to(device), None if (subgraph_edge_weight is None) else subgraph_edge_weight.to(device), subgraph_rv.to(device)
+
+        return generator()
+
+
 def rand_split(x, ps):
     assert abs(sum(ps) - 1) < 1.0e-10
 
@@ -300,17 +368,25 @@ def simplex_coordinates_test(m):
 
 
 def process_edge_index(num_nodes, edge_index, edge_attr=None):
+    def get_undirected(num_nodes, edge_index, edge_attr):
+        row, col = edge_index
+        row, col = torch.cat([row, col], dim=0), torch.cat([col, row], dim=0)
+        edge_attr = None if (edge_attr is None) else torch.cat([edge_attr, edge_attr], dim=0)
+        edge_index = torch.stack([row, col], dim=0)
+        edge_index, edge_attr = coalesce(edge_index, edge_attr, num_nodes, num_nodes, op='max')
+        return edge_index, edge_attr
+
     def sort_edge(num_nodes, edge_index):
         idx = edge_index[0]*num_nodes+edge_index[1]
         sid, perm = idx.sort()
         assert sid.unique_consecutive().shape == sid.shape
         return edge_index[:,perm], perm
 
-    edge_index = to_undirected(remove_self_loops(edge_index)[0], num_nodes)
+    # process edge_attr
+    edge_index, edge_attr = remove_self_loops(edge_index, edge_attr)
+    edge_index, edge_attr = get_undirected(num_nodes, edge_index, edge_attr)
     edge_index, od = sort_edge(num_nodes, edge_index)
     _, rv = sort_edge(num_nodes, edge_index.flip(dims=[0]))
-    # assert not contains_self_loops(edge_index)
-    # assert is_undirected(edge_index)
     assert torch.all(edge_index[:, rv] == edge_index.flip(dims=[0]))
 
     return edge_index, (None if edge_attr is None else edge_attr[...,od]), rv

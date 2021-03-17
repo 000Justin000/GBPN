@@ -18,7 +18,7 @@ import matplotlib.pyplot as plt
 def get_scaling(deg0, deg1):
     assert deg0.shape == deg1.shape
     scaling = torch.ones(deg0.shape[0]).to(deg0.device)
-    scaling[deg1 != 0] = (deg0 / deg1)[deg1 != 0]
+    # scaling[deg1 != 0] = (deg0 / deg1)[deg1 != 0]
     return scaling
 
 
@@ -65,12 +65,12 @@ def run(dataset, homo_ratio, split, model_name, num_hidden, device, learning_rat
     num_nodes, num_features = x.shape
     num_classes = len(torch.unique(y))
     train_mask, val_mask, test_mask = data.train_mask, data.val_mask, data.test_mask
-    subgraph_sampler = SubgraphSampler(num_nodes, x, y, edge_index, edge_weight)
+    subgraph_sampler = SubtreeSampler(num_nodes, x, y, edge_index, edge_weight)
     # max_batch_size = num_nodes
     max_batch_size = min(math.ceil(num_nodes/10), 256)
 
     if model_name == 'MLP':
-        model = GMLP(num_features, num_classes, dim_hidden=256, num_hidden=num_hidden, activation=nn.LeakyReLU(), dropout_p=0.1)
+        model = GMLP(num_features, num_classes, dim_hidden=128, num_hidden=num_hidden, activation=nn.LeakyReLU(), dropout_p=0.1)
     elif model_name == 'SGC':
         model = SGC(num_features, num_classes, dim_hidden=128, dropout_p=0.3)
     elif model_name == 'GCN':
@@ -80,7 +80,7 @@ def run(dataset, homo_ratio, split, model_name, num_hidden, device, learning_rat
     elif model_name == 'GAT':
         model = GAT(num_features, num_classes, dim_hidden=8, activation=nn.ELU(), dropout_p=0.6)
     elif model_name == 'BPGNN':
-        model = BPGNN(num_features, num_classes, dim_hidden=256, num_hidden=num_hidden, activation=nn.LeakyReLU(), dropout_p=0.1, nbr_connection=False, learn_H=learn_H)
+        model = BPGNN(num_features, num_classes, dim_hidden=128, num_hidden=num_hidden, activation=nn.LeakyReLU(), dropout_p=0.1, nbr_connection=False, learn_H=learn_H)
     else:
         raise Exception('unexpected model type')
     model = model.to(device)
@@ -113,11 +113,17 @@ def run(dataset, homo_ratio, split, model_name, num_hidden, device, learning_rat
 
         total_correct = 0.0
         with torch.no_grad():
+            predicted_y_list = []
+            true_y_list = []
             for batch_size, batch_nodes, batch_x, batch_y, batch_deg0, \
                 subgraph_size, subgraph_nodes, subgraph_x, subgraph_y, subgraph_deg0, \
                 subgraph_edge_index, subgraph_edge_weight, subgraph_rv in subgraph_sampler.get_generator(mask, max_batch_size, num_hops, num_nbrs, device):
                 subgraph_log_b = model(subgraph_x, subgraph_edge_index, edge_weight=subgraph_edge_weight, agg_scaling=get_scaling(subgraph_deg0, degree(subgraph_edge_index[1], subgraph_size)), rv=subgraph_rv, K=num_hops)
                 total_correct += (subgraph_log_b[:batch_size].argmax(-1) == batch_y).sum().item()
+                predicted_y_list.append(subgraph_log_b[:batch_size].argmax(-1))
+                true_y_list.append(batch_y)
+            predicted_y = torch.cat(predicted_y_list, dim=0)
+            true_y = torch.cat(true_y_list, dim=0)
         if verbose:
             print('{:>5s} inductive accuracy: {:5.3f}'.format(partition, total_correct/mask.sum().item()), flush=True)
 
@@ -165,7 +171,7 @@ def run(dataset, homo_ratio, split, model_name, num_hidden, device, learning_rat
     return opt_test
 
 
-torch.set_printoptions(precision=4, threshold=None, edgeitems=15, linewidth=200, profile=None, sci_mode=False)
+torch.set_printoptions(precision=4, threshold=None, edgeitems=5, linewidth=200, profile=None, sci_mode=False)
 parser = argparse.ArgumentParser('model')
 parser.add_argument('--dataset', type=str, default='Cora')
 parser.add_argument('--homo_ratio', type=float, default=0.5)
