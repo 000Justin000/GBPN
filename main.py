@@ -139,8 +139,7 @@ def run(dataset, homo_ratio, split, model_name, num_hidden, device, learning_rat
     num_classes = len(torch.unique(y))
     train_mask, val_mask, test_mask = data.train_mask, data.val_mask, data.test_mask
     subgraph_sampler = SubgraphSampler(num_nodes, x, y, edge_index, edge_weight)
-    # max_batch_size = num_nodes
-    max_batch_size = min(math.ceil(num_nodes/10), 256)
+    max_batch_size = min(math.ceil(num_nodes/10), 768)
 
     if model_name == 'MLP':
         model = GMLP(num_features, num_classes, dim_hidden=256, num_hidden=num_hidden, activation=nn.LeakyReLU(), dropout_p=0.1)
@@ -223,7 +222,7 @@ def run(dataset, homo_ratio, split, model_name, num_hidden, device, learning_rat
 
 
     best_val, opt_val, opt_test = 0.0, 0.0, 0.0
-    for epoch in range(500):
+    for epoch in range(30):
         num_hops = (0 if ((not train_BP) or (learn_H and epoch < 3)) else 2)
         num_nbrs = 5
         train(num_hops=num_hops, num_nbrs=num_nbrs)

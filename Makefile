@@ -88,6 +88,13 @@ run_BPGNN_TTT:
 	python main.py --dataset County_Facebook  --split 0.6 0.2 0.2 --model_name BPGNN --learning_rate 1.0e-2 --device cuda --num_hidden 1 --train_BP --learn_H --eval_C 
 	python main.py --dataset Sex              --split 0.6 0.2 0.2 --model_name BPGNN --learning_rate 1.0e-2 --device cuda --num_hidden 1 --train_BP --learn_H --eval_C 
 
+run_Products:
+	python main.py --dataset OGBN_Products --model_name BPGNN --learning_rate 1.0e-2 --device cuda --num_hidden 2
+	python main.py --dataset OGBN_Products --model_name BPGNN --learning_rate 1.0e-2 --device cuda --num_hidden 2 --train_BP
+	python main.py --dataset OGBN_Products --model_name BPGNN --learning_rate 1.0e-2 --device cuda --num_hidden 2 --train_BP --eval_C
+	python main.py --dataset OGBN_Products --model_name BPGNN --learning_rate 1.0e-2 --device cuda --num_hidden 2 --train_BP --learn_H
+	python main.py --dataset OGBN_Products --model_name BPGNN --learning_rate 1.0e-2 --device cuda --num_hidden 2 --train_BP --learn_H --eval_C
+
 run_Animals:
 	python main.py --dataset Animals --homo_ratio 0.0 --split 0.6 0.2 0.2 --model_name SGC   --learning_rate 1.0e-2 --device cuda
 	python main.py --dataset Animals --homo_ratio 0.1 --split 0.6 0.2 0.2 --model_name SGC   --learning_rate 1.0e-2 --device cuda
