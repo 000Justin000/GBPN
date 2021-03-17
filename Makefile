@@ -1,3 +1,6 @@
+build_cnetworkx:
+	c++ -O3 -Wall -shared -std=c++17 -fPIC $(shell python3 -m pybind11 --includes) cnetworkx.cpp -o cnetworkx$(shell python3-config --extension-suffix)
+
 run_SGC:
 	python main.py --dataset Cora             --split 0.6 0.2 0.2 --model_name SGC   --learning_rate 1.0e-2 --device cuda
 	python main.py --dataset CiteSeer         --split 0.6 0.2 0.2 --model_name SGC   --learning_rate 1.0e-2 --device cuda
