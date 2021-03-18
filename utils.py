@@ -335,8 +335,6 @@ class CSubtreeSampler:
                     T_edge_index = torch.tensor(list(map(lambda tp: tp[0:2], T_ew)), dtype=torch.int64).t() if len(T_ew) > 0 else torch.zeros(2, 0, dtype=torch.int64)
                     T_edge_weight = torch.tensor(list(map(lambda tp: tp[2], T_ew)), dtype=torch.float32) if len(T_ew) > 0 else torch.zeros(0, dtype=torch.int64)
 
-                # continue from here...
-
                 subgraph_edge_index, subgraph_edge_weight = T_edge_index, T_edge_weight
                 subgraph_edge_index, subgraph_edge_weight, subgraph_rv = process_edge_index(subgraph_nodes.shape[0], subgraph_edge_index, subgraph_edge_weight)
 
