@@ -18,7 +18,7 @@ import matplotlib.pyplot as plt
 def get_scaling(deg0, deg1):
     assert deg0.shape == deg1.shape
     scaling = torch.ones(deg0.shape[0]).to(deg0.device)
-    # scaling[deg1 != 0] = (deg0 / deg1)[deg1 != 0]
+    scaling[deg1 != 0] = (deg0 / deg1)[deg1 != 0]
     return scaling
 
 
@@ -65,6 +65,12 @@ def run(dataset, homo_ratio, split, model_name, num_hidden, device, learning_rat
     num_nodes, num_features = x.shape
     num_classes = len(torch.unique(y))
     train_mask, val_mask, test_mask = data.train_mask, data.val_mask, data.test_mask
+
+    if (edge_weight is None) and (model_name == 'BPGNN'):
+        deg = degree(edge_index[1], num_nodes)
+        edge_weight = (deg[edge_index[0]] * deg[edge_index[1]])**-0.50
+        # edge_weight = deg[edge_index[1]]**-1.0
+
     subgraph_sampler = CSubtreeSampler(num_nodes, x, y, edge_index, edge_weight)
     max_batch_size = min(math.ceil(num_nodes/10), 1536)
 
@@ -79,7 +85,7 @@ def run(dataset, homo_ratio, split, model_name, num_hidden, device, learning_rat
     elif model_name == 'GAT':
         model = GAT(num_features, num_classes, dim_hidden=8, activation=nn.ELU(), dropout_p=0.6)
     elif model_name == 'BPGNN':
-        model = BPGNN(num_features, num_classes, dim_hidden=128, num_hidden=num_hidden, activation=nn.LeakyReLU(), dropout_p=0.1, nbr_connection=False, learn_H=learn_H)
+        model = BPGNN(num_features, num_classes, dim_hidden=128, num_hidden=num_hidden, activation=nn.LeakyReLU(), dropout_p=0.1, learn_H=learn_H)
     else:
         raise Exception('unexpected model type')
     model = model.to(device)
@@ -147,7 +153,7 @@ def run(dataset, homo_ratio, split, model_name, num_hidden, device, learning_rat
 
     best_val, opt_val, opt_test = 0.0, 0.0, 0.0
     for epoch in range(30):
-        num_hops = (0 if ((not train_BP) or (learn_H and epoch < 1)) else 3)
+        num_hops = (2 if ((not train_BP) or (learn_H and epoch < 3)) else 2)
         num_nbrs = 5
         train(num_hops=num_hops, num_nbrs=num_nbrs)
         val = evaluation(val_mask, num_hops=num_hops, num_nbrs=num_nbrs, partition='val')
@@ -164,7 +170,7 @@ def run(dataset, homo_ratio, split, model_name, num_hidden, device, learning_rat
     return opt_test
 
 
-torch.set_printoptions(precision=4, threshold=None, edgeitems=5, linewidth=200, profile=None, sci_mode=False)
+torch.set_printoptions(precision=4, threshold=None, edgeitems=5, linewidth=300, profile=None, sci_mode=False)
 parser = argparse.ArgumentParser('model')
 parser.add_argument('--dataset', type=str, default='Cora')
 parser.add_argument('--homo_ratio', type=float, default=0.5)

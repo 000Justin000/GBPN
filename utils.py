@@ -172,12 +172,9 @@ class BPConv(MessagePassing):
 
 
 class BPGNN(nn.Module):
-    def __init__(self, dim_in, dim_out, dim_hidden=32, num_hidden=0, activation=nn.ReLU(), dropout_p=0.0, nbr_connection=False, learn_H=False):
+    def __init__(self, dim_in, dim_out, dim_hidden=32, num_hidden=0, activation=nn.ReLU(), dropout_p=0.0, learn_H=False):
         super(BPGNN, self).__init__()
         self.transform_ego = nn.Sequential(MLP(dim_in, dim_out, dim_hidden, num_hidden, activation, dropout_p), nn.LogSoftmax(dim=-1))
-        if nbr_connection:
-            self.sum_conv = SumConv()
-            self.transform_nbr = nn.Sequential(MLP(dim_in, dim_out, dim_hidden, num_hidden, activation, dropout_p), nn.LogSoftmax(dim=-1))
         self.bp_conv = BPConv(dim_out, learn_H)
 
     def forward(self, x, edge_index, edge_weight=None, agg_scaling=None, rv=None, phi=None, K=5):
@@ -190,8 +187,6 @@ class BPGNN(nn.Module):
             edge_index, edge_weight, rv = process_edge_index(x.shape[0], edge_index, edge_weight)
         if phi is not None:
             log_b0 = log_b0 + phi * agg_scaling.unsqueeze(-1)
-        if hasattr(self, 'transform_nbr'):
-            log_b0 = log_b0 + self.sum_conv(self.transform_nbr(x), edge_index, edge_weight) * agg_scaling.unsqueeze(-1)
         num_classes = log_b0.shape[-1]
         info = {'log_b0': log_b0,
                 'log_msg_': (-np.log(num_classes)) * torch.ones(edge_index.shape[1], num_classes).to(x.device),
@@ -336,9 +331,11 @@ class CSubtreeSampler:
                     T_edge_index = torch.tensor(T.get_edges(), dtype=torch.int64).t() if len(T.get_edges()) > 0 else torch.zeros(2, 0, dtype=torch.int64)
                     T_edge_weight = None
                 else:
-                    T_ew = T.get_weigted_edges()
+                    T_ew = T.get_weighted_edges()
                     T_edge_index = torch.tensor(list(map(lambda tp: tp[0:2], T_ew)), dtype=torch.int64).t() if len(T_ew) > 0 else torch.zeros(2, 0, dtype=torch.int64)
                     T_edge_weight = torch.tensor(list(map(lambda tp: tp[2], T_ew)), dtype=torch.float32) if len(T_ew) > 0 else torch.zeros(0, dtype=torch.int64)
+
+                # continue from here...
 
                 subgraph_edge_index, subgraph_edge_weight = T_edge_index, T_edge_weight
                 subgraph_edge_index, subgraph_edge_weight, subgraph_rv = process_edge_index(subgraph_nodes.shape[0], subgraph_edge_index, subgraph_edge_weight)
@@ -429,7 +426,8 @@ def process_edge_index(num_nodes, edge_index, edge_attr=None):
 
     # process edge_attr
     edge_index, edge_attr = remove_self_loops(edge_index, edge_attr)
-    edge_index, edge_attr = get_undirected(num_nodes, edge_index, edge_attr)
+    if not is_undirected(edge_index):
+        edge_index, edge_attr = get_undirected(num_nodes, edge_index, edge_attr)
     edge_index, od = sort_edge(num_nodes, edge_index)
     _, rv = sort_edge(num_nodes, edge_index.flip(dims=[0]))
     assert torch.all(edge_index[:, rv] == edge_index.flip(dims=[0]))
