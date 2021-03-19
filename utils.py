@@ -13,7 +13,7 @@ from torch_sparse import SparseTensor, coalesce
 from torch_geometric.nn import MessagePassing
 from torch_geometric.nn import GCNConv, SAGEConv, GATConv
 from torch_geometric.nn.conv.gcn_conv import gcn_norm
-from torch_geometric.utils import degree, subgraph, remove_self_loops, to_undirected, is_undirected, contains_self_loops, stochastic_blockmodel_graph
+from torch_geometric.utils import degree, subgraph, remove_self_loops, to_undirected, contains_self_loops, is_undirected, stochastic_blockmodel_graph, k_hop_subgraph
 from torch_geometric.data import Data
 from torch_geometric.datasets import Planetoid, Coauthor, WikipediaNetwork
 from ogb.nodeproppred import PygNodePropPredDataset
@@ -219,10 +219,13 @@ class SubgraphSampler:
                 batch_size = batch_nodes.shape[0]
 
                 # create subgraph from neighborhood
-                subgraph_nodes = batch_nodes
-                for _ in range(num_hops):
-                    _, subgraph_nodes = self.adj_t.sample_adj(subgraph_nodes, size, replace=False)
-                subgraph_size = subgraph_nodes.shape[0]
+                if size < 0:
+                    subgraph_nodes, _, _, _ = k_hop_subgraph(batch_nodes, num_hops, self.edge_index, num_nodes=self.num_nodes)
+                else:
+                    subgraph_nodes = batch_nodes
+                    for _ in range(num_hops):
+                        _, subgraph_nodes = self.adj_t.sample_adj(subgraph_nodes, size, replace=False)
+                    subgraph_size = subgraph_nodes.shape[0]
 
                 assert torch.all(subgraph_nodes[:batch_size] == batch_nodes)
                 subgraph_edge_index, subgraph_edge_weight = subgraph(subgraph_nodes, self.edge_index, self.edge_weight, relabel_nodes=True)
@@ -267,7 +270,8 @@ class SubtreeSampler:
                     while len(stack) > 0:
                         u, uid, d, p = stack.pop()
                         nbrs = set(self.G.neighbors(u)) - set([p])
-                        for v in random.sample(nbrs, min(len(nbrs), size)):
+                        selected_nbrs = (nbrs if ((size < 0) or (len(nbrs) <= size)) else random.sample(nbrs, size))
+                        for v in selected_nbrs:
                             subgraph_nodes.append(v)
                             vid = T.number_of_nodes()
                             T.add_node(vid)
@@ -535,7 +539,31 @@ def load_sexual_interaction(transform=None, split=[0.3, 0.2, 0.5]):
     return data if (transform is None) else transform(data)
 
 
-def load_animals(homo_ratio=0.5, transform=None, split=[0.3, 0.2, 0.5]):
+def load_animal2(homo_ratio=0.5, transform=None, split=[0.3, 0.2, 0.5]):
+    cat_images = torch.load('datasets/cats_dogs/cat_images.pt')
+    dog_images = torch.load('datasets/cats_dogs/dog_images.pt')
+
+    x = torch.cat((cat_images, dog_images), dim=0)
+    y = torch.cat((torch.zeros(cat_images.shape[0], dtype=torch.int64), torch.ones(dog_images.shape[0], dtype=torch.int64)), dim=0)
+    edge_index = stochastic_blockmodel_graph([cat_images.shape[0], dog_images.shape[0]],
+                                             torch.tensor([[homo_ratio, 1.0-homo_ratio],
+                                                           [1.0-homo_ratio, homo_ratio]])*0.003)
+
+    data = Data(x=x, y=y, edge_index=edge_index)
+    num_nodes = data.x.shape[0]
+    assert len(split) == 3
+    train_idx, val_idx, test_idx = rand_split(num_nodes, split)
+
+    data.train_mask = torch.zeros(num_nodes, dtype=bool).scatter_(0, torch.tensor(train_idx), True)
+    data.val_mask = torch.zeros(num_nodes, dtype=bool).scatter_(0, torch.tensor(val_idx), True)
+    data.test_mask = torch.zeros(num_nodes, dtype=bool).scatter_(0, torch.tensor(test_idx), True)
+
+    data.edge_index, data.edge_weight, data.rv = process_edge_index(num_nodes, data.edge_index, None)
+
+    return data if (transform is None) else transform(data)
+
+
+def load_animal3(homo_ratio=0.5, transform=None, split=[0.3, 0.2, 0.5]):
     cat_images = torch.load('datasets/animals/cat_images.pt')
     dog_images = torch.load('datasets/animals/dog_images.pt')
     panda_images = torch.load('datasets/animals/panda_images.pt')
@@ -559,30 +587,6 @@ def load_animals(homo_ratio=0.5, transform=None, split=[0.3, 0.2, 0.5]):
     data.test_mask = torch.zeros(num_nodes, dtype=bool).scatter_(0, torch.tensor(test_idx), True)
 
     data.edge_index, data.edge_weight, data.rv = process_edge_index(num_nodes, data.edge_index, data.edge_weight if hasattr(data, 'edge_weight') else None)
-
-    return data if (transform is None) else transform(data)
-
-
-def load_cats_dogs(homo_ratio=0.5, transform=None, split=[0.3, 0.2, 0.5]):
-    cat_images = torch.load('datasets/cats_dogs/cat_images.pt')
-    dog_images = torch.load('datasets/cats_dogs/dog_images.pt')
-
-    x = torch.cat((cat_images, dog_images), dim=0)
-    y = torch.cat((torch.zeros(cat_images.shape[0], dtype=torch.int64), torch.ones(dog_images.shape[0], dtype=torch.int64)), dim=0)
-    edge_index = stochastic_blockmodel_graph([cat_images.shape[0], dog_images.shape[0]],
-                                             torch.tensor([[homo_ratio, 1.0-homo_ratio],
-                                                           [1.0-homo_ratio, homo_ratio]])*0.003)
-
-    data = Data(x=x, y=y, edge_index=edge_index)
-    num_nodes = data.x.shape[0]
-    assert len(split) == 3
-    train_idx, val_idx, test_idx = rand_split(num_nodes, split)
-
-    data.train_mask = torch.zeros(num_nodes, dtype=bool).scatter_(0, torch.tensor(train_idx), True)
-    data.val_mask = torch.zeros(num_nodes, dtype=bool).scatter_(0, torch.tensor(val_idx), True)
-    data.test_mask = torch.zeros(num_nodes, dtype=bool).scatter_(0, torch.tensor(test_idx), True)
-
-    data.edge_index, data.edge_weight, data.rv = process_edge_index(num_nodes, data.edge_index, None)
 
     return data if (transform is None) else transform(data)
 

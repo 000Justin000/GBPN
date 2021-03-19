@@ -125,7 +125,9 @@ void dfs(Graph& G, Graph& T, int r, int rid, int max_d, int size)
 //      cout << endl;
 
         vector<int> selected_nbrs;
-        if (nbrs.size() > 0)
+        if ((size < 0) || (nbrs.size() <= size))
+            selected_nbrs = nbrs;
+        else
             sample(nbrs.begin(), nbrs.end(), back_inserter(selected_nbrs), size, mt19937{random_device{}()});
         for (auto v: selected_nbrs)
         {

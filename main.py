@@ -45,10 +45,10 @@ def run(dataset, homo_ratio, split, model_name, num_hidden, device, learning_rat
         data = load_county_facebook(split=split)
     elif dataset == 'Sex':
         data = load_sexual_interaction(split=split)
-    elif dataset == 'Cats_Dogs':
-        data = load_cats_dogs(homo_ratio=homo_ratio, split=split)
-    elif dataset == 'Animals':
-        data = load_animals(homo_ratio=homo_ratio, split=split)
+    elif dataset == 'Animal2':
+        data = load_animal2(homo_ratio=homo_ratio, split=split)
+    elif dataset == 'Animal3':
+        data = load_animal3(homo_ratio=homo_ratio, split=split)
     elif dataset == 'Squirrel':
         data = load_wikipedia('Squirrel', split=split)
     elif dataset == 'Chameleon':
@@ -66,15 +66,18 @@ def run(dataset, homo_ratio, split, model_name, num_hidden, device, learning_rat
     num_classes = len(torch.unique(y))
     train_mask, val_mask, test_mask = data.train_mask, data.val_mask, data.test_mask
 
-    if (edge_weight is None) and (model_name == 'GBPN'):
-        deg = degree(edge_index[1], num_nodes)
-        edge_weight = (deg[edge_index[0]] * deg[edge_index[1]])**-0.50
+#   if (edge_weight is None) and (model_name == 'GBPN'):
+#       deg = degree(edge_index[1], num_nodes)
+#       edge_weight = (deg[edge_index[0]] * deg[edge_index[1]])**-0.50
 
-    subgraph_sampler = CSubtreeSampler(num_nodes, x, y, edge_index, edge_weight)
-    max_batch_size = min(math.ceil(num_nodes/10), 1024)
+    subgraph_sampler = SubgraphSampler(num_nodes, x, y, edge_index, edge_weight)
+    max_batch_size = num_nodes
+
+#   subgraph_sampler = CSubtreeSampler(num_nodes, x, y, edge_index, edge_weight)
+#   max_batch_size = min(math.ceil(num_nodes/10), 1024)
 
     if model_name == 'MLP':
-        model = GMLP(num_features, num_classes, dim_hidden=128, num_hidden=num_hidden, activation=nn.LeakyReLU(), dropout_p=0.1)
+        model = GMLP(num_features, num_classes, dim_hidden=128, num_hidden=num_hidden, activation=nn.LeakyReLU(), dropout_p=0.3)
     elif model_name == 'SGC':
         model = SGC(num_features, num_classes, dim_hidden=128, dropout_p=0.3)
     elif model_name == 'GCN':
@@ -82,9 +85,9 @@ def run(dataset, homo_ratio, split, model_name, num_hidden, device, learning_rat
     elif model_name == 'SAGE':
         model = SAGE(num_features, num_classes, dim_hidden=128, activation=nn.LeakyReLU(), dropout_p=0.3)
     elif model_name == 'GAT':
-        model = GAT(num_features, num_classes, dim_hidden=8, activation=nn.ELU(), dropout_p=0.6)
+        model = GAT(num_features, num_classes, dim_hidden=16, activation=nn.ELU(), dropout_p=0.6)
     elif model_name == 'GBPN':
-        model = GBPN(num_features, num_classes, dim_hidden=128, num_hidden=num_hidden, activation=nn.LeakyReLU(), dropout_p=0.1, learn_H=learn_H)
+        model = GBPN(num_features, num_classes, dim_hidden=128, num_hidden=num_hidden, activation=nn.LeakyReLU(), dropout_p=0.3, learn_H=learn_H)
     else:
         raise Exception('unexpected model type')
     model = model.to(device)
@@ -148,8 +151,8 @@ def run(dataset, homo_ratio, split, model_name, num_hidden, device, learning_rat
         return total_correct/mask.sum().item()
 
     best_val, opt_val, opt_test = 0.0, 0.0, 0.0
-    for epoch in range(20):
-        num_hops = (0 if ((not train_BP) or (learn_H and epoch < 1)) else 2)
+    for epoch in range(200):
+        num_hops = (0 if ((not train_BP) or (learn_H and epoch < 1)) else 3)
         num_nbrs = 5
         train(num_hops=num_hops, num_nbrs=num_nbrs)
         val = evaluation(val_mask, num_hops=num_hops, num_nbrs=num_nbrs, partition='val')
