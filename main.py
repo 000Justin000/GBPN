@@ -66,13 +66,12 @@ def run(dataset, homo_ratio, split, model_name, num_hidden, device, learning_rat
     num_classes = len(torch.unique(y))
     train_mask, val_mask, test_mask = data.train_mask, data.val_mask, data.test_mask
 
-    if (edge_weight is None) and (model_name == 'BPGNN'):
+    if (edge_weight is None) and (model_name == 'GBPN'):
         deg = degree(edge_index[1], num_nodes)
         edge_weight = (deg[edge_index[0]] * deg[edge_index[1]])**-0.50
-        # edge_weight = deg[edge_index[1]]**-1.0
 
     subgraph_sampler = CSubtreeSampler(num_nodes, x, y, edge_index, edge_weight)
-    max_batch_size = min(math.ceil(num_nodes/10), 1536)
+    max_batch_size = min(math.ceil(num_nodes/10), 1024)
 
     if model_name == 'MLP':
         model = GMLP(num_features, num_classes, dim_hidden=128, num_hidden=num_hidden, activation=nn.LeakyReLU(), dropout_p=0.1)
@@ -84,13 +83,12 @@ def run(dataset, homo_ratio, split, model_name, num_hidden, device, learning_rat
         model = SAGE(num_features, num_classes, dim_hidden=128, activation=nn.LeakyReLU(), dropout_p=0.3)
     elif model_name == 'GAT':
         model = GAT(num_features, num_classes, dim_hidden=8, activation=nn.ELU(), dropout_p=0.6)
-    elif model_name == 'BPGNN':
-        model = BPGNN(num_features, num_classes, dim_hidden=128, num_hidden=num_hidden, activation=nn.LeakyReLU(), dropout_p=0.1, learn_H=learn_H)
+    elif model_name == 'GBPN':
+        model = GBPN(num_features, num_classes, dim_hidden=128, num_hidden=num_hidden, activation=nn.LeakyReLU(), dropout_p=0.1, learn_H=learn_H)
     else:
         raise Exception('unexpected model type')
     model = model.to(device)
     optimizer = torch.optim.AdamW([{'params': model.parameters(), 'lr': learning_rate}], weight_decay=2.5e-4)
-
 
     def train(num_hops=2, num_nbrs=5):
         model.train()
@@ -112,7 +110,6 @@ def run(dataset, homo_ratio, split, model_name, num_hidden, device, learning_rat
 
         return total_correct/train_mask.sum().item()
 
-
     def evaluation(mask, num_hops=2, num_nbrs=5, partition='train'):
         model.eval()
 
@@ -126,7 +123,7 @@ def run(dataset, homo_ratio, split, model_name, num_hidden, device, learning_rat
         if verbose:
             print('{:>5s} inductive accuracy: {:5.3f}'.format(partition, total_correct/mask.sum().item()), flush=True)
 
-        if type(model) == BPGNN and eval_C:
+        if type(model) == GBPN and eval_C:
             sum_conv = SumConv()
             total_correct = 0.0
             with torch.no_grad():
@@ -150,10 +147,9 @@ def run(dataset, homo_ratio, split, model_name, num_hidden, device, learning_rat
 
         return total_correct/mask.sum().item()
 
-
     best_val, opt_val, opt_test = 0.0, 0.0, 0.0
-    for epoch in range(30):
-        num_hops = (2 if ((not train_BP) or (learn_H and epoch < 3)) else 2)
+    for epoch in range(20):
+        num_hops = (0 if ((not train_BP) or (learn_H and epoch < 1)) else 2)
         num_nbrs = 5
         train(num_hops=num_hops, num_nbrs=num_nbrs)
         val = evaluation(val_mask, num_hops=num_hops, num_nbrs=num_nbrs, partition='val')
@@ -161,7 +157,7 @@ def run(dataset, homo_ratio, split, model_name, num_hidden, device, learning_rat
             opt_val = val
             opt_test = evaluation(test_mask, num_hops=num_hops, num_nbrs=num_nbrs, partition='test')
 
-        if type(model) == BPGNN and learn_H and verbose:
+        if type(model) == GBPN and learn_H and verbose:
             print(model.bp_conv.get_logH().exp())
 
     if verbose:
@@ -175,7 +171,7 @@ parser = argparse.ArgumentParser('model')
 parser.add_argument('--dataset', type=str, default='Cora')
 parser.add_argument('--homo_ratio', type=float, default=0.5)
 parser.add_argument('--split', metavar='N', type=float, nargs=3, default=None)
-parser.add_argument('--model_name', type=str, default='BPGNN')
+parser.add_argument('--model_name', type=str, default='GBPN')
 parser.add_argument('--num_hidden', type=int, default=2)
 parser.add_argument('--device', type=str, default='cpu')
 parser.add_argument('--learning_rate', type=float, default=0.01)
@@ -195,7 +191,7 @@ if not args.develop:
     sys.stderr = open(outpath + '/' + commit + '.err', 'w')
 
 test_acc = []
-for _ in range(5):
+for _ in range(3):
     test_acc.append(run(args.dataset, args.homo_ratio, args.split, args.model_name, args.num_hidden, args.device, args.learning_rate, args.train_BP, args.learn_H, args.eval_C, args.verbose))
 
 print(args)

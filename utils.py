@@ -171,9 +171,9 @@ class BPConv(MessagePassing):
         return log_b
 
 
-class BPGNN(nn.Module):
+class GBPN(nn.Module):
     def __init__(self, dim_in, dim_out, dim_hidden=32, num_hidden=0, activation=nn.ReLU(), dropout_p=0.0, learn_H=False):
-        super(BPGNN, self).__init__()
+        super(GBPN, self).__init__()
         self.transform_ego = nn.Sequential(MLP(dim_in, dim_out, dim_hidden, num_hidden, activation, dropout_p), nn.LogSoftmax(dim=-1))
         self.bp_conv = BPConv(dim_out, learn_H)
 
@@ -284,11 +284,11 @@ class SubtreeSampler:
                 subgraph_nodes = torch.tensor(subgraph_nodes, dtype=torch.int64)
                 subgraph_size = subgraph_nodes.shape[0]
                 if self.edge_weight is None:
-                    T_edge_index = torch.tensor(list(T.edges), dtype=torch.int64).t() if len(T.edges) == 0 else torch.zeros(2, 0, dtype=torch.int64) 
+                    T_edge_index = torch.tensor(list(T.edges), dtype=torch.int64).t() if len(T.edges) > 0 else torch.zeros(2, 0, dtype=torch.int64)
                     T_edge_weight = None
                 else:
                     T_ew = nx.get_edge_attributes(T, 'weight')
-                    T_edge_index = torch.tensor(list(T_ew.keys()), dtype=torch.int64).t() if len(T_ew.keys()) == 0 else torch.zeros(2, 0, dtype=torch.int64) 
+                    T_edge_index = torch.tensor(list(T_ew.keys()), dtype=torch.int64).t() if len(T_ew.keys()) > 0 else torch.zeros(2, 0, dtype=torch.int64)
                     T_edge_weight = torch.tensor(list(T_ew.values()))
                 subgraph_edge_index, subgraph_edge_weight = T_edge_index, T_edge_weight
                 subgraph_edge_index, subgraph_edge_weight, subgraph_rv = process_edge_index(subgraph_nodes.shape[0], subgraph_edge_index, subgraph_edge_weight)
@@ -424,7 +424,7 @@ def process_edge_index(num_nodes, edge_index, edge_attr=None):
 
     # process edge_attr
     edge_index, edge_attr = remove_self_loops(edge_index, edge_attr)
-    if not is_undirected(edge_index):
+    if (edge_index.shape[1] > 0) and (not is_undirected(edge_index)):
         edge_index, edge_attr = get_undirected(num_nodes, edge_index, edge_attr)
     edge_index, od = sort_edge(num_nodes, edge_index)
     _, rv = sort_edge(num_nodes, edge_index.flip(dims=[0]))
@@ -600,9 +600,9 @@ def load_ogbn(name='products', transform=None, split=None):
 
     data = dataset[0]
     data.y = data.y.reshape(-1)
-    data.train_mask = torch.zeros(num_nodes, dtype=bool).scatter_(0, torch.tensor(train_idx), True)
-    data.val_mask = torch.zeros(num_nodes, dtype=bool).scatter_(0, torch.tensor(val_idx), True)
-    data.test_mask = torch.zeros(num_nodes, dtype=bool).scatter_(0, torch.tensor(test_idx), True)
+    data.train_mask = torch.zeros(num_nodes, dtype=bool).scatter_(0, train_idx, True)
+    data.val_mask = torch.zeros(num_nodes, dtype=bool).scatter_(0, val_idx, True)
+    data.test_mask = torch.zeros(num_nodes, dtype=bool).scatter_(0, test_idx, True)
 
     data.edge_index, data.edge_weight, data.rv = process_edge_index(num_nodes, data.edge_index, data.edge_weight if hasattr(data, 'edge_weight') else None)
 
