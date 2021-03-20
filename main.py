@@ -101,6 +101,11 @@ def run(dataset, homo_ratio, split, model_name, num_hidden, device, learning_rat
         data = load_ogbn('products', split=split)
         c_weight = None
         accuracy_fun = classification_accuracy
+    elif dataset == 'Elliptic_Bitcoin':
+        data = load_elliptic_bitcoin(split=split)
+        _, cts = data.y[data.y >= 0].unique(return_counts=True)
+        c_weight = (cts**-1.0) / (cts**-1.0).sum()
+        accuracy_fun = roc_auc
     elif dataset == 'JPMC_Fraud_Detection':
         x, y, info = load_jpmc_fraud()
         data = preprocess_gnn_jpmc_fraud(x, y, info, split=split)
@@ -113,7 +118,7 @@ def run(dataset, homo_ratio, split, model_name, num_hidden, device, learning_rat
     edge_index, edge_weight, rv = data.edge_index, data.edge_weight, data.rv
     x, y = data.x, data.y
     num_nodes, num_features = x.shape
-    num_classes = len(torch.unique(y))
+    num_classes = len(torch.unique(y[y >= 0]))
     train_mask, val_mask, test_mask = data.train_mask, data.val_mask, data.test_mask
     c_weight = None if (c_weight is None) else c_weight.to(device)
 
@@ -132,7 +137,7 @@ def run(dataset, homo_ratio, split, model_name, num_hidden, device, learning_rat
             num_hops = 5
         num_samples = -1
         num_epoches = 200
-    elif dataset in ['OGBN_arXiv', 'OGBN_Products', 'JPMC_Fraud_Detection']:
+    elif dataset in ['OGBN_arXiv', 'OGBN_Products', 'JPMC_Fraud_Detection', 'Elliptic_Bitcoin']:
         subgraph_sampler = CSubtreeSampler(num_nodes, x, y, edge_index, edge_weight)
         max_batch_size = min(math.ceil(train_mask.sum()/10.0), 5120)
         if model_name == 'MLP':

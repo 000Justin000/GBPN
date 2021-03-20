@@ -547,8 +547,8 @@ def load_sexual_interaction(transform=None, split=[0.3, 0.2, 0.5]):
 
 
 def load_animal2(homo_ratio=0.5, transform=None, split=[0.3, 0.2, 0.5]):
-    cat_images = torch.load('datasets/cats_dogs/cat_images.pt')
-    dog_images = torch.load('datasets/cats_dogs/dog_images.pt')
+    cat_images = torch.load('datasets/animal2/cat_images.pt')
+    dog_images = torch.load('datasets/animal2/dog_images.pt')
 
     x = torch.cat((cat_images, dog_images), dim=0)
     y = torch.cat((torch.zeros(cat_images.shape[0], dtype=torch.int64), torch.ones(dog_images.shape[0], dtype=torch.int64)), dim=0)
@@ -572,9 +572,9 @@ def load_animal2(homo_ratio=0.5, transform=None, split=[0.3, 0.2, 0.5]):
 
 
 def load_animal3(homo_ratio=0.5, transform=None, split=[0.3, 0.2, 0.5]):
-    cat_images = torch.load('datasets/animals/cat_images.pt')
-    dog_images = torch.load('datasets/animals/dog_images.pt')
-    panda_images = torch.load('datasets/animals/panda_images.pt')
+    cat_images = torch.load('datasets/animal3/cat_images.pt')
+    dog_images = torch.load('datasets/animal3/dog_images.pt')
+    panda_images = torch.load('datasets/animal3/panda_images.pt')
 
     x = torch.cat((cat_images, dog_images, panda_images), dim=0)
     y = torch.cat((torch.zeros(cat_images.shape[0], dtype=torch.int64),
@@ -639,7 +639,7 @@ def load_jpmc_fraud():
         emb = np.concatenate((np.sin(2 * np.pi * tfs), np.cos(2 * np.pi * tfs)))
         return emb
 
-    dat = pd.read_csv('datasets/aml/jpmc_synthetic.csv', delimiter=',', skipinitialspace=True)
+    dat = pd.read_csv('datasets/aml/jpmc/jpmc_synthetic.csv', delimiter=',', skipinitialspace=True)
 
     # get time embedding
     time_emb = torch.tensor(dat['Time_step'].apply(time_encoding).array)
@@ -742,6 +742,36 @@ def preprocess_gnn_jpmc_fraud(feature, label, info, transform=None, split=[0.3, 
     data.edge_index, data.edge_weight, data.rv = process_edge_index(num_nodes, data.edge_index, None)
 
     return data if (transform is None) else transform(data)
+
+
+def load_elliptic_bitcoin(transform=None, split=None):
+    dat = pd.read_csv('datasets/aml/elliptic/elliptic_txs_features.csv', header=None).sort_values(0)
+    cls = pd.read_csv('datasets/aml/elliptic/elliptic_txs_classes.csv', header=0).sort_values('txId')
+    edge_ids = pd.read_csv('datasets/aml/elliptic/elliptic_txs_edgelist.csv', header=0)
+
+    assert (dat[0] == cls['txId']).all()
+    id2num = dict(map(reversed, enumerate(dat[0])))
+
+    features = torch.tensor(dat.iloc[:, 2:].to_numpy(), dtype=torch.float32)
+    labels = torch.tensor(list(map(lambda x: -1 if (x == 'unknown') else (0 if x == '2' else 1), cls['class'])))
+
+    edge_num1 = list(map(lambda x: id2num[x], edge_ids['txId1']))
+    edge_num2 = list(map(lambda x: id2num[x], edge_ids['txId2']))
+    edge_index = torch.stack((torch.tensor(edge_num1), torch.tensor(edge_num2)), dim=0)
+
+    num_nodes = features.shape[0]
+    train_idx, val_idx, test_idx = rand_split(num_nodes, split)
+    train_idx, val_idx, test_idx = torch.tensor(train_idx), torch.tensor(val_idx), torch.tensor(test_idx)
+
+    data = Data(x=features, y=labels, edge_index=edge_index)
+    data.train_mask = torch.zeros(num_nodes, dtype=torch.bool).scatter_(0, train_idx, True) & (labels != -1)
+    data.val_mask = torch.zeros(num_nodes, dtype=torch.bool).scatter_(0, val_idx, True) & (labels != -1)
+    data.test_mask = torch.zeros(num_nodes, dtype=torch.bool).scatter_(0, test_idx, True) & (labels != -1)
+
+    data.edge_index, data.edge_weight, data.rv = process_edge_index(num_nodes, data.edge_index, None)
+
+    return data if (transform is None) else transform(data)
+
 
 
 def acc(score, y, mask):
