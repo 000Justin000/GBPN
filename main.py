@@ -19,7 +19,7 @@ import matplotlib.pyplot as plt
 def get_scaling(deg0, deg1):
     assert deg0.shape == deg1.shape
     scaling = torch.ones(deg0.shape[0]).to(deg0.device)
-    scaling[deg1 != 0] = (deg0 / deg1)[deg1 != 0]
+#   scaling[deg1 != 0] = (deg0 / deg1)[deg1 != 0]
     return scaling
 
 
@@ -84,7 +84,7 @@ def run(dataset, homo_ratio, split, model_name, num_hidden, device, learning_rat
         num_epoches = 200
     elif dataset in ['OGBN_arXiv', 'OGBN_Products']:
         subgraph_sampler = CSubtreeSampler(num_nodes, x, y, edge_index, edge_weight)
-        max_batch_size = min(math.ceil(train_mask.sum()/10.0), 5120)
+        max_batch_size = min(math.ceil(train_mask.sum()/10.0), 1024)
         if model_name == 'MLP':
             num_hops = 0
         else:
@@ -168,8 +168,10 @@ def run(dataset, homo_ratio, split, model_name, num_hidden, device, learning_rat
 
         return total_correct/mask.sum().item()
 
+    max_num_hops = num_hops
     best_val, opt_val, opt_test = 0.0, 0.0, 0.0
     for epoch in range(num_epoches):
+        num_hops = 0 if (model_name == 'GBPN' and epoch < 0.05*num_epoches) else max_num_hops
         train(num_hops=num_hops, num_samples=num_samples)
         val = evaluation(val_mask, num_hops=num_hops, num_samples=num_samples, partition='val')
         if val > opt_val:
