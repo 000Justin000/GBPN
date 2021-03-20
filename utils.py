@@ -210,7 +210,7 @@ class SubgraphSampler:
         self.adj_t = SparseTensor(row=edge_index[0], col=edge_index[1], sparse_sizes=(num_nodes, num_nodes)).t()
         self.deg = degree(edge_index[1], num_nodes)
 
-    def get_generator(self, mask, batch_size, num_hops, size, device):
+    def get_generator(self, mask, batch_size, num_hops, num_samples, device):
         idx = mask.nonzero(as_tuple=True)[0]
         n_batch = math.ceil(idx.shape[0] / batch_size)
 
@@ -219,15 +219,17 @@ class SubgraphSampler:
                 batch_size = batch_nodes.shape[0]
 
                 # create subgraph from neighborhood
-                if size < 0:
+                if num_samples < 0:
                     subgraph_nodes, _, _, _ = k_hop_subgraph(batch_nodes, num_hops, self.edge_index, num_nodes=self.num_nodes)
+                    subgraph_nodes = torch.cat((batch_nodes, torch.tensor(list(set(subgraph_nodes.tolist()) - set(batch_nodes.tolist())), dtype=torch.int64)), dim=0)
                 else:
                     subgraph_nodes = batch_nodes
                     for _ in range(num_hops):
-                        _, subgraph_nodes = self.adj_t.sample_adj(subgraph_nodes, size, replace=False)
-                    subgraph_size = subgraph_nodes.shape[0]
+                        _, subgraph_nodes = self.adj_t.sample_adj(subgraph_nodes, num_samples, replace=False)
 
+                subgraph_size = subgraph_nodes.shape[0]
                 assert torch.all(subgraph_nodes[:batch_size] == batch_nodes)
+
                 subgraph_edge_index, subgraph_edge_weight = subgraph(subgraph_nodes, self.edge_index, self.edge_weight, relabel_nodes=True)
                 subgraph_edge_index, subgraph_edge_weight, subgraph_rv = process_edge_index(subgraph_nodes.shape[0], subgraph_edge_index, subgraph_edge_weight)
 
@@ -254,7 +256,7 @@ class SubtreeSampler:
             self.G.add_weighted_edges_from(list(zip(edge_index[0].tolist(), edge_index[1].tolist(), edge_weight.tolist())))
         self.deg = degree(edge_index[1], num_nodes)
 
-    def get_generator(self, mask, batch_size, num_hops, size, device):
+    def get_generator(self, mask, batch_size, num_hops, num_samples, device):
         idx = mask.nonzero(as_tuple=True)[0]
         n_batch = math.ceil(idx.shape[0] / batch_size)
 
@@ -270,7 +272,7 @@ class SubtreeSampler:
                     while len(stack) > 0:
                         u, uid, d, p = stack.pop()
                         nbrs = set(self.G.neighbors(u)) - set([p])
-                        selected_nbrs = (nbrs if ((size < 0) or (len(nbrs) <= size)) else random.sample(nbrs, size))
+                        selected_nbrs = (nbrs if ((num_samples < 0) or (len(nbrs) <= num_samples)) else random.sample(nbrs, num_samples))
                         for v in selected_nbrs:
                             subgraph_nodes.append(v)
                             vid = T.number_of_nodes()
@@ -320,7 +322,7 @@ class CSubtreeSampler:
             self.G.add_weighted_edges_from(list(zip(edge_index[0].tolist(), edge_index[1].tolist(), edge_weight.tolist())))
         self.deg = degree(edge_index[1], num_nodes)
 
-    def get_generator(self, mask, batch_size, num_hops, size, device):
+    def get_generator(self, mask, batch_size, num_hops, num_samples, device):
         idx = mask.nonzero(as_tuple=True)[0]
         n_batch = math.ceil(idx.shape[0] / batch_size)
 
@@ -328,7 +330,7 @@ class CSubtreeSampler:
             for batch_nodes in idx[torch.randperm(idx.shape[0])].chunk(n_batch):
                 batch_size = batch_nodes.shape[0]
 
-                T = nx.sample_subtree(self.G, batch_nodes.tolist(), num_hops, size)
+                T = nx.sample_subtree(self.G, batch_nodes.tolist(), num_hops, num_samples)
                 subgraph_nodes = torch.tensor(T.get_nodes(), dtype=torch.int64)
                 subgraph_size = subgraph_nodes.shape[0]
                 if self.edge_weight is None:
@@ -444,10 +446,11 @@ def load_citation(name='Cora', transform=None, split=None):
     if split is not None:
         assert len(split) == 3
         train_idx, val_idx, test_idx = rand_split(num_nodes, split)
+        train_idx, val_idx, test_idx = torch.tensor(train_idx), torch.tensor(val_idx), torch.tensor(test_idx)
 
-        data.train_mask = torch.zeros(num_nodes, dtype=bool).scatter_(0, torch.tensor(train_idx), True)
-        data.val_mask = torch.zeros(num_nodes, dtype=bool).scatter_(0, torch.tensor(val_idx), True)
-        data.test_mask = torch.zeros(num_nodes, dtype=bool).scatter_(0, torch.tensor(test_idx), True)
+        data.train_mask = torch.zeros(num_nodes, dtype=bool).scatter_(0, train_idx, True)
+        data.val_mask = torch.zeros(num_nodes, dtype=bool).scatter_(0, val_idx, True)
+        data.test_mask = torch.zeros(num_nodes, dtype=bool).scatter_(0, test_idx, True)
 
     data.edge_index, data.edge_weight, data.rv = process_edge_index(num_nodes, data.edge_index, data.edge_weight if hasattr(data, 'edge_weight') else None)
 
@@ -460,10 +463,11 @@ def load_coauthor(name='CS', transform=None, split=[0.3, 0.2, 0.5]):
 
     assert len(split) == 3
     train_idx, val_idx, test_idx = rand_split(num_nodes, split)
+    train_idx, val_idx, test_idx = torch.tensor(train_idx), torch.tensor(val_idx), torch.tensor(test_idx)
 
-    data.train_mask = torch.zeros(num_nodes, dtype=bool).scatter_(0, torch.tensor(train_idx), True)
-    data.val_mask = torch.zeros(num_nodes, dtype=bool).scatter_(0, torch.tensor(val_idx), True)
-    data.test_mask = torch.zeros(num_nodes, dtype=bool).scatter_(0, torch.tensor(test_idx), True)
+    data.train_mask = torch.zeros(num_nodes, dtype=bool).scatter_(0, train_idx, True)
+    data.val_mask = torch.zeros(num_nodes, dtype=bool).scatter_(0, val_idx, True)
+    data.test_mask = torch.zeros(num_nodes, dtype=bool).scatter_(0, test_idx, True)
 
     data.edge_index, data.edge_weight, data.rv = process_edge_index(num_nodes, data.edge_index, data.edge_weight if hasattr(data, 'edge_weight') else None)
 
@@ -481,10 +485,11 @@ def load_wikipedia(name='Squirrel', transform=None, split=0):
     elif type(split) == list:
         assert len(split) == 3
         train_idx, val_idx, test_idx = rand_split(num_nodes, split)
+        train_idx, val_idx, test_idx = torch.tensor(train_idx), torch.tensor(val_idx), torch.tensor(test_idx)
 
-        data.train_mask = torch.zeros(num_nodes, dtype=bool).scatter_(0, torch.tensor(train_idx), True)
-        data.val_mask = torch.zeros(num_nodes, dtype=bool).scatter_(0, torch.tensor(val_idx), True)
-        data.test_mask = torch.zeros(num_nodes, dtype=bool).scatter_(0, torch.tensor(test_idx), True)
+        data.train_mask = torch.zeros(num_nodes, dtype=bool).scatter_(0, train_idx, True)
+        data.val_mask = torch.zeros(num_nodes, dtype=bool).scatter_(0, val_idx, True)
+        data.test_mask = torch.zeros(num_nodes, dtype=bool).scatter_(0, test_idx, True)
 
     data.edge_index, data.edge_weight, data.rv = process_edge_index(num_nodes, data.edge_index, data.edge_weight if hasattr(data, 'edge_weight') else None)
 
@@ -507,10 +512,11 @@ def load_county_facebook(transform=None, split=[0.3, 0.2, 0.5], normalize=True):
     num_nodes = data.x.shape[0]
     assert len(split) == 3
     train_idx, val_idx, test_idx = rand_split(num_nodes, split)
+    train_idx, val_idx, test_idx = torch.tensor(train_idx), torch.tensor(val_idx), torch.tensor(test_idx)
 
-    data.train_mask = torch.zeros(num_nodes, dtype=bool).scatter_(0, torch.tensor(train_idx), True)
-    data.val_mask = torch.zeros(num_nodes, dtype=bool).scatter_(0, torch.tensor(val_idx), True)
-    data.test_mask = torch.zeros(num_nodes, dtype=bool).scatter_(0, torch.tensor(test_idx), True)
+    data.train_mask = torch.zeros(num_nodes, dtype=bool).scatter_(0, train_idx, True)
+    data.val_mask = torch.zeros(num_nodes, dtype=bool).scatter_(0, val_idx, True)
+    data.test_mask = torch.zeros(num_nodes, dtype=bool).scatter_(0, test_idx, True)
 
     data.edge_index, data.edge_weight, data.rv = process_edge_index(num_nodes, data.edge_index, data.edge_weight if hasattr(data, 'edge_weight') else None)
 
@@ -529,10 +535,11 @@ def load_sexual_interaction(transform=None, split=[0.3, 0.2, 0.5]):
     num_nodes = data.x.shape[0]
     assert len(split) == 3
     train_idx, val_idx, test_idx = rand_split(num_nodes, split)
+    train_idx, val_idx, test_idx = torch.tensor(train_idx), torch.tensor(val_idx), torch.tensor(test_idx)
 
-    data.train_mask = torch.zeros(num_nodes, dtype=bool).scatter_(0, torch.tensor(train_idx), True)
-    data.val_mask = torch.zeros(num_nodes, dtype=bool).scatter_(0, torch.tensor(val_idx), True)
-    data.test_mask = torch.zeros(num_nodes, dtype=bool).scatter_(0, torch.tensor(test_idx), True)
+    data.train_mask = torch.zeros(num_nodes, dtype=bool).scatter_(0, train_idx, True)
+    data.val_mask = torch.zeros(num_nodes, dtype=bool).scatter_(0, val_idx, True)
+    data.test_mask = torch.zeros(num_nodes, dtype=bool).scatter_(0, test_idx, True)
 
     data.edge_index, data.edge_weight, data.rv = process_edge_index(num_nodes, data.edge_index, data.edge_weight if hasattr(data, 'edge_weight') else None)
 
@@ -553,10 +560,11 @@ def load_animal2(homo_ratio=0.5, transform=None, split=[0.3, 0.2, 0.5]):
     num_nodes = data.x.shape[0]
     assert len(split) == 3
     train_idx, val_idx, test_idx = rand_split(num_nodes, split)
+    train_idx, val_idx, test_idx = torch.tensor(train_idx), torch.tensor(val_idx), torch.tensor(test_idx)
 
-    data.train_mask = torch.zeros(num_nodes, dtype=bool).scatter_(0, torch.tensor(train_idx), True)
-    data.val_mask = torch.zeros(num_nodes, dtype=bool).scatter_(0, torch.tensor(val_idx), True)
-    data.test_mask = torch.zeros(num_nodes, dtype=bool).scatter_(0, torch.tensor(test_idx), True)
+    data.train_mask = torch.zeros(num_nodes, dtype=bool).scatter_(0, train_idx, True)
+    data.val_mask = torch.zeros(num_nodes, dtype=bool).scatter_(0, val_idx, True)
+    data.test_mask = torch.zeros(num_nodes, dtype=bool).scatter_(0, test_idx, True)
 
     data.edge_index, data.edge_weight, data.rv = process_edge_index(num_nodes, data.edge_index, None)
 
@@ -581,10 +589,11 @@ def load_animal3(homo_ratio=0.5, transform=None, split=[0.3, 0.2, 0.5]):
     num_nodes = data.x.shape[0]
     assert len(split) == 3
     train_idx, val_idx, test_idx = rand_split(num_nodes, split)
+    train_idx, val_idx, test_idx = torch.tensor(train_idx), torch.tensor(val_idx), torch.tensor(test_idx)
 
-    data.train_mask = torch.zeros(num_nodes, dtype=bool).scatter_(0, torch.tensor(train_idx), True)
-    data.val_mask = torch.zeros(num_nodes, dtype=bool).scatter_(0, torch.tensor(val_idx), True)
-    data.test_mask = torch.zeros(num_nodes, dtype=bool).scatter_(0, torch.tensor(test_idx), True)
+    data.train_mask = torch.zeros(num_nodes, dtype=bool).scatter_(0, train_idx, True)
+    data.val_mask = torch.zeros(num_nodes, dtype=bool).scatter_(0, val_idx, True)
+    data.test_mask = torch.zeros(num_nodes, dtype=bool).scatter_(0, test_idx, True)
 
     data.edge_index, data.edge_weight, data.rv = process_edge_index(num_nodes, data.edge_index, data.edge_weight if hasattr(data, 'edge_weight') else None)
 
@@ -598,6 +607,7 @@ def load_ogbn(name='products', transform=None, split=None):
     if split is not None:
         assert len(split) == 3
         train_idx, val_idx, test_idx = rand_split(num_nodes, split)
+        train_idx, val_idx, test_idx = torch.tensor(train_idx), torch.tensor(val_idx), torch.tensor(test_idx)
     else:
         split_idx = dataset.get_idx_split()
         train_idx, val_idx, test_idx = split_idx["train"], split_idx["valid"], split_idx["test"]

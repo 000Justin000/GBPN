@@ -4,6 +4,7 @@ import subprocess
 import argparse
 import torch.nn as nn
 import torch.nn.functional as F
+import torch_geometric.transforms as T
 from torch_sparse import SparseTensor
 from torch_geometric.data import NeighborSampler
 from torch_geometric.nn import GCNConv
@@ -30,7 +31,7 @@ def get_cts(edge_index, y):
     return ctsm, sqrt_deg_inv.view(-1, 1) * ctsm * sqrt_deg_inv.view(1, -1)
 
 
-def run(dataset, homo_ratio, split, model_name, num_hidden, device, learning_rate, train_BP, learn_H, eval_C, verbose):
+def run(dataset, homo_ratio, split, model_name, num_hidden, device, learning_rate, weighted_BP, learn_H, eval_C, verbose):
     if dataset == 'Cora':
         data = load_citation('Cora', split=split)
     elif dataset == 'CiteSeer':
@@ -66,39 +67,56 @@ def run(dataset, homo_ratio, split, model_name, num_hidden, device, learning_rat
     num_classes = len(torch.unique(y))
     train_mask, val_mask, test_mask = data.train_mask, data.val_mask, data.test_mask
 
-#   if (edge_weight is None) and (model_name == 'GBPN'):
-#       deg = degree(edge_index[1], num_nodes)
-#       edge_weight = (deg[edge_index[0]] * deg[edge_index[1]])**-0.50
+    if (model_name == 'GBPN') and weighted_BP and (edge_weight is None):
+        deg = degree(edge_index[1], num_nodes)
+        edge_weight = (deg[edge_index[0]] * deg[edge_index[1]])**-0.50 * deg.mean()
 
-    subgraph_sampler = SubgraphSampler(num_nodes, x, y, edge_index, edge_weight)
-    max_batch_size = num_nodes
-
-#   subgraph_sampler = CSubtreeSampler(num_nodes, x, y, edge_index, edge_weight)
-#   max_batch_size = min(math.ceil(num_nodes/10), 1024)
+    if dataset in ['Cora', 'CiteSeer', 'PubMed', 'Coauthor_CS', 'Coauthor_Physics', 'County_Facebook', 'Sex', 'Animal2', 'Animal3', 'Squirrel', 'Chameleon']:
+        subgraph_sampler = SubgraphSampler(num_nodes, x, y, edge_index, edge_weight)
+        max_batch_size = num_nodes
+        if model_name == 'MLP':
+            num_hops = 0
+        elif model_name != 'GBPN':
+            num_hops = 2
+        else:
+            num_hops = 5
+        num_samples = -1
+        num_epoches = 200
+    elif dataset in ['OGBN_arXiv', 'OGBN_Products']:
+        subgraph_sampler = CSubtreeSampler(num_nodes, x, y, edge_index, edge_weight)
+        max_batch_size = min(math.ceil(train_mask.sum()/10.0), 1024)
+        if model_name == 'MLP':
+            num_hops = 0
+        else:
+            num_hops = 2
+        num_samples = 5
+        num_epoches = 20
+    else:
+        raise Exception('unexpected dataset encountered')
 
     if model_name == 'MLP':
-        model = GMLP(num_features, num_classes, dim_hidden=128, num_hidden=num_hidden, activation=nn.LeakyReLU(), dropout_p=0.3)
+        model = GMLP(num_features, num_classes, dim_hidden=256, num_hidden=num_hidden, activation=nn.LeakyReLU(), dropout_p=0.6)
     elif model_name == 'SGC':
-        model = SGC(num_features, num_classes, dim_hidden=128, dropout_p=0.3)
+        model = SGC(num_features, num_classes, dim_hidden=256, dropout_p=0.6)
     elif model_name == 'GCN':
-        model = GCN(num_features, num_classes, dim_hidden=128, activation=nn.LeakyReLU(), dropout_p=0.3)
+        model = GCN(num_features, num_classes, dim_hidden=256, activation=nn.LeakyReLU(), dropout_p=0.6)
     elif model_name == 'SAGE':
-        model = SAGE(num_features, num_classes, dim_hidden=128, activation=nn.LeakyReLU(), dropout_p=0.3)
+        model = SAGE(num_features, num_classes, dim_hidden=256, activation=nn.LeakyReLU(), dropout_p=0.6)
     elif model_name == 'GAT':
-        model = GAT(num_features, num_classes, dim_hidden=16, activation=nn.ELU(), dropout_p=0.6)
+        model = GAT(num_features, num_classes, dim_hidden=32, activation=nn.ELU(), dropout_p=0.6)
     elif model_name == 'GBPN':
-        model = GBPN(num_features, num_classes, dim_hidden=128, num_hidden=num_hidden, activation=nn.LeakyReLU(), dropout_p=0.3, learn_H=learn_H)
+        model = GBPN(num_features, num_classes, dim_hidden=256, num_hidden=num_hidden, activation=nn.LeakyReLU(), dropout_p=0.6, learn_H=learn_H)
     else:
         raise Exception('unexpected model type')
     model = model.to(device)
-    optimizer = torch.optim.AdamW([{'params': model.parameters(), 'lr': learning_rate}], weight_decay=2.5e-4)
+    optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate, weight_decay=2.5e-4)
 
-    def train(num_hops=2, num_nbrs=5):
+    def train(num_hops=2, num_samples=5):
         model.train()
         n_batch = total_loss = total_correct = 0.0
         for batch_size, batch_nodes, batch_x, batch_y, batch_deg0, \
             subgraph_size, subgraph_nodes, subgraph_x, subgraph_y, subgraph_deg0, \
-            subgraph_edge_index, subgraph_edge_weight, subgraph_rv in subgraph_sampler.get_generator(train_mask, max_batch_size, num_hops, num_nbrs, device):
+            subgraph_edge_index, subgraph_edge_weight, subgraph_rv in subgraph_sampler.get_generator(train_mask, max_batch_size, num_hops, num_samples, device):
             optimizer.zero_grad()
             subgraph_log_b = model(subgraph_x, subgraph_edge_index, edge_weight=subgraph_edge_weight, agg_scaling=get_scaling(subgraph_deg0, degree(subgraph_edge_index[1], subgraph_size)), rv=subgraph_rv, K=num_hops)
             loss = F.nll_loss(subgraph_log_b[:batch_size], batch_y)
@@ -109,22 +127,22 @@ def run(dataset, homo_ratio, split, model_name, num_hidden, device, learning_rat
             total_correct += (subgraph_log_b[:batch_size].argmax(-1) == batch_y).sum().item()
 
         if verbose:
-            print('step {:5d}, train loss: {:5.3f}, train accuracy: {:5.3f}'.format(epoch, total_loss/n_batch, total_correct/train_mask.sum().item()), flush=True)
+            print('step {:5d}, train loss: {:5.3f}, train accuracy: {:5.3f}'.format(epoch, total_loss/n_batch, total_correct/train_mask.sum().item()), end='    ')
 
         return total_correct/train_mask.sum().item()
 
-    def evaluation(mask, num_hops=2, num_nbrs=5, partition='train'):
+    def evaluation(mask, num_hops=2, num_samples=5, partition='train'):
         model.eval()
 
         total_correct = 0.0
         with torch.no_grad():
             for batch_size, batch_nodes, batch_x, batch_y, batch_deg0, \
                 subgraph_size, subgraph_nodes, subgraph_x, subgraph_y, subgraph_deg0, \
-                subgraph_edge_index, subgraph_edge_weight, subgraph_rv in subgraph_sampler.get_generator(mask, max_batch_size, num_hops, num_nbrs, device):
+                subgraph_edge_index, subgraph_edge_weight, subgraph_rv in subgraph_sampler.get_generator(mask, max_batch_size, num_hops, num_samples, device):
                 subgraph_log_b = model(subgraph_x, subgraph_edge_index, edge_weight=subgraph_edge_weight, agg_scaling=get_scaling(subgraph_deg0, degree(subgraph_edge_index[1], subgraph_size)), rv=subgraph_rv, K=num_hops)
                 total_correct += (subgraph_log_b[:batch_size].argmax(-1) == batch_y).sum().item()
         if verbose:
-            print('{:>5s} inductive accuracy: {:5.3f}'.format(partition, total_correct/mask.sum().item()), flush=True)
+            print('{:>5s} inductive accuracy: {:5.3f}'.format(partition, total_correct/mask.sum().item()), end='    ')
 
         if type(model) == GBPN and eval_C:
             sum_conv = SumConv()
@@ -132,7 +150,7 @@ def run(dataset, homo_ratio, split, model_name, num_hidden, device, learning_rat
             with torch.no_grad():
                 for batch_size, batch_nodes, batch_x, batch_y, batch_deg0, \
                     subgraph_size, subgraph_nodes, subgraph_x, subgraph_y, subgraph_deg0, \
-                    subgraph_edge_index, subgraph_edge_weight, subgraph_rv in subgraph_sampler.get_generator(mask, max_batch_size, num_hops, num_nbrs, device):
+                    subgraph_edge_index, subgraph_edge_weight, subgraph_rv in subgraph_sampler.get_generator(mask, max_batch_size, num_hops, num_samples, device):
                     subgraphC_mask = train_mask[subgraph_nodes]
                     subgraphR_mask = torch.logical_not(subgraphC_mask)
                     log_c = torch.zeros(subgraph_size, num_classes).to(device)
@@ -146,22 +164,21 @@ def run(dataset, homo_ratio, split, model_name, num_hidden, device, learning_rat
                                                            agg_scaling=get_scaling(subgraph_deg0, degree(subgraph_edge_index[1], subgraph_size))[subgraphR_mask], rv=subgraphR_rv, phi=subgraphR_phi, K=num_hops)
                     total_correct += (subgraph_log_b[:batch_size].argmax(-1) == batch_y).sum().item()
             if verbose:
-                print('{:>5s} transductive accuracy: {:5.3f}'.format(partition, total_correct/mask.sum().item()), flush=True)
+                print('{:>5s} transductive accuracy: {:5.3f}'.format(partition, total_correct/mask.sum().item()), end='    ')
 
         return total_correct/mask.sum().item()
 
     best_val, opt_val, opt_test = 0.0, 0.0, 0.0
-    for epoch in range(200):
-        num_hops = (0 if ((not train_BP) or (learn_H and epoch < 1)) else 3)
-        num_nbrs = 5
-        train(num_hops=num_hops, num_nbrs=num_nbrs)
-        val = evaluation(val_mask, num_hops=num_hops, num_nbrs=num_nbrs, partition='val')
+    for epoch in range(num_epoches):
+        train(num_hops=num_hops, num_samples=num_samples)
+        val = evaluation(val_mask, num_hops=num_hops, num_samples=num_samples, partition='val')
         if val > opt_val:
             opt_val = val
-            opt_test = evaluation(test_mask, num_hops=num_hops, num_nbrs=num_nbrs, partition='test')
+            opt_test = evaluation(test_mask, num_hops=num_hops, num_samples=num_samples, partition='test')
+        print(flush=True)
 
         if type(model) == GBPN and learn_H and verbose:
-            print(model.bp_conv.get_logH().exp())
+            print(model.bp_conv.get_logH().exp(), flush=True)
 
     if verbose:
         print('optimal val accuracy: {:7.5f}, optimal test accuracy: {:7.5f}'.format(opt_val, opt_test))
@@ -178,12 +195,12 @@ parser.add_argument('--model_name', type=str, default='GBPN')
 parser.add_argument('--num_hidden', type=int, default=2)
 parser.add_argument('--device', type=str, default='cpu')
 parser.add_argument('--learning_rate', type=float, default=0.01)
-parser.add_argument('--train_BP', action='store_true')
+parser.add_argument('--weighted_BP', action='store_true')
 parser.add_argument('--learn_H', action='store_true')
 parser.add_argument('--eval_C', action='store_true')
 parser.add_argument('--verbose', action='store_true')
 parser.add_argument('--develop', action='store_true')
-parser.set_defaults(train_BP=False, learn_H=False, eval_C=False, verbose=False, develop=False)
+parser.set_defaults(weighted_BP=False, learn_H=False, eval_C=False, verbose=False, develop=False)
 args = parser.parse_args()
 
 outpath = create_outpath(args.dataset, args.model_name)
@@ -194,8 +211,8 @@ if not args.develop:
     sys.stderr = open(outpath + '/' + commit + '.err', 'w')
 
 test_acc = []
-for _ in range(3):
-    test_acc.append(run(args.dataset, args.homo_ratio, args.split, args.model_name, args.num_hidden, args.device, args.learning_rate, args.train_BP, args.learn_H, args.eval_C, args.verbose))
+for _ in range(30):
+    test_acc.append(run(args.dataset, args.homo_ratio, args.split, args.model_name, args.num_hidden, args.device, args.learning_rate, args.weighted_BP, args.learn_H, args.eval_C, args.verbose))
 
 print(args)
 print('overall test accuracies: {:7.3f} ± {:7.3f}'.format(np.mean(test_acc) * 100, np.std(test_acc) * 100))

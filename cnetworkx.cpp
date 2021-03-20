@@ -97,7 +97,7 @@ Graph empty_graph(unsigned num_nodes)
     return Graph(input_nodes);
 }
 
-void dfs(Graph& G, Graph& T, int r, int rid, int max_d, int size)
+void dfs(Graph& G, Graph& T, int r, int rid, int max_d, int num_samples)
 {
     vector<tuple<int,int,int,int>> stack;
     if (max_d > 0)
@@ -125,10 +125,10 @@ void dfs(Graph& G, Graph& T, int r, int rid, int max_d, int size)
 //      cout << endl;
 
         vector<int> selected_nbrs;
-        if ((size < 0) || (nbrs.size() <= size))
+        if ((num_samples < 0) || (nbrs.size() <= num_samples))
             selected_nbrs = nbrs;
         else
-            sample(nbrs.begin(), nbrs.end(), back_inserter(selected_nbrs), size, mt19937{random_device{}()});
+            sample(nbrs.begin(), nbrs.end(), back_inserter(selected_nbrs), num_samples, mt19937{random_device{}()});
         for (auto v: selected_nbrs)
         {
             int vid = T.number_of_nodes();
@@ -144,12 +144,12 @@ void dfs(Graph& G, Graph& T, int r, int rid, int max_d, int size)
 
 }
 
-Graph sample_subtree(Graph& G, vector<int> batch_nodes, int max_d, int size)
+Graph sample_subtree(Graph& G, vector<int> batch_nodes, int max_d, int num_samples)
 {
     assert(G.is_undirected());
     Graph T = Graph(batch_nodes);
     for (unsigned i=0; i<batch_nodes.size(); i++)
-        dfs(G, T, batch_nodes[i], i, max_d, size);
+        dfs(G, T, batch_nodes[i], i, max_d, num_samples);
     return T;
 }
 
