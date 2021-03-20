@@ -65,9 +65,19 @@ run_GBPN_T:
 	python main.py --dataset Sex              --split 0.6 0.2 0.2 --model_name GBPN --learning_rate 1.0e-2 --device cuda --learn_H --eval_C --verbose
 
 run_arXiv:
+	python main.py --dataset OGBN_arXiv --model_name MLP  --learning_rate 1.0e-2 --device cuda                    --verbose
+	python main.py --dataset OGBN_arXiv --model_name SGC  --learning_rate 1.0e-2 --device cuda                    --verbose
+	python main.py --dataset OGBN_arXiv --model_name GCN  --learning_rate 1.0e-2 --device cuda                    --verbose
+	python main.py --dataset OGBN_arXiv --model_name SAGE --learning_rate 1.0e-2 --device cuda                    --verbose
+	python main.py --dataset OGBN_arXiv --model_name GAT  --learning_rate 1.0e-3 --device cuda                    --verbose
 	python main.py --dataset OGBN_arXiv --model_name GBPN --learning_rate 1.0e-2 --device cuda --learn_H          --verbose
 	python main.py --dataset OGBN_arXiv --model_name GBPN --learning_rate 1.0e-2 --device cuda --learn_H --eval_C --verbose
 
 run_Products:
+	python main.py --dataset OGBN_Products --model_name MLP  --learning_rate 1.0e-2 --device cuda                    --verbose
+	python main.py --dataset OGBN_Products --model_name SGC  --learning_rate 1.0e-2 --device cuda                    --verbose
+	python main.py --dataset OGBN_Products --model_name GCN  --learning_rate 1.0e-2 --device cuda                    --verbose
+	python main.py --dataset OGBN_Products --model_name SAGE --learning_rate 1.0e-2 --device cuda                    --verbose
+	python main.py --dataset OGBN_Products --model_name GAT  --learning_rate 1.0e-3 --device cuda                    --verbose
 	python main.py --dataset OGBN_Products --model_name GBPN --learning_rate 1.0e-2 --device cuda --learn_H          --verbose
 	python main.py --dataset OGBN_Products --model_name GBPN --learning_rate 1.0e-2 --device cuda --learn_H --eval_C --verbose

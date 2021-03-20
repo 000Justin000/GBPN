@@ -84,7 +84,7 @@ def run(dataset, homo_ratio, split, model_name, num_hidden, device, learning_rat
         num_epoches = 200
     elif dataset in ['OGBN_arXiv', 'OGBN_Products']:
         subgraph_sampler = CSubtreeSampler(num_nodes, x, y, edge_index, edge_weight)
-        max_batch_size = min(math.ceil(train_mask.sum()/10.0), 1024)
+        max_batch_size = min(math.ceil(train_mask.sum()/10.0), 5120)
         if model_name == 'MLP':
             num_hops = 0
         else:
