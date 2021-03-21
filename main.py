@@ -48,7 +48,7 @@ def roc_auc(log_b, y):
     return roc_auc_score(y, np.exp(log_b[:, 1]))
 
 
-def run(dataset, homo_ratio, split, model_name, num_hidden, device, learning_rate, weighted_BP, learn_H, eval_C, verbose):
+def run(dataset, homo_ratio, split, model_name, num_hidden, device, learning_rate, num_epoches, weighted_BP, learn_H, eval_C, verbose):
     if dataset == 'Cora':
         data = load_citation('Cora', split=split)
         c_weight = None
@@ -136,7 +136,6 @@ def run(dataset, homo_ratio, split, model_name, num_hidden, device, learning_rat
         else:
             num_hops = 5
         num_samples = -1
-        num_epoches = 200
     elif dataset in ['OGBN_arXiv', 'OGBN_Products', 'JPMC_Fraud_Detection', 'Elliptic_Bitcoin']:
         subgraph_sampler = CSubtreeSampler(num_nodes, x, y, edge_index, edge_weight)
         max_batch_size = min(math.ceil(train_mask.sum()/10.0), 5120)
@@ -145,7 +144,6 @@ def run(dataset, homo_ratio, split, model_name, num_hidden, device, learning_rat
         else:
             num_hops = 2
         num_samples = 5
-        num_epoches = 20
     else:
         raise Exception('unexpected dataset encountered')
 
@@ -254,6 +252,7 @@ parser.add_argument('--model_name', type=str, default='GBPN')
 parser.add_argument('--num_hidden', type=int, default=2)
 parser.add_argument('--device', type=str, default='cpu')
 parser.add_argument('--learning_rate', type=float, default=0.01)
+parser.add_argument('--num_epoches', type=int, default=20)
 parser.add_argument('--weighted_BP', action='store_true')
 parser.add_argument('--learn_H', action='store_true')
 parser.add_argument('--eval_C', action='store_true')
@@ -271,7 +270,7 @@ if not args.develop:
 
 test_acc = []
 for _ in range(10):
-    test_acc.append(run(args.dataset, args.homo_ratio, args.split, args.model_name, args.num_hidden, args.device, args.learning_rate, args.weighted_BP, args.learn_H, args.eval_C, args.verbose))
+    test_acc.append(run(args.dataset, args.homo_ratio, args.split, args.model_name, args.num_hidden, args.device, args.learning_rate, args.num_epoches, args.weighted_BP, args.learn_H, args.eval_C, args.verbose))
 
 print(args)
 print('overall test accuracies: {:7.3f} ± {:7.3f}'.format(np.mean(test_acc) * 100, np.std(test_acc) * 100))
