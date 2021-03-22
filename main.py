@@ -253,6 +253,7 @@ parser.add_argument('--num_hidden', type=int, default=2)
 parser.add_argument('--device', type=str, default='cpu')
 parser.add_argument('--learning_rate', type=float, default=0.01)
 parser.add_argument('--num_epoches', type=int, default=20)
+parser.add_argument('--num_trials', type=int, default=10)
 parser.add_argument('--weighted_BP', action='store_true')
 parser.add_argument('--learn_H', action='store_true')
 parser.add_argument('--eval_C', action='store_true')
@@ -269,7 +270,7 @@ if not args.develop:
     sys.stderr = open(outpath + '/' + commit + '.err', 'w')
 
 test_acc = []
-for _ in range(10):
+for _ in range(args.num_trials):
     test_acc.append(run(args.dataset, args.homo_ratio, args.split, args.model_name, args.num_hidden, args.device, args.learning_rate, args.num_epoches, args.weighted_BP, args.learn_H, args.eval_C, args.verbose))
 
 print(args)

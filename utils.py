@@ -140,21 +140,17 @@ class BPConv(MessagePassing):
     def __init__(self, n_channels, learn_H=False):
         super(BPConv, self).__init__(aggr='add')
         self.learn_H = learn_H
-        dim_param = n_channels * (n_channels + 1) // 2
-        self.param = nn.Parameter(torch.zeros(dim_param))
+        self.param = nn.Parameter(torch.zeros(n_channels, n_channels))
         self.n_channels = n_channels
 
     def get_logH(self):
-        logT = torch.zeros(self.n_channels, self.n_channels).to(self.param.device)
-        rid, cid = torch.tril_indices(self.n_channels, self.n_channels, 0)
-        logT[rid, cid] = F.logsigmoid(self.param * 10.0)
-        logH = (logT + logT.transpose(0, 1).triu(1))
+        logH = F.logsigmoid((self.param + self.param.transpose(0,1)) * 10.0)
         return (logH if self.learn_H else logH.detach().fill_diagonal_(0.0))
 
     def forward(self, x, edge_index, edge_weight, info):
         # x has shape [N, n_channels]
         # edge_index has shape [2, E]
-        # info has 3 fields: 'log_b0', 'log_msg_', 'rv'
+        # info has 4 fields: 'log_b0', 'log_msg_', 'rv', 'agg_scaling'
         return self.propagate(edge_index, edge_weight=edge_weight, x=x, info=info)
 
     def message(self, x_j, edge_weight, info):
