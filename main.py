@@ -1,5 +1,6 @@
 import sys
 import math
+import random
 import subprocess
 import argparse
 import torch.nn as nn
@@ -242,6 +243,9 @@ def run(dataset, homo_ratio, split, model_name, num_hidden, device, learning_rat
 
     return opt_test
 
+random.seed(0)
+np.random.seed(0)
+torch.manual_seed(0)
 
 torch.set_printoptions(precision=4, threshold=None, edgeitems=5, linewidth=300, profile=None, sci_mode=False)
 parser = argparse.ArgumentParser('model')
