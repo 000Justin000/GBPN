@@ -49,7 +49,7 @@ def roc_auc(log_b, y):
     return roc_auc_score(y, np.exp(log_b[:, 1]))
 
 
-def run(dataset, homo_ratio, split, model_name, num_hidden, device, learning_rate, num_epoches, weighted_BP, learn_H, eval_C, verbose):
+def run(dataset, homo_ratio, split, model_name, dim_hidden, num_hidden, dropout_p, device, learning_rate, num_epoches, weighted_BP, learn_H, eval_C, verbose):
     if dataset == 'Cora':
         data = load_citation('Cora', split=split)
         c_weight = None
@@ -139,7 +139,7 @@ def run(dataset, homo_ratio, split, model_name, num_hidden, device, learning_rat
         num_samples = -1
     elif dataset in ['OGBN_arXiv', 'OGBN_Products', 'JPMC_Fraud_Detection', 'Elliptic_Bitcoin']:
         subgraph_sampler = CSubtreeSampler(num_nodes, x, y, edge_index, edge_weight)
-        max_batch_size = min(math.ceil(train_mask.sum()/10.0), 5120)
+        max_batch_size = min(math.ceil(train_mask.sum()/10.0), 1024)
         if model_name == 'MLP':
             num_hops = 0
         else:
@@ -149,17 +149,17 @@ def run(dataset, homo_ratio, split, model_name, num_hidden, device, learning_rat
         raise Exception('unexpected dataset encountered')
 
     if model_name == 'MLP':
-        model = GMLP(num_features, num_classes, dim_hidden=256, num_hidden=num_hidden, activation=nn.LeakyReLU(), dropout_p=0.6)
+        model = GMLP(num_features, num_classes, dim_hidden=dim_hidden, num_hidden=num_hidden, activation=nn.LeakyReLU(), dropout_p=dropout_p)
     elif model_name == 'SGC':
-        model = SGC(num_features, num_classes, dim_hidden=256, dropout_p=0.6)
+        model = SGC(num_features, num_classes, dim_hidden=dim_hidden, dropout_p=dropout_p)
     elif model_name == 'GCN':
-        model = GCN(num_features, num_classes, dim_hidden=256, activation=nn.LeakyReLU(), dropout_p=0.6)
+        model = GCN(num_features, num_classes, dim_hidden=dim_hidden, activation=nn.LeakyReLU(), dropout_p=dropout_p)
     elif model_name == 'SAGE':
-        model = SAGE(num_features, num_classes, dim_hidden=256, activation=nn.LeakyReLU(), dropout_p=0.6)
+        model = SAGE(num_features, num_classes, dim_hidden=dim_hidden, activation=nn.LeakyReLU(), dropout_p=dropout_p)
     elif model_name == 'GAT':
-        model = GAT(num_features, num_classes, dim_hidden=32, activation=nn.ELU(), dropout_p=0.6)
+        model = GAT(num_features, num_classes, dim_hidden=dim_hidden//8, activation=nn.ELU(), dropout_p=dropout_p)
     elif model_name == 'GBPN':
-        model = GBPN(num_features, num_classes, dim_hidden=256, num_hidden=num_hidden, activation=nn.LeakyReLU(), dropout_p=0.6, learn_H=learn_H)
+        model = GBPN(num_features, num_classes, dim_hidden=dim_hidden, num_hidden=num_hidden, activation=nn.LeakyReLU(), dropout_p=dropout_p, learn_H=learn_H)
     else:
         raise Exception('unexpected model type')
     model = model.to(device)
@@ -243,6 +243,7 @@ def run(dataset, homo_ratio, split, model_name, num_hidden, device, learning_rat
 
     return opt_test
 
+
 random.seed(0)
 np.random.seed(0)
 torch.manual_seed(0)
@@ -253,7 +254,9 @@ parser.add_argument('--dataset', type=str, default='Cora')
 parser.add_argument('--homo_ratio', type=float, default=0.5)
 parser.add_argument('--split', metavar='N', type=float, nargs=3, default=None)
 parser.add_argument('--model_name', type=str, default='GBPN')
+parser.add_argument('--dim_hidden', type=int, default=256)
 parser.add_argument('--num_hidden', type=int, default=2)
+parser.add_argument('--dropout_p', type=float, default=0.0)
 parser.add_argument('--device', type=str, default='cpu')
 parser.add_argument('--learning_rate', type=float, default=0.01)
 parser.add_argument('--num_epoches', type=int, default=20)
@@ -275,7 +278,7 @@ if not args.develop:
 
 test_acc = []
 for _ in range(args.num_trials):
-    test_acc.append(run(args.dataset, args.homo_ratio, args.split, args.model_name, args.num_hidden, args.device, args.learning_rate, args.num_epoches, args.weighted_BP, args.learn_H, args.eval_C, args.verbose))
+    test_acc.append(run(args.dataset, args.homo_ratio, args.split, args.model_name, args.dim_hidden, args.num_hidden, args.dropout_p, args.device, args.learning_rate, args.num_epoches, args.weighted_BP, args.learn_H, args.eval_C, args.verbose))
 
 print(args)
 print('overall test accuracies: {:7.3f} ± {:7.3f}'.format(np.mean(test_acc) * 100, np.std(test_acc) * 100))
