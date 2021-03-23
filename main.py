@@ -243,6 +243,7 @@ def run(dataset, homo_ratio, split, model_name, num_hidden, device, learning_rat
 
     return opt_test
 
+
 random.seed(0)
 np.random.seed(0)
 torch.manual_seed(0)
