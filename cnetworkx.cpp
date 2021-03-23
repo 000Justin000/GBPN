@@ -13,10 +13,16 @@ namespace py = pybind11;
 struct Graph {
     vector<int> nodes;
     vector<unordered_map<int,float>> nbrws;
+    int undirected; // 0: false, 1: true, 2: unknown
+
+    Graph(void) {
+        undirected = 1;
+    }
 
     Graph(vector<int> input_nodes) {
         for (auto u: input_nodes)
             add_node(u);
+        undirected = 1;
     }
 
     void add_node(int u)
@@ -28,6 +34,7 @@ struct Graph {
     void add_edge(int uid, int vid, float weight)
     {
         nbrws[uid][vid] = weight;
+        undirected = 2;
     }
 
     void add_edges_from(const vector<tuple<int,int>> &list)
@@ -38,6 +45,7 @@ struct Graph {
             int vid = get<1>(item);
             nbrws[uid][vid] = 1.0;
         }
+        undirected = 2;
     }
 
     void add_weighted_edges_from(const vector<tuple<int,int,float>> &list)
@@ -49,6 +57,7 @@ struct Graph {
             float weight = get<2>(item);
             nbrws[uid][vid] = weight;
         }
+        undirected = 2;
     }
 
     int number_of_nodes(void)
@@ -63,11 +72,22 @@ struct Graph {
 
     bool is_undirected(void)
     {
-        for (unsigned i=0; i<nodes.size(); i++)
-            for (auto x: nbrws[i])
-                if (nbrws[x.first].find(i) == nbrws[x.first].end())
-                    return false;
-        return true;
+        if (undirected == 0)
+            return false;
+        else if (undirected == 1)
+            return true;
+        else
+        {
+            for (unsigned i=0; i<nodes.size(); i++)
+                for (auto x: nbrws[i])
+                    if (nbrws[x.first].find(i) == nbrws[x.first].end())
+                    {
+                        undirected = 0;
+                        return false;
+                    }
+            undirected = 1;
+            return true;
+        }
     }
 
     vector<tuple<int,int>> get_edges(void)

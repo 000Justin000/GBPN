@@ -170,11 +170,11 @@ class BPConv(MessagePassing):
 class GBPN(nn.Module):
     def __init__(self, dim_in, dim_out, dim_hidden=32, num_hidden=0, activation=nn.ReLU(), dropout_p=0.0, learn_H=False):
         super(GBPN, self).__init__()
-        self.transform_ego = nn.Sequential(MLP(dim_in, dim_out, dim_hidden, num_hidden, activation, dropout_p), nn.LogSoftmax(dim=-1))
+        self.transform = nn.Sequential(MLP(dim_in, dim_out, dim_hidden, num_hidden, activation, dropout_p), nn.LogSoftmax(dim=-1))
         self.bp_conv = BPConv(dim_out, learn_H)
 
     def forward(self, x, edge_index, edge_weight=None, agg_scaling=None, rv=None, phi=None, K=5):
-        log_b0 = self.transform_ego(x)
+        log_b0 = self.transform(x)
         if edge_weight is None:
             edge_weight = torch.ones(edge_index.shape[1]).to(x.device)
         if agg_scaling is None:
