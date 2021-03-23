@@ -1,11 +1,11 @@
-make run_Sex
-make run_County_Facebook
-make run_Cora
-make run_CiteSeer
-# make run_PubMed
-# make run_Coauthor_CS
-# make run_Coauthor_Physics
-# make run_Elliptic_Bitcoin
-# make run_JPMC_Fraud_Detection
-# make run_arXiv
-# make run_Products
+# make device="cuda:0" run_Sex
+# make device="cuda:0" run_County_Facebook
+# make device="cuda:0" run_Cora
+# make device="cuda:0" run_CiteSeer
+# make device="cuda:0" run_PubMed
+# make device="cuda:0" run_Coauthor_CS
+# make device="cuda:0" run_Coauthor_Physics
+# make device="cuda:0" run_Elliptic_Bitcoin
+# make device="cuda:0" run_JPMC_Fraud_Detection
+# make device="cuda:0" run_arXiv
+make device="cuda:1" run_Products
