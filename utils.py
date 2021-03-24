@@ -57,6 +57,7 @@ class GMLP(torch.nn.Module):
 
 
 class SGC(torch.nn.Module):
+
     def __init__(self, dim_in, dim_out, dim_hidden=128, dropout_p=0.0):
         super(SGC, self).__init__()
         self.conv1 = GCNConv(dim_in, dim_hidden)
@@ -72,6 +73,7 @@ class SGC(torch.nn.Module):
 
 
 class GCN(nn.Module):
+
     def __init__(self, dim_in, dim_out, dim_hidden=128, activation=nn.ReLU(), dropout_p=0.0):
         super(GCN, self).__init__()
         self.conv1 = GCNConv(dim_in, dim_hidden)
@@ -89,6 +91,7 @@ class GCN(nn.Module):
 
 
 class SAGE(nn.Module):
+
     def __init__(self, dim_in, dim_out, dim_hidden=128, activation=nn.ReLU(), dropout_p=0.0):
         super(SAGE, self).__init__()
         self.conv1 = SAGEConv(dim_in, dim_hidden)
@@ -106,6 +109,7 @@ class SAGE(nn.Module):
 
 
 class GAT(nn.Module):
+
     def __init__(self, dim_in, dim_out, dim_hidden=128, activation=nn.ELU(), dropout_p=0.0, num_heads=8):
         super(GAT, self).__init__()
         self.conv1 = GATConv(dim_in, dim_hidden, heads=num_heads, dropout=dropout_p)
@@ -124,6 +128,7 @@ class GAT(nn.Module):
 
 
 class SumConv(MessagePassing):
+
     def __init__(self):
         super(SumConv, self).__init__(aggr='add')
 
@@ -137,6 +142,7 @@ class SumConv(MessagePassing):
 
 
 class BPConv(MessagePassing):
+
     def __init__(self, n_channels, learn_H=False):
         super(BPConv, self).__init__(aggr='add')
         self.learn_H = learn_H
@@ -168,13 +174,14 @@ class BPConv(MessagePassing):
 
 
 class GBPN(nn.Module):
+
     def __init__(self, dim_in, dim_out, dim_hidden=32, num_hidden=0, activation=nn.ReLU(), dropout_p=0.0, learn_H=False):
         super(GBPN, self).__init__()
-        self.transform = nn.Sequential(MLP(dim_in, dim_out, dim_hidden, num_hidden, activation, dropout_p), nn.LogSoftmax(dim=-1))
+        self.transform = GMLP(dim_in, dim_out, dim_hidden=dim_hidden, num_hidden=num_hidden, activation=activation, dropout_p=dropout_p)
         self.bp_conv = BPConv(dim_out, learn_H)
 
     def forward(self, x, edge_index, edge_weight=None, agg_scaling=None, rv=None, phi=None, K=5):
-        log_b0 = self.transform(x)
+        log_b0 = self.transform(x, edge_index)
         if edge_weight is None:
             edge_weight = torch.ones(edge_index.shape[1]).to(x.device)
         if agg_scaling is None:
@@ -698,7 +705,7 @@ def preprocess_rnn_jpmc_fraud(feature, label, info, previous_label_as_feature=Fa
 
     group_feature = [torch.tensor(feature[idx], dtype=torch.float32) for idx in group['indices']]
     group_label = [torch.tensor(label[idx], dtype=torch.int64) for idx in group['indices']]
-    
+
     feature_padded, feature_mask = pad_sequence(group_feature, batch_first=True)
     label_padded, label_mask = pad_sequence(group_label, batch_first=True)
     assert torch.all(feature_mask == label_mask)
@@ -767,7 +774,6 @@ def load_elliptic_bitcoin(transform=None, split=None):
     data.edge_index, data.edge_weight, data.rv = process_edge_index(num_nodes, data.edge_index, None)
 
     return data if (transform is None) else transform(data)
-
 
 
 def acc(score, y, mask):
