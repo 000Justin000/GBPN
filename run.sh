@@ -7,5 +7,5 @@
 # make device="cuda:0" run_Coauthor_Physics
 # make device="cuda:0" run_Elliptic_Bitcoin
 # make device="cuda:0" run_JPMC_Fraud_Detection
-# make device="cuda:1" run_arXiv
-make device="cuda:2" run_Products
+make device="cuda:1" run_arXiv
+# make device="cuda:2" run_Products
