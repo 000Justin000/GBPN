@@ -2,22 +2,22 @@ build_cnetworkx:
 	c++ -O3 -Wall -shared -fopenmp -std=c++17 -fPIC $(shell python3 -m pybind11 --includes) cnetworkx.cpp -o cnetworkx$(shell python3-config --extension-suffix)
 
 run_Sex:
-	python main.py --dataset Sex                  --split 0.6 0.2 0.2 --model_name MLP  --dim_hidden 256 --num_hidden 2 --dropout_p 0.1 --learning_rate 1.0e-2 --num_epoches 200 --num_trials 100 --device $(device)                    --verbose
-	python main.py --dataset Sex                  --split 0.6 0.2 0.2 --model_name SGC  --dim_hidden 256 --num_hidden 2 --dropout_p 0.1 --learning_rate 1.0e-2 --num_epoches 200 --num_trials 100 --device $(device)                    --verbose
-	python main.py --dataset Sex                  --split 0.6 0.2 0.2 --model_name GCN  --dim_hidden 256 --num_hidden 2 --dropout_p 0.1 --learning_rate 1.0e-2 --num_epoches 200 --num_trials 100 --device $(device)                    --verbose
-	python main.py --dataset Sex                  --split 0.6 0.2 0.2 --model_name SAGE --dim_hidden 256 --num_hidden 2 --dropout_p 0.1 --learning_rate 1.0e-2 --num_epoches 200 --num_trials 100 --device $(device)                    --verbose
-	python main.py --dataset Sex                  --split 0.6 0.2 0.2 --model_name GAT  --dim_hidden 256 --num_hidden 2 --dropout_p 0.1 --learning_rate 2.5e-4 --num_epoches 500 --num_trials 100 --device $(device)                    --verbose
-	python main.py --dataset Sex                  --split 0.6 0.2 0.2 --model_name GBPN --dim_hidden 256 --num_hidden 2 --dropout_p 0.1 --learning_rate 1.0e-2 --num_epoches 200 --num_trials 100 --device $(device) --learn_H          --verbose
-	python main.py --dataset Sex                  --split 0.6 0.2 0.2 --model_name GBPN --dim_hidden 256 --num_hidden 2 --dropout_p 0.1 --learning_rate 1.0e-2 --num_epoches 200 --num_trials 100 --device $(device) --learn_H --eval_C --verbose
+	python main.py --dataset Sex                  --split 0.6 0.2 0.2 --model_name MLP  --dim_hidden 256 --num_hidden 2 --dropout_p 0.6 --learning_rate 1.0e-2 --num_epoches 200 --num_trials 100 --device $(device)                    --verbose
+	python main.py --dataset Sex                  --split 0.6 0.2 0.2 --model_name SGC  --dim_hidden 256 --num_hidden 2 --dropout_p 0.6 --learning_rate 1.0e-2 --num_epoches 200 --num_trials 100 --device $(device)                    --verbose
+	python main.py --dataset Sex                  --split 0.6 0.2 0.2 --model_name GCN  --dim_hidden 256 --num_hidden 2 --dropout_p 0.6 --learning_rate 1.0e-2 --num_epoches 200 --num_trials 100 --device $(device)                    --verbose
+	python main.py --dataset Sex                  --split 0.6 0.2 0.2 --model_name SAGE --dim_hidden 256 --num_hidden 2 --dropout_p 0.6 --learning_rate 1.0e-2 --num_epoches 200 --num_trials 100 --device $(device)                    --verbose
+	python main.py --dataset Sex                  --split 0.6 0.2 0.2 --model_name GAT  --dim_hidden 256 --num_hidden 2 --dropout_p 0.6 --learning_rate 2.5e-4 --num_epoches 500 --num_trials 100 --device $(device)                    --verbose
+	python main.py --dataset Sex                  --split 0.6 0.2 0.2 --model_name GBPN --dim_hidden 256 --num_hidden 2 --dropout_p 0.6 --learning_rate 1.0e-2 --num_epoches 200 --num_trials 100 --device $(device) --learn_H          --verbose
+	python main.py --dataset Sex                  --split 0.6 0.2 0.2 --model_name GBPN --dim_hidden 256 --num_hidden 2 --dropout_p 0.6 --learning_rate 1.0e-2 --num_epoches 200 --num_trials 100 --device $(device) --learn_H --eval_C --verbose
 
 run_County_Facebook:
-	python main.py --dataset County_Facebook      --split 0.6 0.2 0.2 --model_name MLP  --dim_hidden 256 --num_hidden 2 --dropout_p 0.1 --learning_rate 1.0e-2 --num_epoches 200 --num_trials 100 --device $(device)                    --verbose
-	python main.py --dataset County_Facebook      --split 0.6 0.2 0.2 --model_name SGC  --dim_hidden 256 --num_hidden 2 --dropout_p 0.1 --learning_rate 1.0e-2 --num_epoches 200 --num_trials 100 --device $(device)                    --verbose
-	python main.py --dataset County_Facebook      --split 0.6 0.2 0.2 --model_name GCN  --dim_hidden 256 --num_hidden 2 --dropout_p 0.1 --learning_rate 1.0e-2 --num_epoches 200 --num_trials 100 --device $(device)                    --verbose
-	python main.py --dataset County_Facebook      --split 0.6 0.2 0.2 --model_name SAGE --dim_hidden 256 --num_hidden 2 --dropout_p 0.1 --learning_rate 1.0e-2 --num_epoches 200 --num_trials 100 --device $(device)                    --verbose
-	python main.py --dataset County_Facebook      --split 0.6 0.2 0.2 --model_name GAT  --dim_hidden 256 --num_hidden 2 --dropout_p 0.1 --learning_rate 2.5e-4 --num_epoches 500 --num_trials 100 --device $(device)                    --verbose
-	python main.py --dataset County_Facebook      --split 0.6 0.2 0.2 --model_name GBPN --dim_hidden 256 --num_hidden 2 --dropout_p 0.1 --learning_rate 1.0e-2 --num_epoches 200 --num_trials 100 --device $(device) --learn_H          --verbose
-	python main.py --dataset County_Facebook      --split 0.6 0.2 0.2 --model_name GBPN --dim_hidden 256 --num_hidden 2 --dropout_p 0.1 --learning_rate 1.0e-2 --num_epoches 200 --num_trials 100 --device $(device) --learn_H --eval_C --verbose
+	python main.py --dataset County_Facebook      --split 0.6 0.2 0.2 --model_name MLP  --dim_hidden 256 --num_hidden 2 --dropout_p 0.6 --learning_rate 1.0e-2 --num_epoches 200 --num_trials 100 --device $(device)                    --verbose
+	python main.py --dataset County_Facebook      --split 0.6 0.2 0.2 --model_name SGC  --dim_hidden 256 --num_hidden 2 --dropout_p 0.6 --learning_rate 1.0e-2 --num_epoches 200 --num_trials 100 --device $(device)                    --verbose
+	python main.py --dataset County_Facebook      --split 0.6 0.2 0.2 --model_name GCN  --dim_hidden 256 --num_hidden 2 --dropout_p 0.6 --learning_rate 1.0e-2 --num_epoches 200 --num_trials 100 --device $(device)                    --verbose
+	python main.py --dataset County_Facebook      --split 0.6 0.2 0.2 --model_name SAGE --dim_hidden 256 --num_hidden 2 --dropout_p 0.6 --learning_rate 1.0e-2 --num_epoches 200 --num_trials 100 --device $(device)                    --verbose
+	python main.py --dataset County_Facebook      --split 0.6 0.2 0.2 --model_name GAT  --dim_hidden 256 --num_hidden 2 --dropout_p 0.6 --learning_rate 2.5e-4 --num_epoches 500 --num_trials 100 --device $(device)                    --verbose
+	python main.py --dataset County_Facebook      --split 0.6 0.2 0.2 --model_name GBPN --dim_hidden 256 --num_hidden 2 --dropout_p 0.6 --learning_rate 1.0e-2 --num_epoches 200 --num_trials 100 --device $(device) --learn_H          --verbose
+	python main.py --dataset County_Facebook      --split 0.6 0.2 0.2 --model_name GBPN --dim_hidden 256 --num_hidden 2 --dropout_p 0.6 --learning_rate 1.0e-2 --num_epoches 200 --num_trials 100 --device $(device) --learn_H --eval_C --verbose
 
 run_Cora:
 	python main.py --dataset Cora                 --split 0.6 0.2 0.2 --model_name MLP  --dim_hidden 256 --num_hidden 2 --dropout_p 0.6 --learning_rate 1.0e-2 --num_epoches 200 --num_trials 100 --device $(device)                    --verbose

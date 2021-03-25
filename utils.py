@@ -110,20 +110,21 @@ class SAGE(nn.Module):
 
 class GAT(nn.Module):
 
-    def __init__(self, dim_in, dim_out, dim_hidden=128, activation=nn.ELU(), dropout_p=0.0, num_heads=8):
+    def __init__(self, dim_in, dim_out, dim_hidden=128, num_heads=8, activation=nn.ELU(), dropout_p=0.0):
         super(GAT, self).__init__()
         self.conv1 = GATConv(dim_in, dim_hidden, heads=num_heads, dropout=dropout_p)
-        # On the Pubmed dataset, use heads=8 in conv2.
         self.conv2 = GATConv(dim_hidden*num_heads, dim_out, heads=num_heads, concat=False, dropout=dropout_p)
+        self.skip1 = nn.Linear(dim_in, dim_hidden*num_heads)
+        self.skip2 = nn.Linear(dim_hidden*num_heads, dim_out)
         self.activation = activation
         self.dropout = nn.Dropout(dropout_p)
 
     def forward(self, x, edge_index, **kwargs):
         x = self.dropout(x)
-        x = self.conv1(x, edge_index)
+        x = self.conv1(x, edge_index)+self.skip1(x)
         x = self.activation(x)
         x = self.dropout(x)
-        x = self.conv2(x, edge_index)
+        x = self.conv2(x, edge_index)+self.skip2(x)
         return F.log_softmax(x, dim=-1)
 
 
