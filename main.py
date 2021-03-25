@@ -226,7 +226,7 @@ def run(dataset, homo_ratio, split, model_name, dim_hidden, num_hidden, dropout_
     max_num_hops = num_hops
     best_val, opt_val, opt_test = 0.0, 0.0, 0.0
     for epoch in range(num_epoches):
-        num_hops = 0 if (model_name == 'GBPN' and epoch < 0.05*num_epoches) else max_num_hops
+        num_hops = 0 if (model_name == 'GBPN' and epoch < 0.00*num_epoches) else max_num_hops
         train(num_hops=num_hops, num_samples=num_samples)
 
         with torch.no_grad():

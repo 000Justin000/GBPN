@@ -336,6 +336,8 @@ class CSubtreeSampler:
                 T = nx.sample_subtree(self.G, batch_nodes.tolist(), num_hops, num_samples)
                 subgraph_nodes = torch.tensor(T.get_nodes(), dtype=torch.int64)
                 subgraph_size = subgraph_nodes.shape[0]
+                assert subgraph_size == len(T.get_edges())//2 + batch_size
+                assert len(set(map(lambda x: (int(subgraph_nodes[x[0]]), int(subgraph_nodes[x[1]])), T.get_edges())) - set(self.G.get_edges())) == 0
                 if self.edge_weight is None:
                     T_edge_index = torch.tensor(T.get_edges(), dtype=torch.int64).t() if len(T.get_edges()) > 0 else torch.zeros(2, 0, dtype=torch.int64)
                     T_edge_weight = None

@@ -1,5 +1,5 @@
 build_cnetworkx:
-	c++ -O3 -Wall -shared -std=c++17 -fPIC $(shell python3 -m pybind11 --includes) cnetworkx.cpp -o cnetworkx$(shell python3-config --extension-suffix)
+	c++ -O3 -Wall -shared -fopenmp -std=c++17 -fPIC $(shell python3 -m pybind11 --includes) cnetworkx.cpp -o cnetworkx$(shell python3-config --extension-suffix)
 
 run_Sex:
 	python main.py --dataset Sex                  --split 0.6 0.2 0.2 --model_name MLP  --dim_hidden 256 --num_hidden 2 --dropout_p 0.6 --learning_rate 1.0e-2 --num_epoches 200 --num_trials 100 --device $(device)                    --verbose

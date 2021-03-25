@@ -14,6 +14,9 @@ struct Graph {
     vector<int> nodes;
     vector<vector<tuple<int,float>>> nbrs;
 
+    Graph(void) {
+    }
+
     Graph(vector<int> input_nodes) {
         for (auto u: input_nodes)
             add_node(u);
@@ -103,7 +106,7 @@ void dfs(Graph& G, Graph& T, int r, int rid, int max_d, int num_samples)
         int p = get<3>(item);
 
 //      cout << u << " " << uid << " " << d << " " << p << endl;
-//      cout << G.nbrs[u].size() << endl;
+//      cout << G.nbrs[u].size() << " ";
 
         vector<tuple<int,float>> nbrs;
         for (auto item: G.nbrs[u])
@@ -119,6 +122,7 @@ void dfs(Graph& G, Graph& T, int r, int rid, int max_d, int num_samples)
             selected_nbrs = nbrs;
         else
             sample(nbrs.begin(), nbrs.end(), back_inserter(selected_nbrs), num_samples, mt19937{random_device{}()});
+//      cout << "sampling finished" << endl;
 
         for (auto item: selected_nbrs)
         {
@@ -127,6 +131,7 @@ void dfs(Graph& G, Graph& T, int r, int rid, int max_d, int num_samples)
 
             int vid = T.number_of_nodes();
             T.add_node(v);
+//          cout << uid << " " << vid << " " << T.number_of_nodes() << " ";
             T.add_edge(uid, vid, weight);
             T.add_edge(vid, uid, weight);
             if (max_d > d+1)
@@ -139,10 +144,43 @@ void dfs(Graph& G, Graph& T, int r, int rid, int max_d, int num_samples)
 
 Graph sample_subtree(Graph& G, vector<int> batch_nodes, int max_d, int num_samples)
 {
-    Graph T = Graph(batch_nodes);
-    for (unsigned rid=0; rid<batch_nodes.size(); rid++)
-        dfs(G, T, batch_nodes[rid], rid, max_d, num_samples);
-    return T;
+    unsigned batch_size = batch_nodes.size();
+
+    vector<Graph> TList;
+    for (unsigned rid=0; rid<batch_size; rid++)
+    {
+        Graph T = Graph();
+        T.add_node(batch_nodes[rid]);
+        TList.push_back(T);
+    }
+
+    #pragma omp parallel for
+    for (unsigned rid=0; rid<batch_size; rid++)
+    {
+        dfs(G, TList[rid], batch_nodes[rid], 0, max_d, num_samples);
+    }
+
+    vector<vector<int>> l2g;
+    Graph TT = Graph(batch_nodes);
+    int tot_count = batch_size;
+    for (unsigned rid=0; rid<batch_size; rid++)
+    {
+        vector<int> l2g_map;
+        l2g_map.push_back(rid);
+        for (unsigned uid=1; uid<TList[rid].number_of_nodes(); uid++)
+        {
+            l2g_map.push_back(tot_count);
+            TT.add_node(TList[rid].nodes[uid]);
+            tot_count += 1;
+        }
+        l2g.push_back(l2g_map);
+    }
+    for (unsigned rid=0; rid<batch_size; rid++)
+        for (unsigned uid=0; uid<TList[rid].number_of_nodes(); uid++)
+            for (auto item: TList[rid].nbrs[uid])
+                TT.add_edge(l2g[rid][uid], l2g[rid][get<0>(item)], get<1>(item));
+
+    return TT;    
 }
 
 PYBIND11_MODULE(cnetworkx, m) {
