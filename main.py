@@ -139,12 +139,12 @@ def run(dataset, homo_ratio, split, model_name, dim_hidden, num_hidden, dropout_
         num_samples = -1
     elif dataset in ['OGBN_arXiv', 'OGBN_Products', 'JPMC_Fraud_Detection', 'Elliptic_Bitcoin']:
         subgraph_sampler = CSubtreeSampler(num_nodes, x, y, edge_index, edge_weight)
-        max_batch_size = min(math.ceil(train_mask.sum()/10.0), 5120)
+        max_batch_size = min(math.ceil(train_mask.sum()/10.0), 1024)
         if model_name == 'MLP':
             num_hops = 0
         else:
             num_hops = 2
-        num_samples = 5
+        num_samples = 10
     else:
         raise Exception('unexpected dataset encountered')
 
