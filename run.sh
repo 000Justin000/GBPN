@@ -1,5 +1,5 @@
-# make device="cuda:0" run_Sex
-# make device="cuda:0" run_County_Facebook
+make device="cuda:0" run_Sex
+make device="cuda:0" run_County_Facebook
 # make device="cuda:0" run_Cora
 # make device="cuda:0" run_CiteSeer
 # make device="cuda:0" run_PubMed
