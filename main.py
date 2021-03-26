@@ -131,7 +131,7 @@ def run(dataset, homo_ratio, split, model_name, dim_hidden, num_hidden, dropout_
 
     if dataset in ['Cora', 'CiteSeer', 'PubMed', 'Coauthor_CS', 'Coauthor_Physics', 'County_Facebook', 'Sex', 'Animal2', 'Animal3', 'Squirrel', 'Chameleon']:
         graph_sampler = FullgraphSampler(num_nodes, x, y, edge_index, edge_weight)
-        max_batch_size = num_nodes
+        max_batch_size = -1
         if model_name == 'MLP':
             num_hops = 0
         elif model_name != 'GBPN':

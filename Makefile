@@ -6,7 +6,7 @@ run_Sex:
 	python main.py --dataset Sex                  --split 0.6 0.2 0.2 --model_name SGC  --dim_hidden 256 --num_hidden 2 --dropout_p 0.6 --learning_rate 1.0e-2 --num_epoches 200 --num_trials 100 --device $(device)                    --verbose
 	python main.py --dataset Sex                  --split 0.6 0.2 0.2 --model_name GCN  --dim_hidden 256 --num_hidden 2 --dropout_p 0.6 --learning_rate 1.0e-2 --num_epoches 200 --num_trials 100 --device $(device)                    --verbose
 	python main.py --dataset Sex                  --split 0.6 0.2 0.2 --model_name SAGE --dim_hidden 256 --num_hidden 2 --dropout_p 0.6 --learning_rate 1.0e-2 --num_epoches 200 --num_trials 100 --device $(device)                    --verbose
-	python main.py --dataset Sex                  --split 0.6 0.2 0.2 --model_name GAT  --dim_hidden 256 --num_hidden 2 --dropout_p 0.6 --learning_rate 2.5e-4 --num_epoches 500 --num_trials 100 --device $(device)                    --verbose
+	python main.py --dataset Sex                  --split 0.6 0.2 0.2 --model_name GAT  --dim_hidden 256 --num_hidden 2 --dropout_p 0.6 --learning_rate 1.0e-3 --num_epoches 500 --num_trials 100 --device $(device)                    --verbose
 	python main.py --dataset Sex                  --split 0.6 0.2 0.2 --model_name GBPN --dim_hidden 256 --num_hidden 2 --dropout_p 0.6 --learning_rate 1.0e-2 --num_epoches 200 --num_trials 100 --device $(device) --learn_H          --verbose
 	python main.py --dataset Sex                  --split 0.6 0.2 0.2 --model_name GBPN --dim_hidden 256 --num_hidden 2 --dropout_p 0.6 --learning_rate 1.0e-2 --num_epoches 200 --num_trials 100 --device $(device) --learn_H --eval_C --verbose
 
@@ -15,7 +15,7 @@ run_County_Facebook:
 	python main.py --dataset County_Facebook      --split 0.6 0.2 0.2 --model_name SGC  --dim_hidden 256 --num_hidden 2 --dropout_p 0.6 --learning_rate 1.0e-2 --num_epoches 200 --num_trials 100 --device $(device)                    --verbose
 	python main.py --dataset County_Facebook      --split 0.6 0.2 0.2 --model_name GCN  --dim_hidden 256 --num_hidden 2 --dropout_p 0.6 --learning_rate 1.0e-2 --num_epoches 200 --num_trials 100 --device $(device)                    --verbose
 	python main.py --dataset County_Facebook      --split 0.6 0.2 0.2 --model_name SAGE --dim_hidden 256 --num_hidden 2 --dropout_p 0.6 --learning_rate 1.0e-2 --num_epoches 200 --num_trials 100 --device $(device)                    --verbose
-	python main.py --dataset County_Facebook      --split 0.6 0.2 0.2 --model_name GAT  --dim_hidden 256 --num_hidden 2 --dropout_p 0.6 --learning_rate 2.5e-4 --num_epoches 500 --num_trials 100 --device $(device)                    --verbose
+	python main.py --dataset County_Facebook      --split 0.6 0.2 0.2 --model_name GAT  --dim_hidden 256 --num_hidden 2 --dropout_p 0.6 --learning_rate 1.0e-3 --num_epoches 500 --num_trials 100 --device $(device)                    --verbose
 	python main.py --dataset County_Facebook      --split 0.6 0.2 0.2 --model_name GBPN --dim_hidden 256 --num_hidden 2 --dropout_p 0.6 --learning_rate 1.0e-2 --num_epoches 200 --num_trials 100 --device $(device) --learn_H          --verbose
 	python main.py --dataset County_Facebook      --split 0.6 0.2 0.2 --model_name GBPN --dim_hidden 256 --num_hidden 2 --dropout_p 0.6 --learning_rate 1.0e-2 --num_epoches 200 --num_trials 100 --device $(device) --learn_H --eval_C --verbose
 
@@ -24,7 +24,7 @@ run_Cora:
 	python main.py --dataset Cora                 --split 0.6 0.2 0.2 --model_name SGC  --dim_hidden 256 --num_hidden 2 --dropout_p 0.6 --learning_rate 1.0e-2 --num_epoches 200 --num_trials 100 --device $(device)                    --verbose
 	python main.py --dataset Cora                 --split 0.6 0.2 0.2 --model_name GCN  --dim_hidden 256 --num_hidden 2 --dropout_p 0.6 --learning_rate 1.0e-2 --num_epoches 200 --num_trials 100 --device $(device)                    --verbose
 	python main.py --dataset Cora                 --split 0.6 0.2 0.2 --model_name SAGE --dim_hidden 256 --num_hidden 2 --dropout_p 0.6 --learning_rate 1.0e-2 --num_epoches 200 --num_trials 100 --device $(device)                    --verbose
-	python main.py --dataset Cora                 --split 0.6 0.2 0.2 --model_name GAT  --dim_hidden 256 --num_hidden 2 --dropout_p 0.6 --learning_rate 2.5e-4 --num_epoches 500 --num_trials 100 --device $(device)                    --verbose
+	python main.py --dataset Cora                 --split 0.6 0.2 0.2 --model_name GAT  --dim_hidden 256 --num_hidden 2 --dropout_p 0.6 --learning_rate 1.0e-3 --num_epoches 500 --num_trials 100 --device $(device)                    --verbose
 	python main.py --dataset Cora                 --split 0.6 0.2 0.2 --model_name GBPN --dim_hidden 256 --num_hidden 2 --dropout_p 0.6 --learning_rate 1.0e-2 --num_epoches 200 --num_trials 100 --device $(device) --learn_H          --verbose
 	python main.py --dataset Cora                 --split 0.6 0.2 0.2 --model_name GBPN --dim_hidden 256 --num_hidden 2 --dropout_p 0.6 --learning_rate 1.0e-2 --num_epoches 200 --num_trials 100 --device $(device) --learn_H --eval_C --verbose
 
@@ -33,7 +33,7 @@ run_CiteSeer:
 	python main.py --dataset CiteSeer             --split 0.6 0.2 0.2 --model_name SGC  --dim_hidden 256 --num_hidden 2 --dropout_p 0.6 --learning_rate 1.0e-2 --num_epoches 200 --num_trials 100 --device $(device)                    --verbose
 	python main.py --dataset CiteSeer             --split 0.6 0.2 0.2 --model_name GCN  --dim_hidden 256 --num_hidden 2 --dropout_p 0.6 --learning_rate 1.0e-2 --num_epoches 200 --num_trials 100 --device $(device)                    --verbose
 	python main.py --dataset CiteSeer             --split 0.6 0.2 0.2 --model_name SAGE --dim_hidden 256 --num_hidden 2 --dropout_p 0.6 --learning_rate 1.0e-2 --num_epoches 200 --num_trials 100 --device $(device)                    --verbose
-	python main.py --dataset CiteSeer             --split 0.6 0.2 0.2 --model_name GAT  --dim_hidden 256 --num_hidden 2 --dropout_p 0.6 --learning_rate 2.5e-4 --num_epoches 500 --num_trials 100 --device $(device)                    --verbose
+	python main.py --dataset CiteSeer             --split 0.6 0.2 0.2 --model_name GAT  --dim_hidden 256 --num_hidden 2 --dropout_p 0.6 --learning_rate 1.0e-3 --num_epoches 500 --num_trials 100 --device $(device)                    --verbose
 	python main.py --dataset CiteSeer             --split 0.6 0.2 0.2 --model_name GBPN --dim_hidden 256 --num_hidden 2 --dropout_p 0.6 --learning_rate 1.0e-2 --num_epoches 200 --num_trials 100 --device $(device) --learn_H          --verbose
 	python main.py --dataset CiteSeer             --split 0.6 0.2 0.2 --model_name GBPN --dim_hidden 256 --num_hidden 2 --dropout_p 0.6 --learning_rate 1.0e-2 --num_epoches 200 --num_trials 100 --device $(device) --learn_H --eval_C --verbose
 
@@ -42,7 +42,7 @@ run_PubMed:
 	python main.py --dataset PubMed               --split 0.6 0.2 0.2 --model_name SGC  --dim_hidden 256 --num_hidden 2 --dropout_p 0.3 --learning_rate 1.0e-2 --num_epoches 200 --num_trials  10 --device $(device)                    --verbose
 	python main.py --dataset PubMed               --split 0.6 0.2 0.2 --model_name GCN  --dim_hidden 256 --num_hidden 2 --dropout_p 0.3 --learning_rate 1.0e-2 --num_epoches 200 --num_trials  10 --device $(device)                    --verbose
 	python main.py --dataset PubMed               --split 0.6 0.2 0.2 --model_name SAGE --dim_hidden 256 --num_hidden 2 --dropout_p 0.3 --learning_rate 1.0e-2 --num_epoches 200 --num_trials  10 --device $(device)                    --verbose
-	python main.py --dataset PubMed               --split 0.6 0.2 0.2 --model_name GAT  --dim_hidden 256 --num_hidden 2 --dropout_p 0.3 --learning_rate 2.5e-4 --num_epoches 500 --num_trials  10 --device $(device)                    --verbose
+	python main.py --dataset PubMed               --split 0.6 0.2 0.2 --model_name GAT  --dim_hidden 256 --num_hidden 2 --dropout_p 0.3 --learning_rate 1.0e-3 --num_epoches 500 --num_trials  10 --device $(device)                    --verbose
 	python main.py --dataset PubMed               --split 0.6 0.2 0.2 --model_name GBPN --dim_hidden 256 --num_hidden 2 --dropout_p 0.3 --learning_rate 1.0e-2 --num_epoches 200 --num_trials  10 --device $(device) --learn_H          --verbose
 	python main.py --dataset PubMed               --split 0.6 0.2 0.2 --model_name GBPN --dim_hidden 256 --num_hidden 2 --dropout_p 0.3 --learning_rate 1.0e-2 --num_epoches 200 --num_trials  10 --device $(device) --learn_H --eval_C --verbose
 
@@ -51,7 +51,7 @@ run_Coauthor_CS:
 	python main.py --dataset Coauthor_CS          --split 0.6 0.2 0.2 --model_name SGC  --dim_hidden 256 --num_hidden 2 --dropout_p 0.3 --learning_rate 1.0e-2 --num_epoches 200 --num_trials  10 --device $(device)                    --verbose
 	python main.py --dataset Coauthor_CS          --split 0.6 0.2 0.2 --model_name GCN  --dim_hidden 256 --num_hidden 2 --dropout_p 0.3 --learning_rate 1.0e-2 --num_epoches 200 --num_trials  10 --device $(device)                    --verbose
 	python main.py --dataset Coauthor_CS          --split 0.6 0.2 0.2 --model_name SAGE --dim_hidden 256 --num_hidden 2 --dropout_p 0.3 --learning_rate 1.0e-2 --num_epoches 200 --num_trials  10 --device $(device)                    --verbose
-	python main.py --dataset Coauthor_CS          --split 0.6 0.2 0.2 --model_name GAT  --dim_hidden 256 --num_hidden 2 --dropout_p 0.3 --learning_rate 2.5e-4 --num_epoches 500 --num_trials  10 --device $(device)                    --verbose
+	python main.py --dataset Coauthor_CS          --split 0.6 0.2 0.2 --model_name GAT  --dim_hidden 256 --num_hidden 2 --dropout_p 0.3 --learning_rate 1.0e-3 --num_epoches 500 --num_trials  10 --device $(device)                    --verbose
 	python main.py --dataset Coauthor_CS          --split 0.6 0.2 0.2 --model_name GBPN --dim_hidden 256 --num_hidden 2 --dropout_p 0.3 --learning_rate 1.0e-2 --num_epoches 200 --num_trials  10 --device $(device) --learn_H          --verbose
 	python main.py --dataset Coauthor_CS          --split 0.6 0.2 0.2 --model_name GBPN --dim_hidden 256 --num_hidden 2 --dropout_p 0.3 --learning_rate 1.0e-2 --num_epoches 200 --num_trials  10 --device $(device) --learn_H --eval_C --verbose
 
@@ -60,7 +60,7 @@ run_Coauthor_Physics:
 	python main.py --dataset Coauthor_Physics     --split 0.6 0.2 0.2 --model_name SGC  --dim_hidden 256 --num_hidden 2 --dropout_p 0.3 --learning_rate 1.0e-2 --num_epoches 200 --num_trials  10 --device $(device)                    --verbose
 	python main.py --dataset Coauthor_Physics     --split 0.6 0.2 0.2 --model_name GCN  --dim_hidden 256 --num_hidden 2 --dropout_p 0.3 --learning_rate 1.0e-2 --num_epoches 200 --num_trials  10 --device $(device)                    --verbose
 	python main.py --dataset Coauthor_Physics     --split 0.6 0.2 0.2 --model_name SAGE --dim_hidden 256 --num_hidden 2 --dropout_p 0.3 --learning_rate 1.0e-2 --num_epoches 200 --num_trials  10 --device $(device)                    --verbose
-	python main.py --dataset Coauthor_Physics     --split 0.6 0.2 0.2 --model_name GAT  --dim_hidden 256 --num_hidden 2 --dropout_p 0.3 --learning_rate 2.5e-4 --num_epoches 500 --num_trials  10 --device $(device)                    --verbose
+	python main.py --dataset Coauthor_Physics     --split 0.6 0.2 0.2 --model_name GAT  --dim_hidden 256 --num_hidden 2 --dropout_p 0.3 --learning_rate 1.0e-3 --num_epoches 500 --num_trials  10 --device $(device)                    --verbose
 	python main.py --dataset Coauthor_Physics     --split 0.6 0.2 0.2 --model_name GBPN --dim_hidden 256 --num_hidden 2 --dropout_p 0.3 --learning_rate 1.0e-2 --num_epoches 200 --num_trials  10 --device $(device) --learn_H          --verbose
 	python main.py --dataset Coauthor_Physics     --split 0.6 0.2 0.2 --model_name GBPN --dim_hidden 256 --num_hidden 2 --dropout_p 0.3 --learning_rate 1.0e-2 --num_epoches 200 --num_trials  10 --device $(device) --learn_H --eval_C --verbose
 
@@ -69,7 +69,7 @@ run_Elliptic_Bitcoin:
 	python main.py --dataset Elliptic_Bitcoin     --split 0.6 0.2 0.2 --model_name SGC  --dim_hidden 256 --num_hidden 2 --dropout_p 0.1 --learning_rate 1.0e-2 --num_epoches  40 --num_trials   3 --device $(device)                    --verbose
 	python main.py --dataset Elliptic_Bitcoin     --split 0.6 0.2 0.2 --model_name GCN  --dim_hidden 256 --num_hidden 2 --dropout_p 0.1 --learning_rate 1.0e-2 --num_epoches  40 --num_trials   3 --device $(device)                    --verbose
 	python main.py --dataset Elliptic_Bitcoin     --split 0.6 0.2 0.2 --model_name SAGE --dim_hidden 256 --num_hidden 2 --dropout_p 0.1 --learning_rate 1.0e-2 --num_epoches  40 --num_trials   3 --device $(device)                    --verbose
-	python main.py --dataset Elliptic_Bitcoin     --split 0.6 0.2 0.2 --model_name GAT  --dim_hidden 256 --num_hidden 2 --dropout_p 0.1 --learning_rate 2.5e-4 --num_epoches 100 --num_trials   3 --device $(device)                    --verbose
+	python main.py --dataset Elliptic_Bitcoin     --split 0.6 0.2 0.2 --model_name GAT  --dim_hidden 256 --num_hidden 2 --dropout_p 0.1 --learning_rate 1.0e-3 --num_epoches 100 --num_trials   3 --device $(device)                    --verbose
 	python main.py --dataset Elliptic_Bitcoin     --split 0.6 0.2 0.2 --model_name GBPN --dim_hidden 256 --num_hidden 2 --dropout_p 0.1 --learning_rate 1.0e-2 --num_epoches  40 --num_trials   3 --device $(device) --learn_H          --verbose
 	python main.py --dataset Elliptic_Bitcoin     --split 0.6 0.2 0.2 --model_name GBPN --dim_hidden 256 --num_hidden 2 --dropout_p 0.1 --learning_rate 1.0e-2 --num_epoches  40 --num_trials   3 --device $(device) --learn_H --eval_C --verbose
 
@@ -78,7 +78,7 @@ run_JPMC_Fraud_Detection:
 	python main.py --dataset JPMC_Fraud_Detection --split 0.6 0.2 0.2 --model_name SGC  --dim_hidden 256 --num_hidden 2 --dropout_p 0.1 --learning_rate 1.0e-2 --num_epoches  40 --num_trials   3 --device $(device)                    --verbose
 	python main.py --dataset JPMC_Fraud_Detection --split 0.6 0.2 0.2 --model_name GCN  --dim_hidden 256 --num_hidden 2 --dropout_p 0.1 --learning_rate 1.0e-2 --num_epoches  40 --num_trials   3 --device $(device)                    --verbose
 	python main.py --dataset JPMC_Fraud_Detection --split 0.6 0.2 0.2 --model_name SAGE --dim_hidden 256 --num_hidden 2 --dropout_p 0.1 --learning_rate 1.0e-2 --num_epoches  40 --num_trials   3 --device $(device)                    --verbose
-	python main.py --dataset JPMC_Fraud_Detection --split 0.6 0.2 0.2 --model_name GAT  --dim_hidden 256 --num_hidden 2 --dropout_p 0.1 --learning_rate 2.5e-4 --num_epoches 100 --num_trials   3 --device $(device)                    --verbose
+	python main.py --dataset JPMC_Fraud_Detection --split 0.6 0.2 0.2 --model_name GAT  --dim_hidden 256 --num_hidden 2 --dropout_p 0.1 --learning_rate 1.0e-3 --num_epoches 100 --num_trials   3 --device $(device)                    --verbose
 	python main.py --dataset JPMC_Fraud_Detection --split 0.6 0.2 0.2 --model_name GBPN --dim_hidden 256 --num_hidden 2 --dropout_p 0.1 --learning_rate 1.0e-2 --num_epoches  40 --num_trials   3 --device $(device) --learn_H          --verbose
 	python main.py --dataset JPMC_Fraud_Detection --split 0.6 0.2 0.2 --model_name GBPN --dim_hidden 256 --num_hidden 2 --dropout_p 0.1 --learning_rate 1.0e-2 --num_epoches  40 --num_trials   3 --device $(device) --learn_H --eval_C --verbose
 
@@ -87,7 +87,7 @@ run_arXiv:
 	python main.py --dataset OGBN_arXiv                               --model_name SGC  --dim_hidden 256 --num_hidden 2 --dropout_p 0.1 --learning_rate 1.0e-2 --num_epoches  40 --num_trials   3 --device $(device)                    --verbose
 	python main.py --dataset OGBN_arXiv                               --model_name GCN  --dim_hidden 256 --num_hidden 2 --dropout_p 0.1 --learning_rate 1.0e-2 --num_epoches  40 --num_trials   3 --device $(device)                    --verbose
 	python main.py --dataset OGBN_arXiv                               --model_name SAGE --dim_hidden 256 --num_hidden 2 --dropout_p 0.1 --learning_rate 1.0e-2 --num_epoches  40 --num_trials   3 --device $(device)                    --verbose
-	python main.py --dataset OGBN_arXiv                               --model_name GAT  --dim_hidden 256 --num_hidden 2 --dropout_p 0.1 --learning_rate 2.5e-4 --num_epoches 100 --num_trials   3 --device $(device)                    --verbose
+	python main.py --dataset OGBN_arXiv                               --model_name GAT  --dim_hidden 256 --num_hidden 2 --dropout_p 0.1 --learning_rate 1.0e-3 --num_epoches 100 --num_trials   3 --device $(device)                    --verbose
 	python main.py --dataset OGBN_arXiv                               --model_name GBPN --dim_hidden 256 --num_hidden 2 --dropout_p 0.1 --learning_rate 1.0e-2 --num_epoches  40 --num_trials   3 --device $(device) --learn_H          --verbose
 	python main.py --dataset OGBN_arXiv                               --model_name GBPN --dim_hidden 256 --num_hidden 2 --dropout_p 0.1 --learning_rate 1.0e-2 --num_epoches  40 --num_trials   3 --device $(device) --learn_H --eval_C --verbose
 
@@ -96,6 +96,6 @@ run_Products:
 	python main.py --dataset OGBN_Products                            --model_name SGC  --dim_hidden 256 --num_hidden 2 --dropout_p 0.1 --learning_rate 1.0e-2 --num_epoches  20 --num_trials   3 --device $(device)                    --verbose
 	python main.py --dataset OGBN_Products                            --model_name GCN  --dim_hidden 256 --num_hidden 2 --dropout_p 0.1 --learning_rate 1.0e-2 --num_epoches  20 --num_trials   3 --device $(device)                    --verbose
 	python main.py --dataset OGBN_Products                            --model_name SAGE --dim_hidden 256 --num_hidden 2 --dropout_p 0.1 --learning_rate 1.0e-2 --num_epoches  20 --num_trials   3 --device $(device)                    --verbose
-	python main.py --dataset OGBN_Products                            --model_name GAT  --dim_hidden 256 --num_hidden 2 --dropout_p 0.1 --learning_rate 2.5e-4 --num_epoches  50 --num_trials   3 --device $(device)                    --verbose
+	python main.py --dataset OGBN_Products                            --model_name GAT  --dim_hidden 256 --num_hidden 2 --dropout_p 0.1 --learning_rate 1.0e-3 --num_epoches  50 --num_trials   3 --device $(device)                    --verbose
 	python main.py --dataset OGBN_Products                            --model_name GBPN --dim_hidden 256 --num_hidden 2 --dropout_p 0.1 --learning_rate 1.0e-2 --num_epoches  20 --num_trials   3 --device $(device) --learn_H          --verbose
 	python main.py --dataset OGBN_Products                            --model_name GBPN --dim_hidden 256 --num_hidden 2 --dropout_p 0.1 --learning_rate 1.0e-2 --num_epoches  20 --num_trials   3 --device $(device) --learn_H --eval_C --verbose

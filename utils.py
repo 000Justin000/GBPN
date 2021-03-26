@@ -260,11 +260,10 @@ class BPConv(MessagePassing):
 
     def message(self, x_j, edge_weight, info):
         # x_j has shape [E, n_channels]
-        logC = edge_weight.unsqueeze(-1).unsqueeze(-1) * self.get_logH().unsqueeze(0)
         if info['log_msg_'] is not None:
             x_j = x_j - info['log_msg_'][info['rv']]
-        log_msg_raw = torch.logsumexp(x_j.unsqueeze(-1) + logC, dim=-2)
-        log_msg = log_normalize(log_msg_raw)
+        logC = self.get_logH().unsqueeze(0) * edge_weight.unsqueeze(-1).unsqueeze(-1)
+        log_msg = log_normalize(torch.logsumexp(x_j.unsqueeze(-1) + logC, dim=-2))
         info['log_msg_'] = log_msg
         return log_msg
 
@@ -332,14 +331,14 @@ class FullgraphSampler:
         self.deg = degree(edge_index[1], num_nodes)
 
     def get_generator(self, mask=None, shuffle=False, max_batch_size=-1, num_hops=0, num_samples=-1, device='cpu'):
-        assert shuffle == False
+        # assert shuffle == False
         assert max_batch_size == -1
         assert num_samples == -1
 
         def generator():
             batch_nodes = torch.arange(self.num_nodes, dtype=torch.int64) if (mask is None) else mask.nonzero(as_tuple=True)[0]
 
-            subgraph_nodes = torch.cat(batch_nodes, torch.tensor(list(set(range(self.num_nodes)) - set(batch_nodes.tolist())), dtype=torch.int64), dim=0)
+            subgraph_nodes = torch.cat((batch_nodes, torch.tensor(list(set(range(self.num_nodes)) - set(batch_nodes.tolist())), dtype=torch.int64)), dim=0)
             subgraph_edge_index, subgraph_edge_oid = subgraph(subgraph_nodes, self.edge_index, torch.arange(self.edge_index.shape[1]), relabel_nodes=True)
             subgraph_edge_index, subgraph_edge_oid, subgraph_rv = process_edge_index(subgraph_nodes.shape[0], subgraph_edge_index, subgraph_edge_oid)
 
