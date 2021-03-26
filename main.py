@@ -145,8 +145,8 @@ def run(dataset, homo_ratio, split, model_name, dim_hidden, num_hidden, dropout_
         if model_name == 'MLP':
             num_hops = 0
         else:
-            num_hops = 2
-        num_samples = 5
+            num_hops = 3
+        num_samples = 10
     else:
         raise Exception('unexpected dataset encountered')
 

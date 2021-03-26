@@ -137,7 +137,7 @@ class GCN(nn.Module):
 class SAGE(nn.Module):
 
     def __init__(self, dim_in, dim_out, dim_hidden=128, num_hidden=2, activation=nn.ReLU(), dropout_p=0.0):
-        super(GAT, self).__init__()
+        super(SAGE, self).__init__()
         assert num_hidden >= 2
         self.num_hidden = num_hidden
         self.convs = nn.ModuleList()
