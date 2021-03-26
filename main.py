@@ -134,18 +134,20 @@ def run(dataset, homo_ratio, split, model_name, dim_hidden, num_hidden, dropout_
         max_batch_size = -1
         if model_name == 'MLP':
             num_hops = 0
-        elif model_name != 'GBPN':
-            num_hops = 2
-        else:
+        elif model_name == 'GBPN':
             num_hops = 5
+        else:
+            num_hops = num_hidden
         num_samples = -1
     elif dataset in ['OGBN_arXiv', 'OGBN_Products', 'JPMC_Fraud_Detection', 'Elliptic_Bitcoin']:
         graph_sampler = SubtreeSampler(num_nodes, x, y, edge_index, edge_weight)
         max_batch_size = min(math.ceil(train_mask.sum()/10.0), 512)
         if model_name == 'MLP':
             num_hops = 0
+        elif model_name == 'GBPN':
+            num_hops = 2
         else:
-            num_hops = 3
+            num_hops = num_hidden
         num_samples = 10
     else:
         raise Exception('unexpected dataset encountered')
