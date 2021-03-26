@@ -161,8 +161,8 @@ class SAGE(nn.Module):
     @torch.no_grad()
     def inference(self, sampler, max_batch_size, device, **kwargs):
         x_all_ = sampler.x
-        for i, (conv, skip) in enumerate(zip(self.convs, self.skips)):
-            x_all = torch.zeros(sampler.num_nodes, skip.out_features, dtype=torch.float32)
+        for i, conv in enumerate(self.convs):
+            x_all = torch.zeros(sampler.num_nodes, conv.out_channels, dtype=torch.float32)
             for _, batch_nodes, _, _, _, \
                 _, subgraph_nodes, _, _, _, \
                 subgraph_edge_index, _, _, _ in sampler.get_generator(max_batch_size=max_batch_size, num_hops=1):
