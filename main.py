@@ -227,10 +227,10 @@ def run(dataset, homo_ratio, split, model_name, dim_hidden, num_hidden, dropout_
     max_num_hops = num_hops
     best_val, opt_val, opt_test = 0.0, 0.0, 0.0
     for epoch in range(num_epoches):
-        num_hops = 0 if (model_name == 'GBPN' and epoch < 0.05*num_epoches) else max_num_hops
+        num_hops = 0 if (model_name == 'GBPN' and epoch == 0) else max_num_hops
         train(num_hops=num_hops, num_samples=num_samples)
 
-        if (epoch+1) % math.ceil(0.1*num_epoches) == 0:
+        if (epoch+1) % 5 == 0:
             train_accuracy, val_accuracy, test_accuracy = evaluation(num_hops=num_hops)
             if val_accuracy > opt_val:
                 opt_val = val_accuracy
