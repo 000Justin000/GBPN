@@ -1,6 +1,6 @@
 #include <iostream>
 #include <vector>
-#include <unordered_map>
+#include <map>
 #include <random>
 #include <algorithm>
 #include <assert.h>
@@ -12,9 +12,11 @@ namespace py = pybind11;
 
 struct Graph {
     vector<int> nodes;
-    vector<vector<tuple<int,float>>> nbrs;
+    vector<map<int,int>> nbrs;
 
-    Graph(void) {
+    Graph(int num_nodes=0) {
+        for (int uid=0; uid<num_nodes; uid++)
+            add_node(uid);
     }
 
     Graph(vector<int> input_nodes) {
@@ -22,82 +24,43 @@ struct Graph {
             add_node(u);
     }
 
-    void add_node(int u)
-    {
+    void add_node(int u) {
         nodes.push_back(u);
-        nbrs.push_back(vector<tuple<int,float>>());
+        nbrs.push_back(map<int,int>());
     }
 
-    void add_edge(int uid, int vid, float weight)
-    {
-        nbrs[uid].push_back(make_tuple(vid, weight));
+    void add_edge(int uid, int vid, int eid) {
+        nbrs[uid][vid] = eid;
     }
 
-    void add_edges_from(const vector<tuple<int,int>> &list)
-    {
-        for (auto item: list)
-        {
-            int uid = get<0>(item);
-            int vid = get<1>(item);
-            add_edge(uid, vid, 1.0);
-        }
+    void add_edges_from(const vector<tuple<int,int,int>> &edges) {
+        for (auto edge: edges)
+            add_edge(get<0>(edge), get<1>(edge), get<2>(edge));
     }
 
-    void add_weighted_edges_from(const vector<tuple<int,int,float>> &list)
-    {
-        for (auto item: list)
-        {
-            int uid = get<0>(item);
-            int vid = get<1>(item);
-            float weight = get<2>(item);
-            add_edge(uid, vid, weight);
-        }
-    }
-
-    int number_of_nodes(void)
-    {
+    int number_of_nodes(void) {
         return nodes.size();
     }
 
-    vector<int> get_nodes(void)
-    {
+    vector<int> get_nodes(void) {
         return nodes;
     }
 
-    vector<tuple<int,int>> get_edges(void)
-    {
-        vector<tuple<int,int>> edges;
+    vector<tuple<int,int,int>> get_edges(void) {
+        vector<tuple<int,int,int>> edges;
         for (unsigned uid=0; uid<nodes.size(); uid++)
-            for (auto item: nbrs[uid])
-                edges.push_back(make_tuple(uid, get<0>(item)));
+            for (auto arc: nbrs[uid])
+                edges.push_back(make_tuple(uid, arc.first, arc.second));
         return edges;
-    }
-
-    vector<tuple<int,int,float>> get_weighted_edges(void)
-    {
-        vector<tuple<int,int,float>> weighted_edges;
-        for (unsigned uid=0; uid<nodes.size(); uid++)
-            for (auto item: nbrs[uid])
-                weighted_edges.push_back(make_tuple(uid, get<0>(item), get<1>(item)));
-        return weighted_edges;
     }
 };
 
-Graph empty_graph(unsigned num_nodes)
-{
-    vector<int> input_nodes;
-    for (unsigned uid=0; uid<num_nodes; uid++)
-        input_nodes.push_back(uid);
-    return Graph(input_nodes);
-}
-
-void dfs(Graph& G, Graph& T, int r, int rid, int max_d, int num_samples)
-{
+void dfs(Graph& G, Graph& T, int r, int rid, int max_d, int num_samples) {
     vector<tuple<int,int,int,int>> stack;
     if (max_d > 0)
         stack.push_back(make_tuple(r, rid, 0, -1));
-    while (stack.size() > 0)
-    {
+
+    while (stack.size() > 0) {
         auto item = stack.back();
         stack.pop_back();
         int u = get<0>(item);
@@ -108,42 +71,35 @@ void dfs(Graph& G, Graph& T, int r, int rid, int max_d, int num_samples)
 //      cout << u << " " << uid << " " << d << " " << p << endl;
 //      cout << G.nbrs[u].size() << " ";
 
-        vector<tuple<int,float>> nbrs;
-        for (auto item: G.nbrs[u])
-            if (get<0>(item) != p)
-            {
-                nbrs.push_back(item);
-//              cout << get<0>(item) << " ";
+        vector<int> nbr;
+        for (auto arc: G.nbrs[u])
+            if (arc.first != p) {
+                nbr.push_back(arc.first);
+//              cout << arc.first << " ";
             }
-//      cout << nbrs.size() << endl;
+//      cout << nbr.size() << endl;
 
-        vector<tuple<int,float>> selected_nbrs;
-        if ((num_samples < 0) || (nbrs.size() <= num_samples))
-            selected_nbrs = nbrs;
+        vector<int> selected_nbr;
+        if ((num_samples < 0) || (nbr.size() <= num_samples))
+            selected_nbr = nbr;
         else
-            sample(nbrs.begin(), nbrs.end(), back_inserter(selected_nbrs), num_samples, mt19937{random_device{}()});
-//      cout << "sampling finished" << endl;
+            sample(nbr.begin(), nbr.end(), back_inserter(selected_nbr), num_samples, mt19937{random_device{}()});
 
-        for (auto item: selected_nbrs)
+        for (auto v: selected_nbr)
         {
-            int v = get<0>(item);
-            int weight = get<1>(item);
-
             int vid = T.number_of_nodes();
             T.add_node(v);
-//          cout << uid << " " << vid << " " << T.number_of_nodes() << " ";
-            T.add_edge(uid, vid, weight);
-            T.add_edge(vid, uid, weight);
+            T.add_edge(uid, vid, G.nbrs[u][v]);
+            T.add_edge(vid, uid, G.nbrs[v][u]);
             if (max_d > d+1)
                 stack.push_back(make_tuple(v, vid, d+1, u));
-//          cout << "(" << v << ", " << vid << ")  ";
+//          cout << "(" << u << ", " << v << ", " << uid << ", " << vid << ")  ";
         }
 //      cout << endl;
     }
 }
 
-Graph sample_subtree(Graph& G, vector<int> batch_nodes, int max_d, int num_samples)
-{
+Graph sample_subtree(Graph& G, vector<int> batch_nodes, int max_d, int num_samples) {
     unsigned batch_size = batch_nodes.size();
 
     vector<Graph> TList;
@@ -177,24 +133,22 @@ Graph sample_subtree(Graph& G, vector<int> batch_nodes, int max_d, int num_sampl
     }
     for (unsigned rid=0; rid<batch_size; rid++)
         for (unsigned uid=0; uid<TList[rid].number_of_nodes(); uid++)
-            for (auto item: TList[rid].nbrs[uid])
-                TT.add_edge(l2g[rid][uid], l2g[rid][get<0>(item)], get<1>(item));
+            for (auto arc: TList[rid].nbrs[uid])
+                TT.add_edge(l2g[rid][uid], l2g[rid][arc.first], arc.second);
 
     return TT;    
 }
 
 PYBIND11_MODULE(cnetworkx, m) {
     py::class_<Graph>(m, "Graph")
+        .def(py::init<int>())
         .def(py::init<vector<int>>())
         .def("add_node", &Graph::add_node)
         .def("add_edge", &Graph::add_edge)
         .def("add_edges_from", &Graph::add_edges_from)
-        .def("add_weighted_edges_from", &Graph::add_weighted_edges_from)
         .def("number_of_nodes", &Graph::number_of_nodes)
         .def("get_nodes", &Graph::get_nodes)
-        .def("get_edges", &Graph::get_edges)
-        .def("get_weighted_edges", &Graph::get_weighted_edges);
+        .def("get_edges", &Graph::get_edges);
     
-   m.def("empty_graph", &empty_graph);
    m.def("sample_subtree", &sample_subtree);
 }

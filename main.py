@@ -21,7 +21,7 @@ import matplotlib.pyplot as plt
 def get_scaling(deg0, deg1):
     assert deg0.shape == deg1.shape
     scaling = torch.ones(deg0.shape[0]).to(deg0.device)
-#   scaling[deg1 != 0] = (deg0 / deg1)[deg1 != 0]
+    scaling[deg1 != 0] = (deg0 / deg1)[deg1 != 0]
     return scaling
 
 
@@ -121,14 +121,16 @@ def run(dataset, homo_ratio, split, model_name, dim_hidden, num_hidden, dropout_
     num_nodes, num_features = x.shape
     num_classes = len(torch.unique(y[y >= 0]))
     train_mask, val_mask, test_mask = data.train_mask, data.val_mask, data.test_mask
+    deg = degree(edge_index[1], num_nodes)
     c_weight = None if (c_weight is None) else c_weight.to(device)
 
-    if (model_name == 'GBPN') and weighted_BP and (edge_weight is None):
-        deg = degree(edge_index[1], num_nodes)
+    if edge_weight is None:
+        edge_weight = torch.ones(edge_index.shape[1], dtype=torch.float32)
+    if (model_name == 'GBPN') and weighted_BP:
         edge_weight = (deg[edge_index[0]] * deg[edge_index[1]])**-0.50 * deg.mean()
 
     if dataset in ['Cora', 'CiteSeer', 'PubMed', 'Coauthor_CS', 'Coauthor_Physics', 'County_Facebook', 'Sex', 'Animal2', 'Animal3', 'Squirrel', 'Chameleon']:
-        subgraph_sampler = SubgraphSampler(num_nodes, x, y, edge_index, edge_weight)
+        graph_sampler = SubgraphSampler(num_nodes, x, y, edge_index, edge_weight)
         max_batch_size = num_nodes
         if model_name == 'MLP':
             num_hops = 0
@@ -138,13 +140,13 @@ def run(dataset, homo_ratio, split, model_name, dim_hidden, num_hidden, dropout_
             num_hops = 5
         num_samples = -1
     elif dataset in ['OGBN_arXiv', 'OGBN_Products', 'JPMC_Fraud_Detection', 'Elliptic_Bitcoin']:
-        subgraph_sampler = CSubtreeSampler(num_nodes, x, y, edge_index, edge_weight)
-        max_batch_size = min(math.ceil(train_mask.sum()/10.0), 1024)
+        graph_sampler = SubtreeSampler(num_nodes, x, y, edge_index, edge_weight)
+        max_batch_size = min(math.ceil(train_mask.sum()/10.0), 512)
         if model_name == 'MLP':
             num_hops = 0
         else:
             num_hops = 2
-        num_samples = 10
+        num_samples = 5
     else:
         raise Exception('unexpected dataset encountered')
 
@@ -157,9 +159,16 @@ def run(dataset, homo_ratio, split, model_name, dim_hidden, num_hidden, dropout_
     elif model_name == 'SAGE':
         model = SAGE(num_features, num_classes, dim_hidden=dim_hidden, activation=nn.LeakyReLU(), dropout_p=dropout_p)
     elif model_name == 'GAT':
-        model = GAT(num_features, num_classes, dim_hidden=dim_hidden//8, num_heads=8, activation=nn.ELU(), dropout_p=dropout_p)
+        model = GAT(num_features, num_classes, dim_hidden=dim_hidden//4, num_heads=4, activation=nn.ELU(), dropout_p=dropout_p)
     elif model_name == 'GBPN':
         model = GBPN(num_features, num_classes, dim_hidden=dim_hidden, num_hidden=num_hidden, activation=nn.LeakyReLU(), dropout_p=dropout_p, learn_H=learn_H)
+        if eval_C:
+            sum_conv = SumConv()
+            graphC_mask = train_mask
+            graphR_mask = torch.logical_not(graphC_mask)
+            graphR_edge_index, graphR_edge_weight = subgraph(graphR_mask, edge_index, edge_weight, relabel_nodes=True)
+            graphR_edge_index, graphR_edge_weight, graphR_rv = process_edge_index(int(graphR_mask.sum()), graphR_edge_index, graphR_edge_weight)
+            graphR_sampler = SubtreeSampler(int(graphR_mask.sum()), x[graphR_mask], y[graphR_mask], graphR_edge_index, graphR_edge_weight)
     else:
         raise Exception('unexpected model type')
     model = model.to(device)
@@ -170,58 +179,48 @@ def run(dataset, homo_ratio, split, model_name, dim_hidden, num_hidden, dropout_
         model.train()
         total_loss = 0.0
         log_b_list, gth_y_list = [], []
-        for batch_size, batch_nodes, batch_x, batch_y, batch_deg0, \
-            subgraph_size, subgraph_nodes, subgraph_x, subgraph_y, subgraph_deg0, \
-            subgraph_edge_index, subgraph_edge_weight, subgraph_rv in subgraph_sampler.get_generator(train_mask, max_batch_size, num_hops, num_samples, device):
+        for batch_size, batch_nodes, _, batch_y, _, \
+            subgraph_size, subgraph_nodes, subgraph_x, _, subgraph_deg, \
+            subgraph_edge_index, subgraph_edge_weight, subgraph_rv, _ in graph_sampler.get_generator(train_mask, True, max_batch_size, num_hops, num_samples, device):
+            agg_scaling = get_scaling(deg[subgraph_nodes].to(device), degree(subgraph_edge_index[1], subgraph_size))
             optimizer.zero_grad()
-            subgraph_log_b = model(subgraph_x, subgraph_edge_index, edge_weight=subgraph_edge_weight, agg_scaling=get_scaling(subgraph_deg0, degree(subgraph_edge_index[1], subgraph_size)), rv=subgraph_rv, K=num_hops)
+            subgraph_log_b = model(subgraph_x, subgraph_edge_index, edge_weight=subgraph_edge_weight, agg_scaling=agg_scaling, rv=subgraph_rv, K=num_hops)
             loss = F.nll_loss(subgraph_log_b[:batch_size], batch_y, weight=c_weight)
             loss.backward()
             optimizer.step()
             total_loss += float(loss)*batch_size
-            log_b_list.append(subgraph_log_b[:batch_size].detach())
-            gth_y_list.append(batch_y)
+            log_b_list.append(subgraph_log_b[:batch_size].detach().cpu())
+            gth_y_list.append(batch_y.cpu())
         mean_loss = total_loss / int(train_mask.sum())
         accuracy = accuracy_fun(torch.cat(log_b_list, dim=0), torch.cat(gth_y_list, dim=0))
         if verbose:
             print('step {:5d}, train loss: {:5.3f}, train accuracy: {:5.3f}'.format(epoch, mean_loss, accuracy), end='    ')
         return accuracy
 
-    def evaluation(mask, num_hops=2, num_samples=5, partition='train'):
+    @torch.no_grad()
+    def evaluation(num_hops=2):
         model.eval()
-        log_b_list, gth_y_list = [], []
-        for batch_size, batch_nodes, batch_x, batch_y, batch_deg0, \
-            subgraph_size, subgraph_nodes, subgraph_x, subgraph_y, subgraph_deg0, \
-            subgraph_edge_index, subgraph_edge_weight, subgraph_rv in subgraph_sampler.get_generator(mask, max_batch_size, num_hops, num_samples, device):
-            subgraph_log_b = model(subgraph_x, subgraph_edge_index, edge_weight=subgraph_edge_weight, agg_scaling=get_scaling(subgraph_deg0, degree(subgraph_edge_index[1], subgraph_size)), rv=subgraph_rv, K=num_hops)
-            log_b_list.append(subgraph_log_b[:batch_size].detach())
-            gth_y_list.append(batch_y)
-        accuracy = accuracy_fun(torch.cat(log_b_list, dim=0), torch.cat(gth_y_list, dim=0))
+        log_b = model.inference(graph_sampler, max_batch_size, device, K=num_hops)
+        train_accuracy = accuracy_fun(log_b[train_mask], y[train_mask])
+        val_accuracy = accuracy_fun(log_b[val_mask], y[val_mask])
+        test_accuracy = accuracy_fun(log_b[test_mask], y[test_mask])
         if verbose:
-            print('{:>5s} inductive accuracy: {:5.3f}'.format(partition, accuracy), end='    ')
+            print('inductive accuracy: ({:5.3f}, {:5.3f}, {:5.3f})'.format(train_accuracy, val_accuracy, test_accuracy), end='    ')
+
         if type(model) == GBPN and eval_C:
-            sum_conv = SumConv()
-            log_b_list, gth_y_list = [], []
-            for batch_size, batch_nodes, batch_x, batch_y, batch_deg0, \
-                subgraph_size, subgraph_nodes, subgraph_x, subgraph_y, subgraph_deg0, \
-                subgraph_edge_index, subgraph_edge_weight, subgraph_rv in subgraph_sampler.get_generator(mask, max_batch_size, num_hops, num_samples, device):
-                subgraphC_mask = train_mask[subgraph_nodes]
-                subgraphR_mask = torch.logical_not(subgraphC_mask)
-                log_c = torch.zeros(subgraph_size, num_classes).to(device)
-                log_c[subgraphC_mask] = model.bp_conv.get_logH()[subgraph_y[subgraphC_mask]]
-                subgraphR_phi = sum_conv(log_c, subgraph_edge_index, subgraph_edge_weight)[subgraphR_mask]
-                subgraphR_edge_index, subgraphR_edge_weight = subgraph(subgraphR_mask, subgraph_edge_index, subgraph_edge_weight, relabel_nodes=True)
-                subgraphR_edge_index, subgraphR_edge_weight, subgraphR_rv = process_edge_index(subgraphR_mask.sum().item(), subgraphR_edge_index, subgraphR_edge_weight)
-                subgraph_log_b = torch.zeros(subgraph_size, num_classes).to(device)
-                subgraph_log_b[subgraphC_mask] = F.one_hot(subgraph_y[subgraphC_mask], num_classes).float().to(device)
-                subgraph_log_b[subgraphR_mask] = model(subgraph_x[subgraphR_mask], subgraphR_edge_index, subgraphR_edge_weight,
-                                                       agg_scaling=get_scaling(subgraph_deg0, degree(subgraph_edge_index[1], subgraph_size))[subgraphR_mask], rv=subgraphR_rv, phi=subgraphR_phi, K=num_hops)
-                log_b_list.append(subgraph_log_b[:batch_size].detach())
-                gth_y_list.append(batch_y)
-            accuracy = accuracy_fun(torch.cat(log_b_list, dim=0), torch.cat(gth_y_list, dim=0))
+            log_c = torch.zeros(num_nodes, num_classes)
+            log_c[graphC_mask] = model.bp_conv.get_logH().cpu()[y[graphC_mask]]
+            graphR_phi = sum_conv(log_c, edge_index, edge_weight)[graphR_mask]
+            log_b = torch.zeros(num_nodes, num_classes)
+            log_b[graphC_mask] = F.one_hot(y[graphC_mask], num_classes).float()
+            log_b[graphR_mask] = model.inference(graphR_sampler, max_batch_size, device, phi=graphR_phi, K=num_hops)
+            train_accuracy = accuracy_fun(log_b[train_mask], y[train_mask])
+            val_accuracy = accuracy_fun(log_b[val_mask], y[val_mask])
+            test_accuracy = accuracy_fun(log_b[test_mask], y[test_mask])
             if verbose:
-                print('{:>5s} transductive accuracy: {:5.3f}'.format(partition, accuracy), end='    ')
-        return accuracy
+                print('transductive accuracy: ({:5.3f}, {:5.3f}, {:5.3f})'.format(train_accuracy, val_accuracy, test_accuracy))
+
+        return train_accuracy, val_accuracy, test_accuracy
 
     max_num_hops = num_hops
     best_val, opt_val, opt_test = 0.0, 0.0, 0.0
@@ -229,11 +228,11 @@ def run(dataset, homo_ratio, split, model_name, dim_hidden, num_hidden, dropout_
         num_hops = 0 if (model_name == 'GBPN' and epoch < 0.05*num_epoches) else max_num_hops
         train(num_hops=num_hops, num_samples=num_samples)
 
-        with torch.no_grad():
-            val = evaluation(val_mask, num_hops=num_hops, num_samples=num_samples, partition='val')
-            if val > opt_val:
-                opt_val = val
-                opt_test = evaluation(test_mask, num_hops=num_hops, num_samples=num_samples, partition='test')
+        if (epoch+1) % math.ceil(0.1*num_epoches) == 0:
+            train_accuracy, val_accuracy, test_accuracy = evaluation(num_hops=num_hops)
+            if val_accuracy > opt_val:
+                opt_val = val_accuracy
+                opt_test = test_accuracy
         print(flush=True)
 
         if type(model) == GBPN and learn_H and verbose:

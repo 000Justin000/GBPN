@@ -33,8 +33,8 @@ num_epoches = 200
 learn_H = True
 eval_C = False
 
-data = load_county_facebook(split=split)
-# data = load_citation('Cora', split=split)
+# data = load_county_facebook(split=split)
+data = load_citation('Cora', split=split)
 # data = load_citation('PubMed', split=split)
 
 edge_index, edge_weight, rv = data.edge_index, data.edge_weight, data.rv

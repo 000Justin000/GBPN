@@ -110,22 +110,49 @@ class SAGE(nn.Module):
 
 class GAT(nn.Module):
 
-    def __init__(self, dim_in, dim_out, dim_hidden=128, num_heads=8, activation=nn.ELU(), dropout_p=0.0):
+    def __init__(self, dim_in, dim_out, dim_hidden=128, num_hidden=2, num_heads=8, activation=nn.ELU(), dropout_p=0.0):
         super(GAT, self).__init__()
-        self.conv1 = GATConv(dim_in, dim_hidden, heads=num_heads, dropout=dropout_p)
-        self.conv2 = GATConv(dim_hidden*num_heads, dim_out, heads=num_heads, concat=False, dropout=dropout_p)
-        self.skip1 = nn.Linear(dim_in, dim_hidden*num_heads)
-        self.skip2 = nn.Linear(dim_hidden*num_heads, dim_out)
+        assert num_hidden >= 2
+        self.num_hidden = num_hidden
+        self.convs = nn.ModuleList()
+        self.skips = nn.ModuleList()
+        self.convs.append(GATConv(dim_in, dim_hidden, heads=num_heads))
+        self.skips.append(nn.Linear(dim_in, dim_hidden*num_heads))
+        for _ in range(num_hidden-2):
+            self.convs.append(GATConv(dim_hidden*num_heads, dim_hidden, heads=num_heads))
+            self.skips.append(nn.Linear(dim_hidden*num_heads, dim_hidden*num_heads))
+        self.convs.append(GATConv(dim_hidden*num_heads, dim_out, heads=num_heads, concat=False))
+        self.skips.append(nn.Linear(dim_hidden*num_heads, dim_out))
         self.activation = activation
         self.dropout = nn.Dropout(dropout_p)
 
     def forward(self, x, edge_index, **kwargs):
-        x = self.dropout(x)
-        x = self.conv1(x, edge_index)+self.skip1(x)
-        x = self.activation(x)
-        x = self.dropout(x)
-        x = self.conv2(x, edge_index)+self.skip2(x)
-        return F.log_softmax(x, dim=-1)
+        for i, (conv, skip) in enumerate(zip(self.convs, self.skips)):
+            x = conv(x, edge_index) + skip(x)
+            if i < self.num_hidden-1:
+                x = self.activation(x)
+                x = self.dropout(x)
+            else:
+                x = F.log_softmax(x, dim=-1)
+        return x
+
+    @torch.no_grad()
+    def inference(self, sampler, max_batch_size, device, **kwargs):
+        x_all_ = sampler.x
+        for i, (conv, skip) in enumerate(zip(self.convs, self.skips)):
+            x_all = torch.zeros(sampler.num_nodes, skip.out_features, dtype=torch.float32)
+            for _, batch_nodes, _, _, _, \
+                _, subgraph_nodes, _, _, _, \
+                subgraph_edge_index, _, _, _ in sampler.get_generator(max_batch_size=max_batch_size, num_hops=1):
+                x = x_all_[subgraph_nodes].to(device)
+                x = conv(x, subgraph_edge_index.to(device)) + skip(x)
+                if i < self.num_hidden-1:
+                    x = self.activation(x)
+                else:
+                    x = F.log_softmax(x, dim=-1)
+                x_all[batch_nodes] = x[:batch_nodes.shape[0]].cpu()
+            x_all_ = x_all
+        return x_all
 
 
 class SumConv(MessagePassing):
@@ -163,13 +190,17 @@ class BPConv(MessagePassing):
     def message(self, x_j, edge_weight, info):
         # x_j has shape [E, n_channels]
         logC = edge_weight.unsqueeze(-1).unsqueeze(-1) * self.get_logH().unsqueeze(0)
-        log_msg_raw = torch.logsumexp((x_j - info['log_msg_'][info['rv']]).unsqueeze(-1) + logC, dim=-2)
+        if info['log_msg_'] is not None:
+            x_j = x_j - info['log_msg_'][info['rv']]
+        log_msg_raw = torch.logsumexp(x_j.unsqueeze(-1) + logC, dim=-2)
         log_msg = log_normalize(log_msg_raw)
         info['log_msg_'] = log_msg
         return log_msg
 
     def update(self, agg_log_msg, info):
-        log_b_raw = info['log_b0'] + agg_log_msg + (info['agg_scaling']-1.0).unsqueeze(-1) * agg_log_msg.detach()
+        log_b_raw = info['log_b0'] + agg_log_msg
+        if info['agg_scaling'] is not None:
+            log_b_raw = log_b_raw + (info['agg_scaling']-1.0).unsqueeze(-1) * agg_log_msg.detach()
         log_b = log_normalize(log_b_raw)
         return log_b
 
@@ -181,24 +212,40 @@ class GBPN(nn.Module):
         self.transform = GMLP(dim_in, dim_out, dim_hidden=dim_hidden, num_hidden=num_hidden, activation=activation, dropout_p=dropout_p)
         self.bp_conv = BPConv(dim_out, learn_H)
 
-    def forward(self, x, edge_index, edge_weight=None, agg_scaling=None, rv=None, phi=None, K=5):
+    def forward(self, x, edge_index, edge_weight, rv, agg_scaling=None, K=5):
         log_b0 = self.transform(x, edge_index)
-        if edge_weight is None:
-            edge_weight = torch.ones(edge_index.shape[1]).to(x.device)
-        if agg_scaling is None:
-            agg_scaling = torch.ones(x.shape[0]).to(x.device)
-        if rv is None:
-            edge_index, edge_weight, rv = process_edge_index(x.shape[0], edge_index, edge_weight)
-        if phi is not None:
-            log_b0 = log_b0 + phi * agg_scaling.unsqueeze(-1)
-        num_classes = log_b0.shape[-1]
-        info = {'log_b0': log_b0,
-                'log_msg_': (-np.log(num_classes)) * torch.ones(edge_index.shape[1], num_classes).to(x.device),
-                'rv': rv,
-                'agg_scaling': agg_scaling}
+        info = {'log_b0': log_b0, 'log_msg_': None, 'rv': rv, 'agg_scaling': agg_scaling}
         log_b = log_b0
         for _ in range(K):
             log_b = self.bp_conv(log_b, edge_index, edge_weight, info)
+        return log_b
+
+    @torch.no_grad()
+    def inference(self, sampler, max_batch_size, device, phi=None, K=5):
+        log_b0_list = []
+        for batch_size, _, _, _, _, \
+            _, _, subgraph_x, _, _, \
+            subgraph_edge_index, _, _, _ in sampler.get_generator(max_batch_size=max_batch_size, num_hops=0):
+            log_b0_list.append(self.transform(subgraph_x.to(device), subgraph_edge_index.to(device))[:batch_size].cpu())
+        log_b0 = torch.cat(log_b0_list, dim=0)
+
+        if phi is not None:
+            log_b0 = log_b0 + phi
+
+        log_b_ = log_b0
+        log_msg_ = torch.zeros(sampler.edge_index.shape[1], log_b0.shape[1], dtype=torch.float32)
+        for _ in range(K):
+            log_b = torch.zeros_like(log_b_)
+            log_msg = torch.zeros_like(log_msg_)
+            for batch_size, batch_nodes, _, _, _, \
+                subgraph_size, subgraph_nodes, _, _, _, \
+                subgraph_edge_index, subgraph_edge_weight, subgraph_rv, subgraph_edge_oid in sampler.get_generator(max_batch_size=max_batch_size, num_hops=1):
+                info = {'log_b0': log_b0[subgraph_nodes].to(device), 'log_msg_': log_msg_[subgraph_edge_oid].to(device), 'rv': subgraph_rv.to(device), 'agg_scaling': None}
+                log_b[batch_nodes] = self.bp_conv(log_b_[subgraph_nodes].to(device), subgraph_edge_index.to(device), subgraph_edge_weight.to(device), info)[:batch_size].cpu()
+                subgraph_edge_mask = subgraph_edge_index[1] < batch_size
+                log_msg[subgraph_edge_oid[subgraph_edge_mask]] = info['log_msg_'][subgraph_edge_mask].cpu()
+            log_b_ = log_b
+            log_msg_ = log_msg
         return log_b
 
 
@@ -210,11 +257,12 @@ class SubgraphSampler:
         self.x = x
         self.y = y
         self.edge_index = edge_index
-        self.edge_weight = None if (edge_weight is None) else edge_weight
+        self.edge_weight = edge_weight
         self.adj_t = SparseTensor(row=edge_index[0], col=edge_index[1], sparse_sizes=(num_nodes, num_nodes)).t()
         self.deg = degree(edge_index[1], num_nodes)
 
     def get_generator(self, mask, batch_size, num_hops, num_samples, device):
+        assert num_samples == -1
         idx = mask.nonzero(as_tuple=True)[0]
         n_batch = math.ceil(idx.shape[0] / batch_size)
 
@@ -223,13 +271,8 @@ class SubgraphSampler:
                 batch_size = batch_nodes.shape[0]
 
                 # create subgraph from neighborhood
-                if num_samples < 0:
-                    subgraph_nodes, _, _, _ = k_hop_subgraph(batch_nodes, num_hops, self.edge_index, num_nodes=self.num_nodes)
-                    subgraph_nodes = torch.cat((batch_nodes, torch.tensor(list(set(subgraph_nodes.tolist()) - set(batch_nodes.tolist())), dtype=torch.int64)), dim=0)
-                else:
-                    subgraph_nodes = batch_nodes
-                    for _ in range(num_hops):
-                        _, subgraph_nodes = self.adj_t.sample_adj(subgraph_nodes, num_samples, replace=False)
+                subgraph_nodes, _, _, _ = k_hop_subgraph(batch_nodes, num_hops, self.edge_index, num_nodes=self.num_nodes)
+                subgraph_nodes = torch.cat((batch_nodes, torch.tensor(list(set(subgraph_nodes.tolist()) - set(batch_nodes.tolist())), dtype=torch.int64)), dim=0)
 
                 subgraph_size = subgraph_nodes.shape[0]
                 assert torch.all(subgraph_nodes[:batch_size] == batch_nodes)
@@ -246,113 +289,43 @@ class SubgraphSampler:
 
 class SubtreeSampler:
 
-    def __init__(self, num_nodes, x, y, edge_index, edge_weight=None):
+    def __init__(self, num_nodes, x, y, edge_index, edge_weight):
         self.device = edge_index.device
         self.num_nodes = num_nodes
         self.x = x
         self.y = y
         self.edge_index = edge_index
         self.edge_weight = edge_weight
-        self.G = nx.empty_graph(num_nodes)
-        if edge_weight is None:
-            self.G.add_edges_from(list(zip(edge_index[0].tolist(), edge_index[1].tolist())))
-        else:
-            self.G.add_weighted_edges_from(list(zip(edge_index[0].tolist(), edge_index[1].tolist(), edge_weight.tolist())))
+        self.G = nx.Graph(num_nodes)
+        self.G.add_edges_from(list(zip(edge_index[0].tolist(), edge_index[1].tolist(), range(edge_index.shape[1]))))
         self.deg = degree(edge_index[1], num_nodes)
 
-    def get_generator(self, mask, batch_size, num_hops, num_samples, device):
-        idx = mask.nonzero(as_tuple=True)[0]
-        n_batch = math.ceil(idx.shape[0] / batch_size)
+    def get_generator(self, mask=None, shuffle=False, max_batch_size=1, num_hops=0, num_samples=-1, device='cpu'):
+        idx = torch.arange(self.num_nodes) if (mask is None) else mask.nonzero(as_tuple=True)[0]
+        n_batch = math.ceil(idx.shape[0] / max_batch_size)
+        if shuffle:
+            idx = idx[torch.randperm(idx.shape[0])]
 
         def generator():
-            for batch_nodes in idx[torch.randperm(idx.shape[0])].chunk(n_batch):
-                batch_size = batch_nodes.shape[0]
-
-                T = nx.empty_graph(batch_size)
-                subgraph_nodes = batch_nodes.tolist()
-
-                def dfs(r, rid):
-                    stack = [(r, rid, 0, -1)] if num_hops > 0 else []
-                    while len(stack) > 0:
-                        u, uid, d, p = stack.pop()
-                        nbrs = set(self.G.neighbors(u)) - set([p])
-                        selected_nbrs = (nbrs if ((num_samples < 0) or (len(nbrs) <= num_samples)) else random.sample(nbrs, num_samples))
-                        for v in selected_nbrs:
-                            subgraph_nodes.append(v)
-                            vid = T.number_of_nodes()
-                            T.add_node(vid)
-                            if self.edge_weight is None:
-                                T.add_edge(uid, vid)
-                            else:
-                                T.add_edge(uid, vid, weight=self.G[u][v]['weight'])
-                            if num_hops > d+1:
-                                stack.append((v, vid, d+1, u))
-
-                for (rid, r) in enumerate(batch_nodes.tolist()):
-                    dfs(r, rid)
-
-                subgraph_nodes = torch.tensor(subgraph_nodes, dtype=torch.int64)
-                subgraph_size = subgraph_nodes.shape[0]
-                if self.edge_weight is None:
-                    T_edge_index = torch.tensor(list(T.edges), dtype=torch.int64).t() if len(T.edges) > 0 else torch.zeros(2, 0, dtype=torch.int64)
-                    T_edge_weight = None
-                else:
-                    T_ew = nx.get_edge_attributes(T, 'weight')
-                    T_edge_index = torch.tensor(list(T_ew.keys()), dtype=torch.int64).t() if len(T_ew.keys()) > 0 else torch.zeros(2, 0, dtype=torch.int64)
-                    T_edge_weight = torch.tensor(list(T_ew.values()))
-                subgraph_edge_index, subgraph_edge_weight = T_edge_index, T_edge_weight
-                subgraph_edge_index, subgraph_edge_weight, subgraph_rv = process_edge_index(subgraph_nodes.shape[0], subgraph_edge_index, subgraph_edge_weight)
-
-                yield batch_size, batch_nodes.to(device), self.x[batch_nodes].to(device), self.y[batch_nodes].to(device), self.deg[batch_nodes].to(device), \
-                      subgraph_size, subgraph_nodes.to(device), self.x[subgraph_nodes].to(device), self.y[subgraph_nodes].to(device), self.deg[subgraph_nodes].to(device), \
-                      subgraph_edge_index.to(device), None if (subgraph_edge_weight is None) else subgraph_edge_weight.to(device), subgraph_rv.to(device)
-
-        return generator()
-
-
-class CSubtreeSampler:
-
-    def __init__(self, num_nodes, x, y, edge_index, edge_weight=None):
-        self.device = edge_index.device
-        self.num_nodes = num_nodes
-        self.x = x
-        self.y = y
-        self.edge_index = edge_index
-        self.edge_weight = edge_weight
-        self.G = nx.empty_graph(num_nodes)
-        if edge_weight is None:
-            self.G.add_edges_from(list(zip(edge_index[0].tolist(), edge_index[1].tolist())))
-        else:
-            self.G.add_weighted_edges_from(list(zip(edge_index[0].tolist(), edge_index[1].tolist(), edge_weight.tolist())))
-        self.deg = degree(edge_index[1], num_nodes)
-
-    def get_generator(self, mask, batch_size, num_hops, num_samples, device):
-        idx = mask.nonzero(as_tuple=True)[0]
-        n_batch = math.ceil(idx.shape[0] / batch_size)
-
-        def generator():
-            for batch_nodes in idx[torch.randperm(idx.shape[0])].chunk(n_batch):
+            for batch_nodes in idx.chunk(n_batch):
                 batch_size = batch_nodes.shape[0]
 
                 T = nx.sample_subtree(self.G, batch_nodes.tolist(), num_hops, num_samples)
                 subgraph_nodes = torch.tensor(T.get_nodes(), dtype=torch.int64)
                 subgraph_size = subgraph_nodes.shape[0]
-                assert subgraph_size == len(T.get_edges())//2 + batch_size
-                # assert len(set(map(lambda x: (int(subgraph_nodes[x[0]]), int(subgraph_nodes[x[1]])), T.get_edges())) - set(self.G.get_edges())) == 0
-                if self.edge_weight is None:
-                    T_edge_index = torch.tensor(T.get_edges(), dtype=torch.int64).t() if len(T.get_edges()) > 0 else torch.zeros(2, 0, dtype=torch.int64)
-                    T_edge_weight = None
-                else:
-                    T_ew = T.get_weighted_edges()
-                    T_edge_index = torch.tensor(list(map(lambda tp: tp[0:2], T_ew)), dtype=torch.int64).t() if len(T_ew) > 0 else torch.zeros(2, 0, dtype=torch.int64)
-                    T_edge_weight = torch.tensor(list(map(lambda tp: tp[2], T_ew)), dtype=torch.float32) if len(T_ew) > 0 else torch.zeros(0, dtype=torch.int64)
+                T_edges = torch.tensor(T.get_edges(), dtype=torch.int64)
+                subgraph_edge_index = T_edges[:,0:2].t() if T_edges.shape[0] > 0 else torch.zeros(2, 0, dtype=torch.int64)
+                subgraph_edge_oid = T_edges[:,2] if T_edges.shape[0] > 0 else torch.zeros(0, dtype=torch.int64)
 
-                subgraph_edge_index, subgraph_edge_weight = T_edge_index, T_edge_weight
-                subgraph_edge_index, subgraph_edge_weight, subgraph_rv = process_edge_index(subgraph_nodes.shape[0], subgraph_edge_index, subgraph_edge_weight)
+                assert subgraph_size == subgraph_edge_index.shape[1]//2 + batch_size
+                assert torch.all(subgraph_nodes[subgraph_edge_index.reshape(-1)] == self.edge_index[:,subgraph_edge_oid].reshape(-1))
+
+                subgraph_edge_index, subgraph_edge_oid, subgraph_rv = process_edge_index(subgraph_nodes.shape[0], subgraph_edge_index, subgraph_edge_oid)
+                subgraph_edge_weight = self.edge_weight[subgraph_edge_oid]
 
                 yield batch_size, batch_nodes.to(device), self.x[batch_nodes].to(device), self.y[batch_nodes].to(device), self.deg[batch_nodes].to(device), \
                       subgraph_size, subgraph_nodes.to(device), self.x[subgraph_nodes].to(device), self.y[subgraph_nodes].to(device), self.deg[subgraph_nodes].to(device), \
-                      subgraph_edge_index.to(device), None if (subgraph_edge_weight is None) else subgraph_edge_weight.to(device), subgraph_rv.to(device)
+                      subgraph_edge_index.to(device), subgraph_edge_weight.to(device), subgraph_rv.to(device), subgraph_edge_oid.to(device)
 
         return generator()
 
