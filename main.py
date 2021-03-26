@@ -130,7 +130,7 @@ def run(dataset, homo_ratio, split, model_name, dim_hidden, num_hidden, dropout_
         edge_weight = (deg[edge_index[0]] * deg[edge_index[1]])**-0.50 * deg.mean()
 
     if dataset in ['Cora', 'CiteSeer', 'PubMed', 'Coauthor_CS', 'Coauthor_Physics', 'County_Facebook', 'Sex', 'Animal2', 'Animal3', 'Squirrel', 'Chameleon']:
-        graph_sampler = SubgraphSampler(num_nodes, x, y, edge_index, edge_weight)
+        graph_sampler = FullgraphSampler(num_nodes, x, y, edge_index, edge_weight)
         max_batch_size = num_nodes
         if model_name == 'MLP':
             num_hops = 0
@@ -159,7 +159,7 @@ def run(dataset, homo_ratio, split, model_name, dim_hidden, num_hidden, dropout_
     elif model_name == 'SAGE':
         model = SAGE(num_features, num_classes, dim_hidden=dim_hidden, activation=nn.LeakyReLU(), dropout_p=dropout_p)
     elif model_name == 'GAT':
-        model = GAT(num_features, num_classes, dim_hidden=dim_hidden//4, num_heads=4, activation=nn.ELU(), dropout_p=dropout_p)
+        model = GAT(num_features, num_classes, dim_hidden=dim_hidden//8, num_heads=8, activation=nn.ELU(), dropout_p=dropout_p)
     elif model_name == 'GBPN':
         model = GBPN(num_features, num_classes, dim_hidden=dim_hidden, num_hidden=num_hidden, activation=nn.LeakyReLU(), dropout_p=dropout_p, learn_H=learn_H)
         if eval_C:

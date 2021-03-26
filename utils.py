@@ -42,7 +42,6 @@ class MLP(nn.Module):
     def forward(self, x):
         for m in self.linears[:-1]:
             x = self.activation(m(self.dropout(x)))
-
         return self.linears[-1](self.dropout(x))
 
 
@@ -55,62 +54,133 @@ class GMLP(torch.nn.Module):
     def forward(self, x, edge_index, **kwargs):
         return F.log_softmax(self.mlp(x), dim=-1)
 
+    @torch.no_grad()
+    def inference(self, sampler, max_batch_size, device, **kwargs):
+        x_all = torch.zeros(sampler.num_nodes, self.mlp.linears[-1].out_features, dtype=torch.float32)
+        for batch_size, batch_nodes, _, _, _, \
+            _, _, subgraph_x, _, _, \
+            subgraph_edge_index, _, _, _ in sampler.get_generator(max_batch_size=max_batch_size, num_hops=0):
+            x_all[batch_nodes] = self.forward(subgraph_x, subgraph_edge_index)[:batch_size]
+        return x_all
+
 
 class SGC(torch.nn.Module):
 
-    def __init__(self, dim_in, dim_out, dim_hidden=128, dropout_p=0.0):
+    def __init__(self, dim_in, dim_out, dim_hidden=128, num_hidden=2, dropout_p=0.0):
         super(SGC, self).__init__()
-        self.conv1 = GCNConv(dim_in, dim_hidden)
-        self.conv2 = GCNConv(dim_hidden, dim_out)
+        assert num_hidden >= 2
+        self.num_hidden = num_hidden
+        self.convs = nn.ModuleList()
+        self.convs.append(GCNConv(dim_in, dim_hidden))
+        for _ in range(num_hidden-2):
+            self.convs.append(GCNConv(dim_hidden, dim_hidden))
+        self.convs.append(GCNConv(dim_hidden, dim_out))
         self.dropout = nn.Dropout(dropout_p)
 
     def forward(self, x, edge_index, **kwargs):
-        x = self.dropout(x)
-        x = self.conv1(x, edge_index)
-        x = self.dropout(x)
-        x = self.conv2(x, edge_index)
-        return F.log_softmax(x, dim=-1)
+        for i, conv in enumerate(self.convs):
+            x = conv(x, edge_index)
+            if i < self.num_hidden-1:
+                x = self.dropout(x)
+            else:
+                x = F.log_softmax(x, dim=-1)
+        return x
+
+    @torch.no_grad()
+    def inference(self, sampler, max_batch_size, device, **kwargs):
+        assert type(sampler) == FullgraphSampler
+        assert max_batch_size == -1
+        x_all = torch.zeros(sampler.num_nodes, self.convs[-1].out_channels, dtype=torch.float32)
+        for batch_size, batch_nodes, _, _, _, \
+            _, _, subgraph_x, _, _, \
+            subgraph_edge_index, _, _, _ in sampler.get_generator(max_batch_size=max_batch_size, num_hops=self.num_hidden):
+            x_all[batch_nodes] = self.forward(subgraph_x, subgraph_edge_index)[:batch_size]
+        return x_all
 
 
 class GCN(nn.Module):
 
-    def __init__(self, dim_in, dim_out, dim_hidden=128, activation=nn.ReLU(), dropout_p=0.0):
+    def __init__(self, dim_in, dim_out, dim_hidden=128, num_hidden=2, activation=nn.ReLU(), dropout_p=0.0):
         super(GCN, self).__init__()
-        self.conv1 = GCNConv(dim_in, dim_hidden)
-        self.conv2 = GCNConv(dim_hidden, dim_out)
+        assert num_hidden >= 2
+        self.num_hidden = num_hidden
+        self.convs = nn.ModuleList()
+        self.convs.append(GCNConv(dim_in, dim_hidden))
+        for _ in range(num_hidden-2):
+            self.convs.append(GCNConv(dim_hidden, dim_hidden))
+        self.convs.append(GCNConv(dim_hidden, dim_out))
         self.activation = activation
         self.dropout = nn.Dropout(dropout_p)
 
     def forward(self, x, edge_index, **kwargs):
-        x = self.dropout(x)
-        x = self.conv1(x, edge_index)
-        x = self.activation(x)
-        x = self.dropout(x)
-        x = self.conv2(x, edge_index)
-        return F.log_softmax(x, dim=-1)
+        for i, conv in enumerate(self.convs):
+            x = conv(x, edge_index)
+            if i < self.num_hidden-1:
+                x = self.activation(x)
+                x = self.dropout(x)
+            else:
+                x = F.log_softmax(x, dim=-1)
+        return x
+
+    @torch.no_grad()
+    def inference(self, sampler, max_batch_size, device, **kwargs):
+        assert type(sampler) == FullgraphSampler
+        assert max_batch_size == -1
+        x_all = torch.zeros(sampler.num_nodes, self.convs[-1].out_channels, dtype=torch.float32)
+        for batch_size, batch_nodes, _, _, _, \
+            _, _, subgraph_x, _, _, \
+            subgraph_edge_index, _, _, _ in sampler.get_generator(max_batch_size=max_batch_size, num_hops=self.num_hidden):
+            x_all[batch_nodes] = self.forward(subgraph_x, subgraph_edge_index)[:batch_size]
+        return x_all
 
 
 class SAGE(nn.Module):
 
-    def __init__(self, dim_in, dim_out, dim_hidden=128, activation=nn.ReLU(), dropout_p=0.0):
-        super(SAGE, self).__init__()
-        self.conv1 = SAGEConv(dim_in, dim_hidden)
-        self.conv2 = SAGEConv(dim_hidden, dim_out)
+    def __init__(self, dim_in, dim_out, dim_hidden=128, num_hidden=2, activation=nn.ReLU(), dropout_p=0.0):
+        super(GAT, self).__init__()
+        assert num_hidden >= 2
+        self.num_hidden = num_hidden
+        self.convs = nn.ModuleList()
+        self.convs.append(SAGEConv(dim_in, dim_hidden))
+        for _ in range(num_hidden-2):
+            self.convs.append(SAGEConv(dim_hidden, dim_hidden))
+        self.convs.append(SAGEConv(dim_hidden, dim_out))
         self.activation = activation
         self.dropout = nn.Dropout(dropout_p)
 
     def forward(self, x, edge_index, **kwargs):
-        x = self.dropout(x)
-        x = self.conv1(x, edge_index)
-        x = self.activation(x)
-        x = self.dropout(x)
-        x = self.conv2(x, edge_index)
-        return F.log_softmax(x, dim=-1)
+        for i, conv in enumerate(self.convs):
+            x = conv(x, edge_index)
+            if i < self.num_hidden-1:
+                x = self.activation(x)
+                x = self.dropout(x)
+            else:
+                x = F.log_softmax(x, dim=-1)
+        return x
+
+    @torch.no_grad()
+    def inference(self, sampler, max_batch_size, device, **kwargs):
+        x_all_ = sampler.x
+        for i, (conv, skip) in enumerate(zip(self.convs, self.skips)):
+            x_all = torch.zeros(sampler.num_nodes, skip.out_features, dtype=torch.float32)
+            for _, batch_nodes, _, _, _, \
+                _, subgraph_nodes, _, _, _, \
+                subgraph_edge_index, _, _, _ in sampler.get_generator(max_batch_size=max_batch_size, num_hops=1):
+                x = x_all_[subgraph_nodes].to(device)
+                x = conv(x, subgraph_edge_index.to(device))
+                if i < self.num_hidden-1:
+                    x = self.activation(x)
+                    x = self.dropout(x)
+                else:
+                    x = F.log_softmax(x, dim=-1)
+                x_all[batch_nodes] = x[:batch_nodes.shape[0]].cpu()
+            x_all_ = x_all
+        return x_all
 
 
 class GAT(nn.Module):
 
-    def __init__(self, dim_in, dim_out, dim_hidden=128, num_hidden=2, num_heads=8, activation=nn.ELU(), dropout_p=0.0):
+    def __init__(self, dim_in, dim_out, dim_hidden=128, num_hidden=2, num_heads=1, activation=nn.ELU(), dropout_p=0.0):
         super(GAT, self).__init__()
         assert num_hidden >= 2
         self.num_hidden = num_hidden
@@ -148,6 +218,7 @@ class GAT(nn.Module):
                 x = conv(x, subgraph_edge_index.to(device)) + skip(x)
                 if i < self.num_hidden-1:
                     x = self.activation(x)
+                    x = self.dropout(x)
                 else:
                     x = F.log_softmax(x, dim=-1)
                 x_all[batch_nodes] = x[:batch_nodes.shape[0]].cpu()
@@ -249,40 +320,37 @@ class GBPN(nn.Module):
         return log_b
 
 
-class SubgraphSampler:
+class FullgraphSampler:
 
-    def __init__(self, num_nodes, x, y, edge_index, edge_weight=None):
+    def __init__(self, num_nodes, x, y, edge_index, edge_weight):
         self.device = edge_index.device
         self.num_nodes = num_nodes
         self.x = x
         self.y = y
         self.edge_index = edge_index
         self.edge_weight = edge_weight
-        self.adj_t = SparseTensor(row=edge_index[0], col=edge_index[1], sparse_sizes=(num_nodes, num_nodes)).t()
         self.deg = degree(edge_index[1], num_nodes)
 
-    def get_generator(self, mask, batch_size, num_hops, num_samples, device):
+    def get_generator(self, mask=None, shuffle=False, max_batch_size=-1, num_hops=0, num_samples=-1, device='cpu'):
+        assert shuffle == False
+        assert max_batch_size == -1
         assert num_samples == -1
-        idx = mask.nonzero(as_tuple=True)[0]
-        n_batch = math.ceil(idx.shape[0] / batch_size)
 
         def generator():
-            for batch_nodes in idx[torch.randperm(idx.shape[0])].chunk(n_batch):
-                batch_size = batch_nodes.shape[0]
+            batch_nodes = torch.arange(self.num_nodes, dtype=torch.int64) if (mask is None) else mask.nonzero(as_tuple=True)[0]
 
-                # create subgraph from neighborhood
-                subgraph_nodes, _, _, _ = k_hop_subgraph(batch_nodes, num_hops, self.edge_index, num_nodes=self.num_nodes)
-                subgraph_nodes = torch.cat((batch_nodes, torch.tensor(list(set(subgraph_nodes.tolist()) - set(batch_nodes.tolist())), dtype=torch.int64)), dim=0)
+            subgraph_nodes = torch.cat(batch_nodes, torch.tensor(list(set(range(self.num_nodes)) - set(batch_nodes.tolist())), dtype=torch.int64), dim=0)
+            subgraph_edge_index, subgraph_edge_oid = subgraph(subgraph_nodes, self.edge_index, torch.arange(self.edge_index.shape[1]), relabel_nodes=True)
+            subgraph_edge_index, subgraph_edge_oid, subgraph_rv = process_edge_index(subgraph_nodes.shape[0], subgraph_edge_index, subgraph_edge_oid)
 
-                subgraph_size = subgraph_nodes.shape[0]
-                assert torch.all(subgraph_nodes[:batch_size] == batch_nodes)
+            subgraph_edge_weight = self.edge_weight[subgraph_edge_oid]
 
-                subgraph_edge_index, subgraph_edge_weight = subgraph(subgraph_nodes, self.edge_index, self.edge_weight, relabel_nodes=True)
-                subgraph_edge_index, subgraph_edge_weight, subgraph_rv = process_edge_index(subgraph_nodes.shape[0], subgraph_edge_index, subgraph_edge_weight)
+            batch_size = batch_nodes.shape[0]
+            subgraph_size = subgraph_nodes.shape[0]
 
-                yield batch_size, batch_nodes.to(device), self.x[batch_nodes].to(device), self.y[batch_nodes].to(device), self.deg[batch_nodes].to(device), \
-                      subgraph_size, subgraph_nodes.to(device), self.x[subgraph_nodes].to(device), self.y[subgraph_nodes].to(device), self.deg[subgraph_nodes].to(device), \
-                      subgraph_edge_index.to(device), None if (subgraph_edge_weight is None) else subgraph_edge_weight.to(device), subgraph_rv.to(device)
+            yield batch_size, batch_nodes.to(device), self.x[batch_nodes].to(device), self.y[batch_nodes].to(device), self.deg[batch_nodes].to(device), \
+                  subgraph_size, subgraph_nodes.to(device), self.x[subgraph_nodes].to(device), self.y[subgraph_nodes].to(device), self.deg[subgraph_nodes].to(device), \
+                  subgraph_edge_index.to(device), subgraph_edge_weight.to(device), subgraph_rv.to(device), subgraph_edge_oid.to(device)
 
         return generator()
 
@@ -300,11 +368,14 @@ class SubtreeSampler:
         self.G.add_edges_from(list(zip(edge_index[0].tolist(), edge_index[1].tolist(), range(edge_index.shape[1]))))
         self.deg = degree(edge_index[1], num_nodes)
 
-    def get_generator(self, mask=None, shuffle=False, max_batch_size=1, num_hops=0, num_samples=-1, device='cpu'):
-        idx = torch.arange(self.num_nodes) if (mask is None) else mask.nonzero(as_tuple=True)[0]
-        n_batch = math.ceil(idx.shape[0] / max_batch_size)
+    def get_generator(self, mask=None, shuffle=False, max_batch_size=-1, num_hops=0, num_samples=-1, device='cpu'):
+        idx = torch.arange(self.num_nodes, dtype=torch.int64) if (mask is None) else mask.nonzero(as_tuple=True)[0]
         if shuffle:
             idx = idx[torch.randperm(idx.shape[0])]
+        if max_batch_size == -1:
+            max_batch_size = self.num_nodes
+
+        n_batch = math.ceil(idx.shape[0] / max_batch_size)
 
         def generator():
             for batch_nodes in idx.chunk(n_batch):
