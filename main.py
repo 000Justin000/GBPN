@@ -148,7 +148,7 @@ def run(dataset, homo_ratio, split, model_name, dim_hidden, num_hidden, dropout_
             num_hops = 2
         else:
             num_hops = num_hidden
-        num_samples = 10
+        num_samples = 5
     else:
         raise Exception('unexpected dataset encountered')
 
