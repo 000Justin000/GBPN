@@ -255,13 +255,13 @@ class BPConv(MessagePassing):
     def forward(self, x, edge_index, edge_weight, info):
         # x has shape [N, n_channels]
         # edge_index has shape [2, E]
-        # info has 4 fields: 'log_b0', 'log_msg_', 'rv', 'agg_scaling'
+        # info has 4 fields: 'log_b0', 'log_msg_', 'edge_rv', 'agg_scaling'
         return self.propagate(edge_index, edge_weight=edge_weight, x=x, info=info)
 
     def message(self, x_j, edge_weight, info):
         # x_j has shape [E, n_channels]
         if info['log_msg_'] is not None:
-            x_j = x_j - info['log_msg_'][info['rv']]
+            x_j = x_j - info['log_msg_'][info['edge_rv']]
         logC = self.get_logH().unsqueeze(0) * edge_weight.unsqueeze(-1).unsqueeze(-1)
         log_msg = log_normalize(torch.logsumexp(x_j.unsqueeze(-1) + logC, dim=-2))
         info['log_msg_'] = log_msg
@@ -282,9 +282,9 @@ class GBPN(nn.Module):
         self.transform = GMLP(dim_in, dim_out, dim_hidden=dim_hidden, num_hidden=num_hidden, activation=activation, dropout_p=dropout_p)
         self.bp_conv = BPConv(dim_out, learn_H)
 
-    def forward(self, x, edge_index, edge_weight, rv, agg_scaling=None, K=5):
+    def forward(self, x, edge_index, edge_weight, edge_rv, agg_scaling=None, K=5):
         log_b0 = self.transform(x, edge_index)
-        info = {'log_b0': log_b0, 'log_msg_': None, 'rv': rv, 'agg_scaling': agg_scaling}
+        info = {'log_b0': log_b0, 'log_msg_': None, 'edge_rv': edge_rv, 'agg_scaling': agg_scaling}
         log_b = log_b0
         for _ in range(K):
             log_b = self.bp_conv(log_b, edge_index, edge_weight, info)
@@ -309,25 +309,26 @@ class GBPN(nn.Module):
             log_msg = torch.zeros_like(log_msg_)
             for batch_size, batch_nodes, _, _, _, \
                 subgraph_size, subgraph_nodes, _, _, _, \
-                subgraph_edge_index, subgraph_edge_weight, subgraph_rv, subgraph_edge_oid in sampler.get_generator(max_batch_size=max_batch_size, num_hops=1):
-                info = {'log_b0': log_b0[subgraph_nodes].to(device), 'log_msg_': log_msg_[subgraph_edge_oid].to(device), 'rv': subgraph_rv.to(device), 'agg_scaling': None}
+                subgraph_edge_index, subgraph_edge_weight, subgraph_edge_rv, subgraph_edge_oid in sampler.get_generator(max_batch_size=max_batch_size, num_hops=1):
+                info = {'log_b0': log_b0[subgraph_nodes].to(device), 'log_msg_': log_msg_[subgraph_edge_oid].to(device), 'edge_rv': subgraph_edge_rv.to(device), 'agg_scaling': None}
                 log_b[batch_nodes] = self.bp_conv(log_b_[subgraph_nodes].to(device), subgraph_edge_index.to(device), subgraph_edge_weight.to(device), info)[:batch_size].cpu()
                 subgraph_edge_mask = subgraph_edge_index[1] < batch_size
                 log_msg[subgraph_edge_oid[subgraph_edge_mask]] = info['log_msg_'][subgraph_edge_mask].cpu()
             log_b_ = log_b
             log_msg_ = log_msg
-        return log_b
+        return log_b_
 
 
 class FullgraphSampler:
 
-    def __init__(self, num_nodes, x, y, edge_index, edge_weight):
+    def __init__(self, num_nodes, x, y, edge_index, edge_weight, edge_rv):
         self.device = edge_index.device
         self.num_nodes = num_nodes
         self.x = x
         self.y = y
         self.edge_index = edge_index
         self.edge_weight = edge_weight
+        self.edge_rv = edge_rv
         self.deg = degree(edge_index[1], num_nodes)
 
     def get_generator(self, mask=None, shuffle=False, max_batch_size=-1, num_hops=0, num_samples=-1, device='cpu'):
@@ -340,7 +341,7 @@ class FullgraphSampler:
 
             subgraph_nodes = torch.cat((batch_nodes, torch.tensor(list(set(range(self.num_nodes)) - set(batch_nodes.tolist())), dtype=torch.int64)), dim=0)
             subgraph_edge_index, subgraph_edge_oid = subgraph(subgraph_nodes, self.edge_index, torch.arange(self.edge_index.shape[1]), relabel_nodes=True, num_nodes=self.num_nodes)
-            subgraph_edge_index, subgraph_edge_oid, subgraph_rv = process_edge_index(subgraph_nodes.shape[0], subgraph_edge_index, subgraph_edge_oid)
+            subgraph_edge_index, subgraph_edge_oid, subgraph_edge_rv = process_edge_index(subgraph_nodes.shape[0], subgraph_edge_index, subgraph_edge_oid)
 
             subgraph_edge_weight = self.edge_weight[subgraph_edge_oid]
 
@@ -349,22 +350,23 @@ class FullgraphSampler:
 
             yield batch_size, batch_nodes.to(device), self.x[batch_nodes].to(device), self.y[batch_nodes].to(device), self.deg[batch_nodes].to(device), \
                   subgraph_size, subgraph_nodes.to(device), self.x[subgraph_nodes].to(device), self.y[subgraph_nodes].to(device), self.deg[subgraph_nodes].to(device), \
-                  subgraph_edge_index.to(device), subgraph_edge_weight.to(device), subgraph_rv.to(device), subgraph_edge_oid.to(device)
+                  subgraph_edge_index.to(device), subgraph_edge_weight.to(device), subgraph_edge_rv.to(device), subgraph_edge_oid.to(device)
 
         return generator()
 
 
 class SubtreeSampler:
 
-    def __init__(self, num_nodes, x, y, edge_index, edge_weight):
+    def __init__(self, num_nodes, x, y, edge_index, edge_weight, edge_rv):
         self.device = edge_index.device
         self.num_nodes = num_nodes
         self.x = x
         self.y = y
         self.edge_index = edge_index
         self.edge_weight = edge_weight
+        self.edge_rv = edge_rv
         self.G = nx.Graph(num_nodes)
-        self.G.add_edges_from(list(zip(edge_index[0].tolist(), edge_index[1].tolist(), range(edge_index.shape[1]))))
+        self.G.add_edges_from(torch.cat((edge_index, torch.arange(edge_index.shape[1]).reshape(1,-1)), dim=0).transpose(0,1).numpy())
         self.deg = degree(edge_index[1], num_nodes)
 
     def get_generator(self, mask=None, shuffle=False, max_batch_size=-1, num_hops=0, num_samples=-1, device='cpu'):
@@ -377,6 +379,7 @@ class SubtreeSampler:
         n_batch = math.ceil(idx.shape[0] / max_batch_size)
 
         def generator():
+            edge_oid2nid = torch.zeros(self.edge_index.shape[1], dtype=torch.int64)
             for batch_nodes in idx.chunk(n_batch):
                 batch_size = batch_nodes.shape[0]
 
@@ -390,12 +393,12 @@ class SubtreeSampler:
                 assert subgraph_size == subgraph_edge_index.shape[1]//2 + batch_size
                 assert torch.all(subgraph_nodes[subgraph_edge_index.reshape(-1)] == self.edge_index[:,subgraph_edge_oid].reshape(-1))
 
-                subgraph_edge_index, subgraph_edge_oid, subgraph_rv = process_edge_index(subgraph_nodes.shape[0], subgraph_edge_index, subgraph_edge_oid)
+                subgraph_edge_index, subgraph_edge_oid, subgraph_edge_rv = process_edge_index(subgraph_nodes.shape[0], subgraph_edge_index, subgraph_edge_oid)
                 subgraph_edge_weight = self.edge_weight[subgraph_edge_oid]
 
                 yield batch_size, batch_nodes.to(device), self.x[batch_nodes].to(device), self.y[batch_nodes].to(device), self.deg[batch_nodes].to(device), \
                       subgraph_size, subgraph_nodes.to(device), self.x[subgraph_nodes].to(device), self.y[subgraph_nodes].to(device), self.deg[subgraph_nodes].to(device), \
-                      subgraph_edge_index.to(device), subgraph_edge_weight.to(device), subgraph_rv.to(device), subgraph_edge_oid.to(device)
+                      subgraph_edge_index.to(device), subgraph_edge_weight.to(device), subgraph_edge_rv.to(device), subgraph_edge_oid.to(device)
 
         return generator()
 
@@ -482,10 +485,10 @@ def process_edge_index(num_nodes, edge_index, edge_attr=None):
     if (edge_index.shape[1] > 0) and (not is_undirected(edge_index)):
         edge_index, edge_attr = get_undirected(num_nodes, edge_index, edge_attr)
     edge_index, od = sort_edge(num_nodes, edge_index)
-    _, rv = sort_edge(num_nodes, edge_index.flip(dims=[0]))
-    assert torch.all(edge_index[:, rv] == edge_index.flip(dims=[0]))
+    _, edge_rv = sort_edge(num_nodes, edge_index.flip(dims=[0]))
+    assert torch.all(edge_index[:, edge_rv] == edge_index.flip(dims=[0]))
 
-    return edge_index, (None if edge_attr is None else edge_attr[...,od]), rv
+    return edge_index, (None if edge_attr is None else edge_attr[...,od]), edge_rv
 
 
 def load_citation(name='Cora', transform=None, split=None):
@@ -501,7 +504,7 @@ def load_citation(name='Cora', transform=None, split=None):
         data.val_mask = torch.zeros(num_nodes, dtype=bool).scatter_(0, val_idx, True)
         data.test_mask = torch.zeros(num_nodes, dtype=bool).scatter_(0, test_idx, True)
 
-    data.edge_index, data.edge_weight, data.rv = process_edge_index(num_nodes, data.edge_index, data.edge_weight if hasattr(data, 'edge_weight') else None)
+    data.edge_index, data.edge_weight, data.edge_rv = process_edge_index(num_nodes, data.edge_index, data.edge_weight if hasattr(data, 'edge_weight') else None)
 
     return data if (transform is None) else transform(data)
 
@@ -518,7 +521,7 @@ def load_coauthor(name='CS', transform=None, split=[0.3, 0.2, 0.5]):
     data.val_mask = torch.zeros(num_nodes, dtype=bool).scatter_(0, val_idx, True)
     data.test_mask = torch.zeros(num_nodes, dtype=bool).scatter_(0, test_idx, True)
 
-    data.edge_index, data.edge_weight, data.rv = process_edge_index(num_nodes, data.edge_index, data.edge_weight if hasattr(data, 'edge_weight') else None)
+    data.edge_index, data.edge_weight, data.edge_rv = process_edge_index(num_nodes, data.edge_index, data.edge_weight if hasattr(data, 'edge_weight') else None)
 
     return data if (transform is None) else transform(data)
 
@@ -540,7 +543,7 @@ def load_wikipedia(name='Squirrel', transform=None, split=0):
         data.val_mask = torch.zeros(num_nodes, dtype=bool).scatter_(0, val_idx, True)
         data.test_mask = torch.zeros(num_nodes, dtype=bool).scatter_(0, test_idx, True)
 
-    data.edge_index, data.edge_weight, data.rv = process_edge_index(num_nodes, data.edge_index, data.edge_weight if hasattr(data, 'edge_weight') else None)
+    data.edge_index, data.edge_weight, data.edge_rv = process_edge_index(num_nodes, data.edge_index, data.edge_weight if hasattr(data, 'edge_weight') else None)
 
     data.y = data.y.long()
 
@@ -567,7 +570,7 @@ def load_county_facebook(transform=None, split=[0.3, 0.2, 0.5], normalize=True):
     data.val_mask = torch.zeros(num_nodes, dtype=bool).scatter_(0, val_idx, True)
     data.test_mask = torch.zeros(num_nodes, dtype=bool).scatter_(0, test_idx, True)
 
-    data.edge_index, data.edge_weight, data.rv = process_edge_index(num_nodes, data.edge_index, data.edge_weight if hasattr(data, 'edge_weight') else None)
+    data.edge_index, data.edge_weight, data.edge_rv = process_edge_index(num_nodes, data.edge_index, data.edge_weight if hasattr(data, 'edge_weight') else None)
 
     return data if (transform is None) else transform(data)
 
@@ -590,7 +593,7 @@ def load_sexual_interaction(transform=None, split=[0.3, 0.2, 0.5]):
     data.val_mask = torch.zeros(num_nodes, dtype=bool).scatter_(0, val_idx, True)
     data.test_mask = torch.zeros(num_nodes, dtype=bool).scatter_(0, test_idx, True)
 
-    data.edge_index, data.edge_weight, data.rv = process_edge_index(num_nodes, data.edge_index, data.edge_weight if hasattr(data, 'edge_weight') else None)
+    data.edge_index, data.edge_weight, data.edge_rv = process_edge_index(num_nodes, data.edge_index, data.edge_weight if hasattr(data, 'edge_weight') else None)
 
     return data if (transform is None) else transform(data)
 
@@ -615,7 +618,7 @@ def load_animal2(homo_ratio=0.5, transform=None, split=[0.3, 0.2, 0.5]):
     data.val_mask = torch.zeros(num_nodes, dtype=bool).scatter_(0, val_idx, True)
     data.test_mask = torch.zeros(num_nodes, dtype=bool).scatter_(0, test_idx, True)
 
-    data.edge_index, data.edge_weight, data.rv = process_edge_index(num_nodes, data.edge_index, None)
+    data.edge_index, data.edge_weight, data.edge_rv = process_edge_index(num_nodes, data.edge_index, None)
 
     return data if (transform is None) else transform(data)
 
@@ -644,7 +647,7 @@ def load_animal3(homo_ratio=0.5, transform=None, split=[0.3, 0.2, 0.5]):
     data.val_mask = torch.zeros(num_nodes, dtype=bool).scatter_(0, val_idx, True)
     data.test_mask = torch.zeros(num_nodes, dtype=bool).scatter_(0, test_idx, True)
 
-    data.edge_index, data.edge_weight, data.rv = process_edge_index(num_nodes, data.edge_index, data.edge_weight if hasattr(data, 'edge_weight') else None)
+    data.edge_index, data.edge_weight, data.edge_rv = process_edge_index(num_nodes, data.edge_index, data.edge_weight if hasattr(data, 'edge_weight') else None)
 
     return data if (transform is None) else transform(data)
 
@@ -667,7 +670,7 @@ def load_ogbn(name='products', transform=None, split=None):
     data.val_mask = torch.zeros(num_nodes, dtype=bool).scatter_(0, val_idx, True)
     data.test_mask = torch.zeros(num_nodes, dtype=bool).scatter_(0, test_idx, True)
 
-    data.edge_index, data.edge_weight, data.rv = process_edge_index(num_nodes, data.edge_index, data.edge_weight if hasattr(data, 'edge_weight') else None)
+    data.edge_index, data.edge_weight, data.edge_rv = process_edge_index(num_nodes, data.edge_index, data.edge_weight if hasattr(data, 'edge_weight') else None)
 
     return data if (transform is None) else transform(data)
 
@@ -788,7 +791,7 @@ def preprocess_gnn_jpmc_fraud(feature, label, info, transform=None, split=[0.3, 
     data.val_mask = torch.zeros(num_nodes, dtype=bool).scatter(0, torch.tensor(val_idx), True)
     data.test_mask = torch.zeros(num_nodes, dtype=bool).scatter(0, torch.tensor(test_idx), True)
 
-    data.edge_index, data.edge_weight, data.rv = process_edge_index(num_nodes, data.edge_index, None)
+    data.edge_index, data.edge_weight, data.edge_rv = process_edge_index(num_nodes, data.edge_index, None)
 
     return data if (transform is None) else transform(data)
 
@@ -817,7 +820,7 @@ def load_elliptic_bitcoin(transform=None, split=None):
     data.val_mask = torch.zeros(num_nodes, dtype=torch.bool).scatter_(0, val_idx, True) & (labels != -1)
     data.test_mask = torch.zeros(num_nodes, dtype=torch.bool).scatter_(0, test_idx, True) & (labels != -1)
 
-    data.edge_index, data.edge_weight, data.rv = process_edge_index(num_nodes, data.edge_index, None)
+    data.edge_index, data.edge_weight, data.edge_rv = process_edge_index(num_nodes, data.edge_index, None)
 
     return data if (transform is None) else transform(data)
 

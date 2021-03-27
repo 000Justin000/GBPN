@@ -10,9 +10,13 @@ using namespace std;
 #include <pybind11/stl.h>
 namespace py = pybind11;
 
+bool comp_first(const pair<int,int> &x, const pair<int,int> &y) {
+    return x.first < y.first;
+}
+
 struct Graph {
     vector<int> nodes;
-    vector<map<int,int>> nbrs;
+    vector<vector<pair<int,int>>> nbrs;
 
     Graph(int num_nodes=0) {
         for (int uid=0; uid<num_nodes; uid++)
@@ -26,16 +30,17 @@ struct Graph {
 
     void add_node(int u) {
         nodes.push_back(u);
-        nbrs.push_back(map<int,int>());
+        nbrs.push_back(vector<pair<int,int>>());
     }
 
     void add_edge(int uid, int vid, int eid) {
-        nbrs[uid][vid] = eid;
+        nbrs[uid].push_back(make_pair(vid,eid));
     }
 
     void add_edges_from(const vector<tuple<int,int,int>> &edges) {
         for (auto edge: edges)
             add_edge(get<0>(edge), get<1>(edge), get<2>(edge));
+        sort_nbrs();
     }
 
     int number_of_nodes(void) {
@@ -52,6 +57,11 @@ struct Graph {
             for (auto arc: nbrs[uid])
                 edges.push_back(make_tuple(uid, arc.first, arc.second));
         return edges;
+    }
+
+    void sort_nbrs(void) {
+        for (auto nbr: nbrs)
+            sort(nbr.begin(), nbr.end(), comp_first);
     }
 };
 
@@ -71,26 +81,31 @@ void dfs(Graph& G, Graph& T, int r, int rid, int max_d, int num_samples) {
 //      cout << u << " " << uid << " " << d << " " << p << endl;
 //      cout << G.nbrs[u].size() << " ";
 
-        vector<int> nbr;
+        vector<pair<int,int>> nbr;
         for (auto arc: G.nbrs[u])
             if (arc.first != p) {
-                nbr.push_back(arc.first);
+                nbr.push_back(arc);
 //              cout << arc.first << " ";
             }
 //      cout << nbr.size() << endl;
 
-        vector<int> selected_nbr;
+        vector<pair<int,int>> selected_nbr;
         if ((num_samples < 0) || (nbr.size() <= num_samples))
             selected_nbr = nbr;
         else
             sample(nbr.begin(), nbr.end(), back_inserter(selected_nbr), num_samples, mt19937{random_device{}()});
 
-        for (auto v: selected_nbr)
+        for (auto arc: selected_nbr)
         {
+            int v = arc.first;
             int vid = T.number_of_nodes();
             T.add_node(v);
-            T.add_edge(uid, vid, G.nbrs[u][v]);
-            T.add_edge(vid, uid, G.nbrs[v][u]);
+
+            int uvid = arc.second;
+            int vuid = lower_bound(G.nbrs[v].begin(), G.nbrs[v].end(), make_pair(u,0), comp_first)->second;
+
+            T.add_edge(uid, vid, uvid);
+            T.add_edge(vid, uid, vuid);
             if (max_d > d+1)
                 stack.push_back(make_tuple(v, vid, d+1, u));
 //          cout << "(" << u << ", " << v << ", " << uid << ", " << vid << ")  ";
@@ -143,8 +158,6 @@ PYBIND11_MODULE(cnetworkx, m) {
     py::class_<Graph>(m, "Graph")
         .def(py::init<int>())
         .def(py::init<vector<int>>())
-        .def("add_node", &Graph::add_node)
-        .def("add_edge", &Graph::add_edge)
         .def("add_edges_from", &Graph::add_edges_from)
         .def("number_of_nodes", &Graph::number_of_nodes)
         .def("get_nodes", &Graph::get_nodes)

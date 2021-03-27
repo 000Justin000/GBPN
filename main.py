@@ -116,7 +116,7 @@ def run(dataset, homo_ratio, split, model_name, dim_hidden, num_hidden, dropout_
     else:
         raise Exception('unexpected dataset')
 
-    edge_index, edge_weight, rv = data.edge_index, data.edge_weight, data.rv
+    edge_index, edge_weight, edge_rv = data.edge_index, data.edge_weight, data.edge_rv
     x, y = data.x, data.y
     num_nodes, num_features = x.shape
     num_classes = len(torch.unique(y[y >= 0]))
@@ -130,7 +130,7 @@ def run(dataset, homo_ratio, split, model_name, dim_hidden, num_hidden, dropout_
         edge_weight = ((deg[edge_index[0]] * deg[edge_index[1]])**-0.5 * deg.mean())
 
     if dataset in ['Cora', 'CiteSeer', 'PubMed', 'Coauthor_CS', 'Coauthor_Physics', 'County_Facebook', 'Sex', 'Animal2', 'Animal3', 'Squirrel', 'Chameleon']:
-        graph_sampler = FullgraphSampler(num_nodes, x, y, edge_index, edge_weight)
+        graph_sampler = FullgraphSampler(num_nodes, x, y, edge_index, edge_weight, edge_rv)
         max_batch_size = -1
         if model_name == 'MLP':
             num_hops = 0
@@ -140,7 +140,7 @@ def run(dataset, homo_ratio, split, model_name, dim_hidden, num_hidden, dropout_
             num_hops = num_hidden
         num_samples = -1
     elif dataset in ['OGBN_arXiv', 'OGBN_Products', 'JPMC_Fraud_Detection', 'Elliptic_Bitcoin']:
-        graph_sampler = SubtreeSampler(num_nodes, x, y, edge_index, edge_weight)
+        graph_sampler = SubtreeSampler(num_nodes, x, y, edge_index, edge_weight, edge_rv)
         max_batch_size = min(math.ceil(train_mask.sum()/10.0), 1024)
         if model_name == 'MLP':
             num_hops = 0
@@ -169,8 +169,8 @@ def run(dataset, homo_ratio, split, model_name, dim_hidden, num_hidden, dropout_
             graphC_mask = train_mask
             graphR_mask = torch.logical_not(graphC_mask)
             graphR_edge_index, graphR_edge_weight = subgraph(graphR_mask, edge_index, edge_weight, relabel_nodes=True, num_nodes=num_nodes)
-            graphR_edge_index, graphR_edge_weight, graphR_rv = process_edge_index(int(graphR_mask.sum()), graphR_edge_index, graphR_edge_weight)
-            graphR_sampler = type(graph_sampler)(int(graphR_mask.sum()), x[graphR_mask], y[graphR_mask], graphR_edge_index, graphR_edge_weight)
+            graphR_edge_index, graphR_edge_weight, graphR_edge_rv = process_edge_index(int(graphR_mask.sum()), graphR_edge_index, graphR_edge_weight)
+            graphR_sampler = type(graph_sampler)(int(graphR_mask.sum()), x[graphR_mask], y[graphR_mask], graphR_edge_index, graphR_edge_weight, graphR_edge_rv)
     else:
         raise Exception('unexpected model type')
     model = model.to(device)
@@ -182,10 +182,10 @@ def run(dataset, homo_ratio, split, model_name, dim_hidden, num_hidden, dropout_
         log_b_list, gth_y_list = [], []
         for batch_size, batch_nodes, _, batch_y, _, \
             subgraph_size, subgraph_nodes, subgraph_x, _, subgraph_deg, \
-            subgraph_edge_index, subgraph_edge_weight, subgraph_rv, _ in graph_sampler.get_generator(train_mask, True, max_batch_size, num_hops, num_samples, device):
+            subgraph_edge_index, subgraph_edge_weight, subgraph_edge_rv, _ in graph_sampler.get_generator(train_mask, True, max_batch_size, num_hops, num_samples, device):
             agg_scaling = get_scaling(deg[subgraph_nodes].to(device), degree(subgraph_edge_index[1], subgraph_size))
             optimizer.zero_grad()
-            subgraph_log_b = model(subgraph_x, subgraph_edge_index, edge_weight=subgraph_edge_weight, agg_scaling=agg_scaling, rv=subgraph_rv, K=num_hops)
+            subgraph_log_b = model(subgraph_x, subgraph_edge_index, edge_weight=subgraph_edge_weight, agg_scaling=agg_scaling, edge_rv=subgraph_edge_rv, K=num_hops)
             loss = F.nll_loss(subgraph_log_b[:batch_size], batch_y, weight=c_weight)
             loss.backward()
             optimizer.step()
@@ -201,7 +201,7 @@ def run(dataset, homo_ratio, split, model_name, dim_hidden, num_hidden, dropout_
     @torch.no_grad()
     def evaluation(num_hops=2):
         model.eval()
-        log_b = model.inference(graph_sampler, max_batch_size, device, K=num_hops)
+        log_b = model.inference(graph_sampler, max_batch_size//4, device, K=num_hops)
         train_accuracy = accuracy_fun(log_b[train_mask], y[train_mask])
         val_accuracy = accuracy_fun(log_b[val_mask], y[val_mask])
         test_accuracy = accuracy_fun(log_b[test_mask], y[test_mask])
@@ -214,7 +214,7 @@ def run(dataset, homo_ratio, split, model_name, dim_hidden, num_hidden, dropout_
             graphR_phi = sum_conv(log_c, edge_index, edge_weight)[graphR_mask]
             log_b = torch.zeros(num_nodes, num_classes)
             log_b[graphC_mask] = F.one_hot(y[graphC_mask], num_classes).float()
-            log_b[graphR_mask] = model.inference(graphR_sampler, max_batch_size, device, phi=graphR_phi, K=num_hops)
+            log_b[graphR_mask] = model.inference(graphR_sampler, max_batch_size//4, device, phi=graphR_phi, K=num_hops)
             train_accuracy = accuracy_fun(log_b[train_mask], y[train_mask])
             val_accuracy = accuracy_fun(log_b[val_mask], y[val_mask])
             test_accuracy = accuracy_fun(log_b[test_mask], y[test_mask])
@@ -225,11 +225,11 @@ def run(dataset, homo_ratio, split, model_name, dim_hidden, num_hidden, dropout_
 
     max_num_hops = num_hops
     best_val, opt_val, opt_test = 0.0, 0.0, 0.0
-    for epoch in range(num_epoches):
-        num_hops = 0 if (model_name == 'GBPN' and epoch == 0) else max_num_hops
+    for epoch in range(1,num_epoches+1):
+        num_hops = 0 if (model_name == 'GBPN' and epoch == 1) else max_num_hops
         train(num_hops=num_hops, num_samples=num_samples)
 
-        if (epoch+1) % int(num_epoches*0.10) == 0:
+        if epoch % max(int(num_epoches*0.10), 5) == 0:
             train_accuracy, val_accuracy, test_accuracy = evaluation(num_hops=num_hops)
             if val_accuracy > opt_val:
                 opt_val = val_accuracy
