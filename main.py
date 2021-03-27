@@ -127,7 +127,7 @@ def run(dataset, homo_ratio, split, model_name, dim_hidden, num_hidden, dropout_
     if edge_weight is None:
         edge_weight = torch.ones(edge_index.shape[1], dtype=torch.float32)
     if (model_name == 'GBPN') and weighted_BP:
-        edge_weight = (deg[edge_index[0]] * deg[edge_index[1]])**-0.50 * deg.mean()
+        edge_weight = ((deg[edge_index[0]] * deg[edge_index[1]])**-0.5 * deg.mean())
 
     if dataset in ['Cora', 'CiteSeer', 'PubMed', 'Coauthor_CS', 'Coauthor_Physics', 'County_Facebook', 'Sex', 'Animal2', 'Animal3', 'Squirrel', 'Chameleon']:
         graph_sampler = FullgraphSampler(num_nodes, x, y, edge_index, edge_weight)
@@ -168,9 +168,9 @@ def run(dataset, homo_ratio, split, model_name, dim_hidden, num_hidden, dropout_
             sum_conv = SumConv()
             graphC_mask = train_mask
             graphR_mask = torch.logical_not(graphC_mask)
-            graphR_edge_index, graphR_edge_weight = subgraph(graphR_mask, edge_index, edge_weight, relabel_nodes=True)
+            graphR_edge_index, graphR_edge_weight = subgraph(graphR_mask, edge_index, edge_weight, relabel_nodes=True, num_nodes=num_nodes)
             graphR_edge_index, graphR_edge_weight, graphR_rv = process_edge_index(int(graphR_mask.sum()), graphR_edge_index, graphR_edge_weight)
-            graphR_sampler = SubtreeSampler(int(graphR_mask.sum()), x[graphR_mask], y[graphR_mask], graphR_edge_index, graphR_edge_weight)
+            graphR_sampler = type(graph_sampler)(int(graphR_mask.sum()), x[graphR_mask], y[graphR_mask], graphR_edge_index, graphR_edge_weight)
     else:
         raise Exception('unexpected model type')
     model = model.to(device)
@@ -196,7 +196,7 @@ def run(dataset, homo_ratio, split, model_name, dim_hidden, num_hidden, dropout_
         mean_loss = total_loss / int(train_mask.sum())
         accuracy = accuracy_fun(torch.cat(log_b_list, dim=0), torch.cat(gth_y_list, dim=0))
         if verbose:
-            print('step {:5d}, train loss: {:5.3f}, train accuracy: {:5.3f}'.format(epoch, mean_loss, accuracy), end='    ')
+            print('step {:5d}, train loss: {:5.3f}, train accuracy: {:5.3f}'.format(epoch, mean_loss, accuracy), end='    ', flush=True)
         return accuracy
 
     @torch.no_grad()
@@ -207,7 +207,7 @@ def run(dataset, homo_ratio, split, model_name, dim_hidden, num_hidden, dropout_
         val_accuracy = accuracy_fun(log_b[val_mask], y[val_mask])
         test_accuracy = accuracy_fun(log_b[test_mask], y[test_mask])
         if verbose:
-            print('inductive accuracy: ({:5.3f}, {:5.3f}, {:5.3f})'.format(train_accuracy, val_accuracy, test_accuracy), end='    ')
+            print('inductive accuracy: ({:5.3f}, {:5.3f}, {:5.3f})'.format(train_accuracy, val_accuracy, test_accuracy), end='    ', flush=True)
 
         if type(model) == GBPN and eval_C:
             log_c = torch.zeros(num_nodes, num_classes)
@@ -220,7 +220,7 @@ def run(dataset, homo_ratio, split, model_name, dim_hidden, num_hidden, dropout_
             val_accuracy = accuracy_fun(log_b[val_mask], y[val_mask])
             test_accuracy = accuracy_fun(log_b[test_mask], y[test_mask])
             if verbose:
-                print('transductive accuracy: ({:5.3f}, {:5.3f}, {:5.3f})'.format(train_accuracy, val_accuracy, test_accuracy))
+                print('transductive accuracy: ({:5.3f}, {:5.3f}, {:5.3f})'.format(train_accuracy, val_accuracy, test_accuracy), end='', flush=True)
 
         return train_accuracy, val_accuracy, test_accuracy
 
@@ -230,7 +230,7 @@ def run(dataset, homo_ratio, split, model_name, dim_hidden, num_hidden, dropout_
         num_hops = 0 if (model_name == 'GBPN' and epoch == 0) else max_num_hops
         train(num_hops=num_hops, num_samples=num_samples)
 
-        if (epoch+1) % 5 == 0:
+        if (epoch+1) % int(num_epoches*0.10) == 0:
             train_accuracy, val_accuracy, test_accuracy = evaluation(num_hops=num_hops)
             if val_accuracy > opt_val:
                 opt_val = val_accuracy
@@ -241,7 +241,7 @@ def run(dataset, homo_ratio, split, model_name, dim_hidden, num_hidden, dropout_
             print(model.bp_conv.get_logH().exp(), flush=True)
 
     if verbose:
-        print('optimal val accuracy: {:7.5f}, optimal test accuracy: {:7.5f}'.format(opt_val, opt_test))
+        print('optimal val accuracy: {:7.5f}, optimal test accuracy: {:7.5f}\n'.format(opt_val, opt_test))
 
     return opt_test
 
@@ -283,6 +283,6 @@ for _ in range(args.num_trials):
     test_acc.append(run(args.dataset, args.homo_ratio, args.split, args.model_name, args.dim_hidden, args.num_hidden, args.dropout_p, args.device, args.learning_rate, args.num_epoches, args.weighted_BP, args.learn_H, args.eval_C, args.verbose))
 
 print(args)
-print('overall test accuracies: {:7.3f} ± {:7.3f}'.format(np.mean(test_acc) * 100, np.std(test_acc) * 100))
+print('overall test accuracies: {:7.3f} ± {:7.3f}'.format(np.mean(test_acc)*100, np.std(test_acc)*100))
 
 print('finish')
