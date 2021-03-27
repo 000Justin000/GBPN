@@ -60,7 +60,7 @@ class GMLP(torch.nn.Module):
         for batch_size, batch_nodes, _, _, _, \
             _, _, subgraph_x, _, _, \
             subgraph_edge_index, _, _, _ in sampler.get_generator(max_batch_size=max_batch_size, num_hops=0):
-            x_all[batch_nodes] = self.forward(subgraph_x, subgraph_edge_index)[:batch_size]
+            x_all[batch_nodes] = self.forward(subgraph_x.to(device), subgraph_edge_index.to(device))[:batch_size].cpu()
         return x_all
 
 
@@ -94,7 +94,7 @@ class SGC(torch.nn.Module):
         for batch_size, batch_nodes, _, _, _, \
             _, _, subgraph_x, _, _, \
             subgraph_edge_index, _, _, _ in sampler.get_generator(max_batch_size=max_batch_size, num_hops=self.num_hidden):
-            x_all[batch_nodes] = self.forward(subgraph_x, subgraph_edge_index)[:batch_size]
+            x_all[batch_nodes] = self.forward(subgraph_x.to(device), subgraph_edge_index.to(device))[:batch_size].cpu()
         return x_all
 
 
@@ -130,7 +130,7 @@ class GCN(nn.Module):
         for batch_size, batch_nodes, _, _, _, \
             _, _, subgraph_x, _, _, \
             subgraph_edge_index, _, _, _ in sampler.get_generator(max_batch_size=max_batch_size, num_hops=self.num_hidden):
-            x_all[batch_nodes] = self.forward(subgraph_x, subgraph_edge_index)[:batch_size]
+            x_all[batch_nodes] = self.forward(subgraph_x.to(device), subgraph_edge_index.to(device))[:batch_size].cpu()
         return x_all
 
 

@@ -174,8 +174,7 @@ def run(dataset, homo_ratio, split, model_name, dim_hidden, num_hidden, dropout_
     else:
         raise Exception('unexpected model type')
     model = model.to(device)
-    # optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate, weight_decay=2.5e-4)
-    optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
+    optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate, weight_decay=2.5e-4)
 
     def train(num_hops=2, num_samples=5):
         model.train()
