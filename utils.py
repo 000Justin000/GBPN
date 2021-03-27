@@ -339,7 +339,7 @@ class FullgraphSampler:
             batch_nodes = torch.arange(self.num_nodes, dtype=torch.int64) if (mask is None) else mask.nonzero(as_tuple=True)[0]
 
             subgraph_nodes = torch.cat((batch_nodes, torch.tensor(list(set(range(self.num_nodes)) - set(batch_nodes.tolist())), dtype=torch.int64)), dim=0)
-            subgraph_edge_index, subgraph_edge_oid = subgraph(subgraph_nodes, self.edge_index, torch.arange(self.edge_index.shape[1]), relabel_nodes=True)
+            subgraph_edge_index, subgraph_edge_oid = subgraph(subgraph_nodes, self.edge_index, torch.arange(self.edge_index.shape[1]), relabel_nodes=True, num_nodes=self.num_nodes)
             subgraph_edge_index, subgraph_edge_oid, subgraph_rv = process_edge_index(subgraph_nodes.shape[0], subgraph_edge_index, subgraph_edge_oid)
 
             subgraph_edge_weight = self.edge_weight[subgraph_edge_oid]
