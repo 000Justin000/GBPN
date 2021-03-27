@@ -94,7 +94,11 @@ class SGC(torch.nn.Module):
         for batch_size, batch_nodes, _, _, _, \
             _, _, subgraph_x, _, _, \
             subgraph_edge_index, _, _, _ in sampler.get_generator(max_batch_size=max_batch_size, num_hops=self.num_hidden):
+<<<<<<< HEAD
             x_all[batch_nodes] = self.forward(subgraph_x.to(device), subgraph_edge_index.to(device))[:batch_size].cpu()
+=======
+            x_all[batch_nodes] = self.forward(subgraph_x, subgraph_edge_index)[:batch_size].cpu()
+>>>>>>> d2b298bd03cd5d571c8cc2cc55f105476d4d352c
         return x_all
 
 
@@ -130,7 +134,11 @@ class GCN(nn.Module):
         for batch_size, batch_nodes, _, _, _, \
             _, _, subgraph_x, _, _, \
             subgraph_edge_index, _, _, _ in sampler.get_generator(max_batch_size=max_batch_size, num_hops=self.num_hidden):
+<<<<<<< HEAD
             x_all[batch_nodes] = self.forward(subgraph_x.to(device), subgraph_edge_index.to(device))[:batch_size].cpu()
+=======
+            x_all[batch_nodes] = self.forward(subgraph_x, subgraph_edge_index)[:batch_size].cpu()
+>>>>>>> d2b298bd03cd5d571c8cc2cc55f105476d4d352c
         return x_all
 
 
