@@ -28,20 +28,22 @@ def classification_accuracy(log_b, y):
 split = [0.3, 0.2, 0.5]
 num_hidden = 2
 device = 'cuda'
-learning_rate = 0.01
-num_epoches = 200
+learning_rate = 1.0e-3
+num_epoches = 500
 learn_H = True
 eval_C = False
 
 # data = load_county_facebook(split=split)
-data = load_citation('Cora', split=split)
-# data = load_citation('PubMed', split=split)
+# data = load_citation('Cora', split=split)
+data = load_citation('PubMed', split=split)
 
-edge_index, edge_weight, rv = data.edge_index, data.edge_weight, data.rv
+edge_index, edge_weight, edge_rv = data.edge_index, data.edge_weight, data.edge_rv
 x, y = data.x, data.y
 num_nodes, num_features = x.shape
 num_classes = len(torch.unique(y[y >= 0]))
 train_mask, val_mask, test_mask = data.train_mask, data.val_mask, data.test_mask
+if edge_weight is None:
+    edge_weight = torch.ones(edge_index.shape[1], dtype=torch.float32)
 
 c_weight = None
 accuracy_fun = classification_accuracy
@@ -57,7 +59,7 @@ optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate, weight_decay
 def train(epoch, num_hops=2):
     model.train()
     optimizer.zero_grad()
-    log_b = model(x, edge_index, edge_weight=edge_weight, rv=rv, K=num_hops)
+    log_b = model(x, edge_index, edge_weight=edge_weight, edge_rv=edge_rv, K=num_hops)
     loss = F.nll_loss(log_b[train_mask], y[train_mask])
     loss.backward()
     optimizer.step()
@@ -66,12 +68,12 @@ def train(epoch, num_hops=2):
     return accuracy
 
 
-def evaluation(mask, num_hops=2, partition='train'):
+def evaluation(num_hops=2):
     model.eval()
-    log_b = model(x, edge_index, edge_weight=edge_weight, rv=rv, K=num_hops)
-    accuracy = accuracy_fun(log_b[mask], y[mask])
-    print('{:>5s} inductive accuracy: {:5.3f}'.format(partition, accuracy), end='    ')
-
+    log_b = model(x, edge_index, edge_weight=edge_weight, edge_rv=edge_rv, K=num_hops)
+    val_accuracy = accuracy_fun(log_b[val_mask], y[val_mask])
+    test_accuracy = accuracy_fun(log_b[test_mask], y[test_mask])
+    print('inductive accuracy: ({:5.3f}, {:5.3f})'.format(val_accuracy, test_accuracy), end='    ')
     if type(model) == GBPN and eval_C:
         sum_conv = SumConv()
         subgraphC_mask = train_mask
@@ -80,32 +82,30 @@ def evaluation(mask, num_hops=2, partition='train'):
         log_c[subgraphC_mask] = model.bp_conv.get_logH()[y[subgraphC_mask]]
         subgraphR_phi = sum_conv(log_c, edge_index, edge_weight)[subgraphR_mask]
         subgraphR_edge_index, subgraphR_edge_weight = subgraph(subgraphR_mask, edge_index, edge_weight, relabel_nodes=True)
-        subgraphR_edge_index, subgraphR_edge_weight, subgraphR_rv = process_edge_index(subgraphR_mask.sum().item(), subgraphR_edge_index, subgraphR_edge_weight)
-        subgraphR_log_b = model(x[subgraphR_mask], subgraphR_edge_index, subgraphR_edge_weight, rv=subgraphR_rv, phi=subgraphR_phi, K=num_hops)
-        accuracy = accuracy_fun(subgraphR_log_b[mask[subgraphR_mask]], y[mask])
-        print('{:>5s} transductive accuracy: {:5.3f}'.format(partition, accuracy), end='    ')
-
-    return accuracy
+        subgraphR_edge_index, subgraphR_edge_weight, subgraphR_edge_rv = process_edge_index(subgraphR_mask.sum().item(), subgraphR_edge_index, subgraphR_edge_weight)
+        subgraphR_log_b = model(x[subgraphR_mask], subgraphR_edge_index, subgraphR_edge_weight, edge_rv=subgraphR_edge_rv, phi=subgraphR_phi, K=num_hops)
+        val_accuracy = accuracy_fun(subgraphR_log_b[val_mask[subgraphR_mask]], y[val_mask])
+        test_accuracy = accuracy_fun(subgraphR_log_b[test_mask[subgraphR_mask]], y[test_mask])
+        print('transductive accuracy: ({:5.3f}, {:5.3f})'.format(val_accuracy, test_accuracy), end='    ')
+    return val_accuracy, test_accuracy
 
 
 optimal_val_accuracy = 0.0
-for epoch in range(100):
+optimal_test_accuracy = 0.0
+for epoch in range(num_epoches):
     num_hops = 0 if (epoch < num_epoches*0.05) else max_num_hops
     train(epoch, num_hops)
-    val_accuracy = evaluation(val_mask, num_hops, 'val')
+    val_accuracy, test_accuracy = evaluation(num_hops)
     print(flush=True)
     if type(model) == GBPN:
         print(model.bp_conv.get_logH().exp())
     if val_accuracy > optimal_val_accuracy:
         optimal_val_accuracy = val_accuracy
+        optimal_test_accuracy = test_accuracy
         torch.save(model.state_dict(), 'model.pt')
 model.load_state_dict(torch.load('model.pt'))
 
-with torch.no_grad():
-    test_accuracy = evaluation(test_mask, num_hops, 'test')
-    print(flush=True)
-    if type(model) == GBPN:
-        print(model.bp_conv.get_logH().exp())
+print('optimal accuracy: ({:5.3f}, {:5.3f})'.format(optimal_val_accuracy, optimal_test_accuracy))
 
 with torch.no_grad():
     log_b0 = model.transform(x, edge_index)
@@ -113,7 +113,7 @@ with torch.no_grad():
     agg_scaling = torch.ones(x.shape[0]).to(x.device)
     info = {'log_b0': log_b0,
             'log_msg_': (-np.log(num_classes)) * torch.ones(edge_index.shape[1], num_classes).to(x.device),
-            'rv': rv,
+            'edge_rv': edge_rv,
             'agg_scaling': agg_scaling}
     log_b = log_b0
 
