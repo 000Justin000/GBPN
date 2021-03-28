@@ -144,8 +144,6 @@ def run(dataset, homo_ratio, split, model_name, dim_hidden, num_layers, dropout_
         max_batch_size = min(math.ceil(train_mask.sum()/10.0), 1024)
         if model_name == 'MLP':
             num_hops = 0
-        elif model_name == 'GBPN':
-            num_hops = 2
         else:
             num_hops = num_layers
         num_samples = 5
@@ -201,7 +199,7 @@ def run(dataset, homo_ratio, split, model_name, dim_hidden, num_layers, dropout_
     @torch.no_grad()
     def evaluation(num_hops=2):
         model.eval()
-        log_b = model.inference(graph_sampler, max_batch_size//4, device, K=num_hops)
+        log_b = model.inference(graph_sampler, max_batch_size, device, K=num_hops)
         train_accuracy = accuracy_fun(log_b[train_mask], y[train_mask])
         val_accuracy = accuracy_fun(log_b[val_mask], y[val_mask])
         test_accuracy = accuracy_fun(log_b[test_mask], y[test_mask])
@@ -214,7 +212,7 @@ def run(dataset, homo_ratio, split, model_name, dim_hidden, num_layers, dropout_
             graphR_phi = sum_conv(log_c, edge_index, edge_weight)[graphR_mask]
             log_b = torch.zeros(num_nodes, num_classes)
             log_b[graphC_mask] = F.one_hot(y[graphC_mask], num_classes).float()
-            log_b[graphR_mask] = model.inference(graphR_sampler, max_batch_size//4, device, phi=graphR_phi, K=num_hops)
+            log_b[graphR_mask] = model.inference(graphR_sampler, max_batch_size, device, phi=graphR_phi, K=num_hops)
             train_accuracy = accuracy_fun(log_b[train_mask], y[train_mask])
             val_accuracy = accuracy_fun(log_b[val_mask], y[val_mask])
             test_accuracy = accuracy_fun(log_b[test_mask], y[test_mask])
