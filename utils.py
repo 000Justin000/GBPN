@@ -23,33 +23,35 @@ from collections import defaultdict
 
 class MLP(nn.Module):
 
-    def __init__(self, dim_in, dim_out, dim_hidden=20, num_hidden=0, activation=nn.ReLU(), dropout_p=0.0):
+    def __init__(self, dim_in, dim_out, dim_hidden=128, num_layers=2, activation=nn.ReLU(), dropout_p=0.0):
         super(MLP, self).__init__()
-
-        if num_hidden == 0:
+        self.num_layers = num_layers
+        if num_layers == 1:
             self.linears = nn.ModuleList([nn.Linear(dim_in, dim_out)])
-        elif num_hidden >= 1:
+        elif num_layers >= 2:
             self.linears = nn.ModuleList()
             self.linears.append(nn.Linear(dim_in, dim_hidden))
-            self.linears.extend([nn.Linear(dim_hidden, dim_hidden) for _ in range(num_hidden-1)])
+            self.linears.extend([nn.Linear(dim_hidden, dim_hidden) for _ in range(num_layers-2)])
             self.linears.append(nn.Linear(dim_hidden, dim_out))
         else:
-            raise Exception('number of hidden layers must be positive')
-
+            raise Exception('number of layers must be positive')
         self.activation = activation
         self.dropout = nn.Dropout(dropout_p)
 
     def forward(self, x):
-        for m in self.linears[:-1]:
-            x = self.activation(m(self.dropout(x)))
-        return self.linears[-1](self.dropout(x))
+        for i, linear in enumerate(self.linears):
+            x = self.dropout(x)
+            x = linear(x)
+            if i < self.num_layers-1:
+                x = self.activation(x)
+        return x
 
 
 class GMLP(torch.nn.Module):
 
-    def __init__(self, dim_in, dim_out, dim_hidden=20, num_hidden=0, activation=nn.ReLU(), dropout_p=0.0):
+    def __init__(self, dim_in, dim_out, dim_hidden=128, num_layers=2, activation=nn.ReLU(), dropout_p=0.0):
         super(GMLP, self).__init__()
-        self.mlp = MLP(dim_in, dim_out, dim_hidden, num_hidden, activation, dropout_p)
+        self.mlp = MLP(dim_in, dim_out, dim_hidden, num_layers, activation, dropout_p)
 
     def forward(self, x, edge_index, **kwargs):
         return F.log_softmax(self.mlp(x), dim=-1)
@@ -66,23 +68,22 @@ class GMLP(torch.nn.Module):
 
 class SGC(torch.nn.Module):
 
-    def __init__(self, dim_in, dim_out, dim_hidden=128, num_hidden=2, dropout_p=0.0):
+    def __init__(self, dim_in, dim_out, dim_hidden=128, num_layers=2, dropout_p=0.0):
         super(SGC, self).__init__()
-        assert num_hidden >= 2
-        self.num_hidden = num_hidden
+        assert num_layers >= 2
+        self.num_layers = num_layers
         self.convs = nn.ModuleList()
         self.convs.append(GCNConv(dim_in, dim_hidden))
-        for _ in range(num_hidden-2):
+        for _ in range(num_layers-2):
             self.convs.append(GCNConv(dim_hidden, dim_hidden))
         self.convs.append(GCNConv(dim_hidden, dim_out))
         self.dropout = nn.Dropout(dropout_p)
 
     def forward(self, x, edge_index, **kwargs):
         for i, conv in enumerate(self.convs):
+            x = self.dropout(x)
             x = conv(x, edge_index)
-            if i < self.num_hidden-1:
-                x = self.dropout(x)
-            else:
+            if i == self.num_layers-1:
                 x = F.log_softmax(x, dim=-1)
         return x
 
@@ -93,20 +94,20 @@ class SGC(torch.nn.Module):
         x_all = torch.zeros(sampler.num_nodes, self.convs[-1].out_channels, dtype=torch.float32)
         for batch_size, batch_nodes, _, _, _, \
             _, _, subgraph_x, _, _, \
-            subgraph_edge_index, _, _, _ in sampler.get_generator(max_batch_size=max_batch_size, num_hops=self.num_hidden):
+            subgraph_edge_index, _, _, _ in sampler.get_generator(max_batch_size=max_batch_size, num_hops=self.num_layers):
             x_all[batch_nodes] = self.forward(subgraph_x.to(device), subgraph_edge_index.to(device))[:batch_size].cpu()
         return x_all
 
 
 class GCN(nn.Module):
 
-    def __init__(self, dim_in, dim_out, dim_hidden=128, num_hidden=2, activation=nn.ReLU(), dropout_p=0.0):
+    def __init__(self, dim_in, dim_out, dim_hidden=128, num_layers=2, activation=nn.ReLU(), dropout_p=0.0):
         super(GCN, self).__init__()
-        assert num_hidden >= 2
-        self.num_hidden = num_hidden
+        assert num_layers >= 2
+        self.num_layers = num_layers
         self.convs = nn.ModuleList()
         self.convs.append(GCNConv(dim_in, dim_hidden))
-        for _ in range(num_hidden-2):
+        for _ in range(num_layers-2):
             self.convs.append(GCNConv(dim_hidden, dim_hidden))
         self.convs.append(GCNConv(dim_hidden, dim_out))
         self.activation = activation
@@ -114,10 +115,10 @@ class GCN(nn.Module):
 
     def forward(self, x, edge_index, **kwargs):
         for i, conv in enumerate(self.convs):
+            x = self.dropout(x)
             x = conv(x, edge_index)
-            if i < self.num_hidden-1:
+            if i < self.num_layers-1:
                 x = self.activation(x)
-                x = self.dropout(x)
             else:
                 x = F.log_softmax(x, dim=-1)
         return x
@@ -129,20 +130,20 @@ class GCN(nn.Module):
         x_all = torch.zeros(sampler.num_nodes, self.convs[-1].out_channels, dtype=torch.float32)
         for batch_size, batch_nodes, _, _, _, \
             _, _, subgraph_x, _, _, \
-            subgraph_edge_index, _, _, _ in sampler.get_generator(max_batch_size=max_batch_size, num_hops=self.num_hidden):
+            subgraph_edge_index, _, _, _ in sampler.get_generator(max_batch_size=max_batch_size, num_hops=self.num_layers):
             x_all[batch_nodes] = self.forward(subgraph_x.to(device), subgraph_edge_index.to(device))[:batch_size].cpu()
         return x_all
 
 
 class SAGE(nn.Module):
 
-    def __init__(self, dim_in, dim_out, dim_hidden=128, num_hidden=2, activation=nn.ReLU(), dropout_p=0.0):
+    def __init__(self, dim_in, dim_out, dim_hidden=128, num_layers=2, activation=nn.ReLU(), dropout_p=0.0):
         super(SAGE, self).__init__()
-        assert num_hidden >= 2
-        self.num_hidden = num_hidden
+        assert num_layers >= 2
+        self.num_layers = num_layers
         self.convs = nn.ModuleList()
         self.convs.append(SAGEConv(dim_in, dim_hidden))
-        for _ in range(num_hidden-2):
+        for _ in range(num_layers-2):
             self.convs.append(SAGEConv(dim_hidden, dim_hidden))
         self.convs.append(SAGEConv(dim_hidden, dim_out))
         self.activation = activation
@@ -150,10 +151,10 @@ class SAGE(nn.Module):
 
     def forward(self, x, edge_index, **kwargs):
         for i, conv in enumerate(self.convs):
+            x = self.dropout(x)
             x = conv(x, edge_index)
-            if i < self.num_hidden-1:
+            if i < self.num_layers-1:
                 x = self.activation(x)
-                x = self.dropout(x)
             else:
                 x = F.log_softmax(x, dim=-1)
         return x
@@ -166,11 +167,11 @@ class SAGE(nn.Module):
             for _, batch_nodes, _, _, _, \
                 _, subgraph_nodes, _, _, _, \
                 subgraph_edge_index, _, _, _ in sampler.get_generator(max_batch_size=max_batch_size, num_hops=1):
-                x = x_all_[subgraph_nodes].to(device)
-                x = conv(x, subgraph_edge_index.to(device))
-                if i < self.num_hidden-1:
+                x, subgraph_edge_index = x_all_[subgraph_nodes].to(device), subgraph_edge_index.to(device)
+                x = self.dropout(x)
+                x = conv(x, subgraph_edge_index)
+                if i < self.num_layers-1:
                     x = self.activation(x)
-                    x = self.dropout(x)
                 else:
                     x = F.log_softmax(x, dim=-1)
                 x_all[batch_nodes] = x[:batch_nodes.shape[0]].cpu()
@@ -180,15 +181,15 @@ class SAGE(nn.Module):
 
 class GAT(nn.Module):
 
-    def __init__(self, dim_in, dim_out, dim_hidden=128, num_hidden=2, num_heads=1, activation=nn.ELU(), dropout_p=0.0):
+    def __init__(self, dim_in, dim_out, dim_hidden=128, num_layers=2, num_heads=1, activation=nn.ELU(), dropout_p=0.0):
         super(GAT, self).__init__()
-        assert num_hidden >= 2
-        self.num_hidden = num_hidden
+        assert num_layers >= 2
+        self.num_layers = num_layers
         self.convs = nn.ModuleList()
         self.skips = nn.ModuleList()
         self.convs.append(GATConv(dim_in, dim_hidden, heads=num_heads))
         self.skips.append(nn.Linear(dim_in, dim_hidden*num_heads))
-        for _ in range(num_hidden-2):
+        for _ in range(num_layers-2):
             self.convs.append(GATConv(dim_hidden*num_heads, dim_hidden, heads=num_heads))
             self.skips.append(nn.Linear(dim_hidden*num_heads, dim_hidden*num_heads))
         self.convs.append(GATConv(dim_hidden*num_heads, dim_out, heads=num_heads, concat=False))
@@ -198,10 +199,10 @@ class GAT(nn.Module):
 
     def forward(self, x, edge_index, **kwargs):
         for i, (conv, skip) in enumerate(zip(self.convs, self.skips)):
+            x = self.dropout(x)
             x = conv(x, edge_index) + skip(x)
-            if i < self.num_hidden-1:
+            if i < self.num_layers-1:
                 x = self.activation(x)
-                x = self.dropout(x)
             else:
                 x = F.log_softmax(x, dim=-1)
         return x
@@ -214,11 +215,11 @@ class GAT(nn.Module):
             for _, batch_nodes, _, _, _, \
                 _, subgraph_nodes, _, _, _, \
                 subgraph_edge_index, _, _, _ in sampler.get_generator(max_batch_size=max_batch_size, num_hops=1):
-                x = x_all_[subgraph_nodes].to(device)
-                x = conv(x, subgraph_edge_index.to(device)) + skip(x)
-                if i < self.num_hidden-1:
+                x, subgraph_edge_index = x_all_[subgraph_nodes].to(device), subgraph_edge_index.to(device)
+                x = self.dropout(x)
+                x = conv(x, subgraph_edge_index) + skip(x)
+                if i < self.num_layers-1:
                     x = self.activation(x)
-                    x = self.dropout(x)
                 else:
                     x = F.log_softmax(x, dim=-1)
                 x_all[batch_nodes] = x[:batch_nodes.shape[0]].cpu()
@@ -277,9 +278,9 @@ class BPConv(MessagePassing):
 
 class GBPN(nn.Module):
 
-    def __init__(self, dim_in, dim_out, dim_hidden=32, num_hidden=0, activation=nn.ReLU(), dropout_p=0.0, learn_H=False):
+    def __init__(self, dim_in, dim_out, dim_hidden=32, num_layers=0, activation=nn.ReLU(), dropout_p=0.0, learn_H=False):
         super(GBPN, self).__init__()
-        self.transform = GMLP(dim_in, dim_out, dim_hidden=dim_hidden, num_hidden=num_hidden, activation=activation, dropout_p=dropout_p)
+        self.transform = GMLP(dim_in, dim_out, dim_hidden=dim_hidden, num_layers=num_layers, activation=activation, dropout_p=dropout_p)
         self.bp_conv = BPConv(dim_out, learn_H)
 
     def forward(self, x, edge_index, edge_weight, edge_rv, agg_scaling=None, K=5):
@@ -554,7 +555,7 @@ def load_county_facebook(transform=None, split=[0.3, 0.2, 0.5], normalize=True):
     dat = pd.read_csv('datasets/county_facebook/dat.csv')
     adj = pd.read_csv('datasets/county_facebook/adj.csv')
 
-    x = torch.tensor(dat.values[:, :9], dtype=torch.float32)
+    x = torch.tensor(dat.values[:, 0:9], dtype=torch.float32)
     if normalize:
         x = (x - x.mean(dim=0)) / x.std(dim=0)
     y = torch.tensor(dat.values[:, 9] < dat.values[:, 10], dtype=torch.int64)
@@ -580,7 +581,7 @@ def load_sexual_interaction(transform=None, split=[0.3, 0.2, 0.5]):
     adj = pd.read_csv('datasets/sexual_interaction/adj.csv', header=None)
 
     y = torch.tensor(dat.values[:, 0], dtype=torch.int64)
-    x = torch.tensor(dat.values[:, 1:], dtype=torch.float32)
+    x = torch.tensor(dat.values[:, 1:21], dtype=torch.float32)
     edge_index = torch.transpose(torch.tensor(adj.values), 0, 1)
 
     data = Data(x=x, y=y, edge_index=edge_index)
