@@ -144,6 +144,8 @@ def run(dataset, homo_ratio, split, model_name, dim_hidden, num_layers, dropout_
         max_batch_size = min(math.ceil(train_mask.sum()/10.0), 1024)
         if model_name == 'MLP':
             num_hops = 0
+        elif model_name == 'GBPN':
+            num_hops = 2
         else:
             num_hops = num_layers
         num_samples = 5
@@ -159,7 +161,7 @@ def run(dataset, homo_ratio, split, model_name, dim_hidden, num_layers, dropout_
     elif model_name == 'SAGE':
         model = SAGE(num_features, num_classes, dim_hidden=dim_hidden, num_layers=num_layers, activation=nn.LeakyReLU(), dropout_p=dropout_p)
     elif model_name == 'GAT':
-        model = GAT(num_features, num_classes, dim_hidden=dim_hidden//4, num_layers=num_layers, num_heads=4, activation=nn.ELU(), dropout_p=dropout_p)
+        model = GAT(num_features, num_classes, dim_hidden=dim_hidden//2, num_layers=num_layers, num_heads=4, activation=nn.ELU(), dropout_p=dropout_p)
     elif model_name == 'GBPN':
         model = GBPN(num_features, num_classes, dim_hidden=dim_hidden, num_layers=num_layers, activation=nn.LeakyReLU(), dropout_p=dropout_p, learn_H=learn_H)
         if eval_C:
@@ -227,7 +229,7 @@ def run(dataset, homo_ratio, split, model_name, dim_hidden, num_layers, dropout_
         num_hops = 0 if (model_name == 'GBPN' and epoch == 1) else max_num_hops
         train(num_hops=num_hops, num_samples=num_samples)
 
-        if epoch % max(int(num_epoches*0.10), 10) == 0:
+        if epoch % max(int(num_epoches*0.10), 20) == 0:
             train_accuracy, val_accuracy, test_accuracy = evaluation(num_hops=num_hops)
             if val_accuracy > opt_val:
                 opt_val = val_accuracy
