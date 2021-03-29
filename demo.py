@@ -2,6 +2,9 @@ import sys
 import math
 import subprocess
 import argparse
+import random
+import numpy as np
+import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torch_geometric.transforms as T
@@ -10,12 +13,12 @@ from torch_geometric.data import NeighborSampler
 from torch_geometric.nn import GCNConv
 from torch_geometric.transforms import ToSparseTensor
 from torch_geometric.nn import MessagePassing
-from torch_geometric.utils import degree, is_undirected, subgraph
+from torch_geometric.utils import degree, is_undirected, subgraph, to_networkx
 from sklearn.metrics import roc_auc_score
 from utils import *
 import matplotlib
 import matplotlib.pyplot as plt
-
+plt.rcParams.update({"font.size": 14, "text.usetex": True, "font.family": "serif", "font.serif": ["Palatino"]})
 
 def classification_accuracy(log_b, y):
     if type(log_b) == torch.Tensor:
@@ -25,11 +28,15 @@ def classification_accuracy(log_b, y):
     return (log_b.argmax(-1) == y).sum() / y.shape[0]
 
 
+random.seed(0)
+np.random.seed(0)
+torch.manual_seed(0)
+
 split = [0.3, 0.2, 0.5]
-num_hidden = 2
-device = 'cuda'
+num_layers = 2
+max_num_hops = 5
 learning_rate = 1.0e-3
-num_epoches = 500
+num_epoches = 300
 learn_H = True
 eval_C = False
 
@@ -44,17 +51,20 @@ num_classes = len(torch.unique(y[y >= 0]))
 train_mask, val_mask, test_mask = data.train_mask, data.val_mask, data.test_mask
 if edge_weight is None:
     edge_weight = torch.ones(edge_index.shape[1], dtype=torch.float32)
-
 c_weight = None
 accuracy_fun = classification_accuracy
 
-max_batch_size = num_nodes
-max_num_hops = 5
-
-model = GBPN(num_features, num_classes, dim_hidden=256, num_hidden=num_hidden, activation=nn.LeakyReLU(), dropout_p=0.1, learn_H=learn_H)
-# model = GCN(num_features, num_classes, dim_hidden=256, activation=nn.LeakyReLU(), dropout_p=0.1)
+model = GBPN(num_features, num_classes, dim_hidden=256, num_layers=num_layers, activation=nn.LeakyReLU(), dropout_p=0.1, learn_H=learn_H)
 optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate, weight_decay=2.5e-4)
 
+graph_sampler = FullgraphSampler(num_nodes, x, y, edge_index, edge_weight, edge_rv)
+if type(model) == GBPN and eval_C:
+    sum_conv = SumConv()
+    graphC_mask = train_mask
+    graphR_mask = torch.logical_not(graphC_mask)
+    graphR_edge_index, graphR_edge_weight = subgraph(graphR_mask, edge_index, edge_weight, relabel_nodes=True, num_nodes=num_nodes)
+    graphR_edge_index, graphR_edge_weight, graphR_edge_rv = process_edge_index(int(graphR_mask.sum()), graphR_edge_index, graphR_edge_weight)
+    graphR_sampler = type(graph_sampler)(int(graphR_mask.sum()), x[graphR_mask], y[graphR_mask], graphR_edge_index, graphR_edge_weight, graphR_edge_rv)
 
 def train(epoch, num_hops=2):
     model.train()
@@ -67,57 +77,58 @@ def train(epoch, num_hops=2):
     print('step {:5d}, train loss: {:5.3f}, train accuracy: {:5.3f}'.format(epoch, float(loss), accuracy), end='    ')
     return accuracy
 
-
 def evaluation(num_hops=2):
     model.eval()
-    log_b = model(x, edge_index, edge_weight=edge_weight, edge_rv=edge_rv, K=num_hops)
+    log_b = model.inference(graph_sampler, -1, 'cpu', K=num_hops)
+    train_accuracy = accuracy_fun(log_b[train_mask], y[train_mask])
     val_accuracy = accuracy_fun(log_b[val_mask], y[val_mask])
     test_accuracy = accuracy_fun(log_b[test_mask], y[test_mask])
-    print('inductive accuracy: ({:5.3f}, {:5.3f})'.format(val_accuracy, test_accuracy), end='    ')
+    print('inductive accuracy: ({:5.3f}, {:5.3f}, {:5.3f})'.format(train_accuracy, val_accuracy, test_accuracy), end='    ')
     if type(model) == GBPN and eval_C:
-        sum_conv = SumConv()
-        subgraphC_mask = train_mask
-        subgraphR_mask = torch.logical_not(subgraphC_mask)
         log_c = torch.zeros(num_nodes, num_classes)
-        log_c[subgraphC_mask] = model.bp_conv.get_logH()[y[subgraphC_mask]]
-        subgraphR_phi = sum_conv(log_c, edge_index, edge_weight)[subgraphR_mask]
-        subgraphR_edge_index, subgraphR_edge_weight = subgraph(subgraphR_mask, edge_index, edge_weight, relabel_nodes=True)
-        subgraphR_edge_index, subgraphR_edge_weight, subgraphR_edge_rv = process_edge_index(subgraphR_mask.sum().item(), subgraphR_edge_index, subgraphR_edge_weight)
-        subgraphR_log_b = model(x[subgraphR_mask], subgraphR_edge_index, subgraphR_edge_weight, edge_rv=subgraphR_edge_rv, phi=subgraphR_phi, K=num_hops)
-        val_accuracy = accuracy_fun(subgraphR_log_b[val_mask[subgraphR_mask]], y[val_mask])
-        test_accuracy = accuracy_fun(subgraphR_log_b[test_mask[subgraphR_mask]], y[test_mask])
-        print('transductive accuracy: ({:5.3f}, {:5.3f})'.format(val_accuracy, test_accuracy), end='    ')
-    return val_accuracy, test_accuracy
+        log_c[graphC_mask] = model.bp_conv.get_logH()[y[graphC_mask]]
+        graphR_phi = sum_conv(log_c, edge_index, edge_weight)[graphR_mask]
+        log_b = torch.zeros(num_nodes, num_classes)
+        log_b[graphC_mask] = F.one_hot(y[graphC_mask], num_classes).float()
+        log_b[graphR_mask] = model.inference(graphR_sampler, -1, 'cpu', phi=graphR_phi, K=num_hops)
+        train_accuracy = accuracy_fun(log_b[train_mask], y[train_mask])
+        val_accuracy = accuracy_fun(log_b[val_mask], y[val_mask])
+        test_accuracy = accuracy_fun(log_b[test_mask], y[test_mask])
+        print('transductive accuracy: ({:5.3f}, {:5.3f}, {:5.3f})'.format(train_accuracy, val_accuracy, test_accuracy), end='    ')
+    return train_accuracy, val_accuracy, test_accuracy
 
 
-optimal_val_accuracy = 0.0
-optimal_test_accuracy = 0.0
-for epoch in range(num_epoches):
-    num_hops = 0 if (epoch < num_epoches*0.05) else max_num_hops
-    train(epoch, num_hops)
-    val_accuracy, test_accuracy = evaluation(num_hops)
-    print(flush=True)
-    if type(model) == GBPN:
-        print(model.bp_conv.get_logH().exp())
-    if val_accuracy > optimal_val_accuracy:
-        optimal_val_accuracy = val_accuracy
-        optimal_test_accuracy = test_accuracy
-        torch.save(model.state_dict(), 'model.pt')
+run_demo = True
+if run_demo:
+    optimal_val_accuracy = 0.0
+    optimal_test_accuracy = 0.0
+    for epoch in range(1, num_epoches+1):
+        num_hops = 0 if (type(model) == GBPN and epoch == 1) else max_num_hops
+        train(epoch, num_hops)
+        if epoch % max(int(num_epoches*0.1), 10) == 0:
+            train_accuracy, val_accuracy, test_accuracy = evaluation(num_hops)
+            if val_accuracy > optimal_val_accuracy:
+                optimal_val_accuracy = val_accuracy
+                optimal_test_accuracy = test_accuracy
+                torch.save(model.state_dict(), 'model.pt')
+        print(flush=True)
+        if type(model) == GBPN:
+            print(model.bp_conv.get_logH().exp())
+    print('optimal accuracy: ({:5.3f}, {:5.3f})'.format(optimal_val_accuracy, optimal_test_accuracy))
 model.load_state_dict(torch.load('model.pt'))
 
-print('optimal accuracy: ({:5.3f}, {:5.3f})'.format(optimal_val_accuracy, optimal_test_accuracy))
-
 with torch.no_grad():
+    model.eval()
     log_b0 = model.transform(x, edge_index)
-    edge_weight = torch.ones(edge_index.shape[1]).to(x.device)
-    agg_scaling = torch.ones(x.shape[0]).to(x.device)
+    edge_weight = torch.ones(edge_index.shape[1])
+    agg_scaling = torch.ones(x.shape[0])
     info = {'log_b0': log_b0,
-            'log_msg_': (-np.log(num_classes)) * torch.ones(edge_index.shape[1], num_classes).to(x.device),
+            'log_msg_': (-np.log(num_classes)) * torch.ones(edge_index.shape[1], num_classes),
             'edge_rv': edge_rv,
             'agg_scaling': agg_scaling}
     log_b = log_b0
 
-    all_hops = range(20)
+    all_hops = range(21)
     log_b_list = []
     for _ in all_hops:
         log_b_list.append(log_b)
@@ -129,26 +140,34 @@ with torch.no_grad():
     test_accuracies = [accuracy_fun(log_b_[test_mask], y[test_mask]) for log_b_ in log_b_list]
     b_delta = [float((((log_b_.exp() - log_b.exp())**2).mean())**0.5) for log_b_ in log_b_list]
 
-    fig, ax1 = plt.subplots()
-    ax1.set_xlabel('hop-#')
-    ax1.set_ylabel('accuracy')
-    ax1.plot(all_hops, train_accuracies, color='tab:red', linestyle='solid', marker='o')
-    ax1.plot(all_hops, test_accuracies, color='tab:green', linestyle='solid', marker='o')
-    ax1.tick_params(axis='y')
+    fig, ax1 = plt.subplots(figsize=(6.0, 4.5))
+    ax1.set_xlabel('number of BP steps ($k$)', fontsize=16.5)
+    ax1.set_ylabel(r'$\|p^{(k)} - p^{(\infty)}\|$', color='tab:blue', fontsize=16.5)
+    ax1.semilogy(all_hops, b_delta, color='tab:blue', linestyle='dashed')
+    ax1.tick_params(axis='y', labelcolor='tab:blue')
 
     ax2 = ax1.twinx()
-    ax2.set_ylabel('')
-    ax2.set_yticks([])
-    ax2.plot(all_hops, train_loss, color='tab:red', linestyle='dotted', marker='.')
-    ax2.plot(all_hops, test_loss, color='tab:green', linestyle='dotted', marker='.')
+    ax2.set_ylabel('accuracies', fontsize=16.5)
+    ax2.set_xlim([-1, 21])
+    ax2.set_ylim([0.82, 0.92])
+    ax2.set_xticks([0, 5, 10, 15, 20])
+    ax2.set_yticks([0.82, 0.82, 0.84, 0.86, 0.88, 0.90, 0.92])
+    ax2.plot(all_hops, train_accuracies, label='train', color='tab:red', linestyle='solid', marker='o', markeredgecolor='k', markersize=6)
+    ax2.plot(all_hops, test_accuracies, label='test', color='tab:green', linestyle='solid', marker='o', markeredgecolor='k', markersize=6)
+    ax2.tick_params(axis='y')
+    ax2.legend(loc='lower center', ncol=2)
 
-    ax3 = ax1.twinx()
-    ax3.set_ylabel('delta', color='tab:blue')
-    ax3.semilogy(all_hops, b_delta, color='tab:blue', linestyle='solid', marker='.')
-    ax3.tick_params(axis='y', labelcolor='tab:blue')
+    # ax3 = ax1.twinx()
+    # ax3.set_ylabel('')
+    # ax3.set_yticks([])
+    # ax3.plot(all_hops, train_loss, color='tab:red', linestyle='dotted', marker='.')
+    # ax3.plot(all_hops, test_loss, color='tab:green', linestyle='dotted', marker='.')
 
     fig.tight_layout()
-    plt.savefig('curve.pdf')
+    plt.savefig('convergence.svg')
     plt.show()
 
-    print('finished')
+G = to_networkx(data, to_undirected=True)
+
+print('finished')
+
