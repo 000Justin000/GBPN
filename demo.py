@@ -4,6 +4,7 @@ import subprocess
 import argparse
 import random
 import numpy as np
+import scipy
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -15,6 +16,8 @@ from torch_geometric.transforms import ToSparseTensor
 from torch_geometric.nn import MessagePassing
 from torch_geometric.utils import degree, is_undirected, subgraph, to_networkx
 from sklearn.metrics import roc_auc_score
+import networkx
+import umap
 from utils import *
 import matplotlib
 import matplotlib.pyplot as plt
@@ -134,40 +137,83 @@ with torch.no_grad():
         log_b_list.append(log_b)
         log_b = model.bp_conv(log_b, edge_index, edge_weight, info)
 
-    train_loss = [F.nll_loss(log_b_[train_mask], y[train_mask]) for log_b_ in log_b_list]
-    train_accuracies = [accuracy_fun(log_b_[train_mask], y[train_mask]) for log_b_ in log_b_list]
-    test_loss = [F.nll_loss(log_b_[test_mask], y[test_mask]) for log_b_ in log_b_list]
-    test_accuracies = [accuracy_fun(log_b_[test_mask], y[test_mask]) for log_b_ in log_b_list]
-    b_delta = [float((((log_b_.exp() - log_b.exp())**2).mean())**0.5) for log_b_ in log_b_list]
+# plot convergence results
+test_mask = torch.logical_not(train_mask)
+train_loss = [F.nll_loss(log_b_[train_mask], y[train_mask]) for log_b_ in log_b_list]
+train_accuracies = [accuracy_fun(log_b_[train_mask], y[train_mask]) for log_b_ in log_b_list]
+test_loss = [F.nll_loss(log_b_[test_mask], y[test_mask]) for log_b_ in log_b_list]
+test_accuracies = [accuracy_fun(log_b_[test_mask], y[test_mask]) for log_b_ in log_b_list]
+b_delta = [float((((log_b_.exp() - log_b.exp())**2).mean())**0.5) for log_b_ in log_b_list]
 
-    fig, ax1 = plt.subplots(figsize=(6.0, 4.5))
-    ax1.set_xlabel('number of BP steps ($k$)', fontsize=16.5)
-    ax1.set_ylabel(r'$\|p^{(k)} - p^{(\infty)}\|$', color='tab:blue', fontsize=16.5)
-    ax1.semilogy(all_hops, b_delta, color='tab:blue', linestyle='dashed')
-    ax1.tick_params(axis='y', labelcolor='tab:blue')
+fig, ax1 = plt.subplots(figsize=(6.0, 4.5))
+ax1.set_xlabel('number of BP steps ($k$)', fontsize=16.5)
+ax1.set_ylabel(r'$\|p^{(k)} - p^{(\infty)}\|$', color='tab:blue', fontsize=16.5)
+ax1.semilogy(all_hops, b_delta, color='tab:blue', linestyle='dashed', label='residual')
+ax1.tick_params(axis='y', labelcolor='tab:blue')
 
-    ax2 = ax1.twinx()
-    ax2.set_ylabel('accuracies', fontsize=16.5)
-    ax2.set_xlim([-1, 21])
-    ax2.set_ylim([0.82, 0.92])
-    ax2.set_xticks([0, 5, 10, 15, 20])
-    ax2.set_yticks([0.82, 0.82, 0.84, 0.86, 0.88, 0.90, 0.92])
-    ax2.plot(all_hops, train_accuracies, label='train', color='tab:red', linestyle='solid', marker='o', markeredgecolor='k', markersize=6)
-    ax2.plot(all_hops, test_accuracies, label='test', color='tab:green', linestyle='solid', marker='o', markeredgecolor='k', markersize=6)
-    ax2.tick_params(axis='y')
-    ax2.legend(loc='lower center', ncol=2)
+ax2 = ax1.twinx()
+ax2.set_ylabel(r'accuracies ($\%$)', fontsize=16.5)
+ax2.set_xlim([-1, 21])
+ax2.set_ylim([0.82, 0.92])
+ax2.set_xticks([0, 5, 10, 15, 20])
+ax2.set_yticks([0.82, 0.84, 0.86, 0.88, 0.90, 0.92])
+ax2.set_yticklabels([82, 84, 86, 88, 90, 92])
+ax2.plot(all_hops, train_accuracies, label='train', color='tab:red', linestyle='solid', marker='o', markeredgecolor='k', markersize=6)
+ax2.plot(all_hops, test_accuracies, label='test', color='tab:green', linestyle='solid', marker='o', markeredgecolor='k', markersize=6)
+ax2.tick_params(axis='y')
+ax2.legend(loc='lower center', ncol=2)
 
-    # ax3 = ax1.twinx()
-    # ax3.set_ylabel('')
-    # ax3.set_yticks([])
-    # ax3.plot(all_hops, train_loss, color='tab:red', linestyle='dotted', marker='.')
-    # ax3.plot(all_hops, test_loss, color='tab:green', linestyle='dotted', marker='.')
+# ax3 = ax1.twinx()
+# ax3.set_ylabel('')
+# ax3.set_yticks([])
+# ax3.plot(all_hops, train_loss, color='tab:red', linestyle='dotted', marker='.')
+# ax3.plot(all_hops, test_loss, color='tab:green', linestyle='dotted', marker='.')
 
-    fig.tight_layout()
-    plt.savefig('convergence.svg')
-    plt.show()
+fig.tight_layout()
+plt.savefig('convergence.pdf', bbox_inches='tight', pad_inches=0)
+plt.show()
 
+# plot accuracy visualization
 G = to_networkx(data, to_undirected=True)
+N = networkx.normalized_laplacian_matrix(G)
+eigvals, eigvecs = scipy.sparse.linalg.eigsh(N, k=100)
+coords = umap.UMAP().fit_transform(eigvecs)
+xlims = (np.min(coords[:,0])-1.5, np.max(coords[:,0])+1.5)
+ylims = (np.min(coords[:,1])-1.5, np.max(coords[:,1])+1.5)
+
+fig, ax3 = plt.subplots(figsize=(4.5,4.5))
+ax3.set_xticks([])
+ax3.set_yticks([])
+ax3.set_xlim(xlims)
+ax3.set_ylim(ylims)
+label_colors = np.array(['tab:red', 'tab:green', 'tab:blue'])
+ax3.scatter(coords[:,0], coords[:,1], c=label_colors[y.numpy()], s=5.0, alpha=0.3)
+
+fig.tight_layout()
+plt.savefig('visualization_labels.pdf', bbox_inches='tight', pad_inches=0)
+plt.show()
+
+correct_step = torch.ones(num_nodes, dtype=torch.int64)*-1
+for i, log_b_ in enumerate(log_b_list):
+    remaining = correct_step == -1
+    correct = log_b_.argmax(dim=-1) == y
+    correct_step[torch.logical_not(correct)] = -1
+    correct_step[remaining & correct] = i
+cmap = matplotlib.cm.get_cmap('Spectral_r', 6)
+
+fig, ax4 = plt.subplots(figsize=(4.5,4.5))
+ax4.set_xticks([])
+ax4.set_yticks([])
+ax4.set_xlim(xlims)
+ax4.set_ylim(ylims)
+for i in range(6):
+    mask = correct_step == i
+    ax4.scatter(coords[mask,0], coords[mask,1], color=cmap(i), s=5.0*0.7**i, label=r'$k={:d}$'.format(i))
+ax4.legend(loc='lower right', ncol=3, fontsize=10, markerscale=2.0, framealpha=1.0)
+
+fig.tight_layout()
+plt.savefig('visualization_predictions.pdf', bbox_inches='tight', pad_inches=0)
+plt.show()
 
 print('finished')
 

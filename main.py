@@ -21,7 +21,7 @@ import matplotlib.pyplot as plt
 def get_scaling(deg0, deg1):
     assert deg0.shape == deg1.shape
     scaling = torch.ones(deg0.shape[0]).to(deg0.device)
-#   scaling[deg1 != 0] = (deg0 / deg1)[deg1 != 0]
+    scaling[deg1 != 0] = (deg0 / deg1)[deg1 != 0]
     return scaling
 
 
@@ -126,7 +126,7 @@ def run(dataset, split, model_name, dim_hidden, num_layers, num_hops, num_sample
         max_batch_size = -1
     elif dataset in ['OGBN_arXiv', 'OGBN_Products', 'JPMC_Fraud_Detection', 'Elliptic_Bitcoin']:
         graph_sampler = SubtreeSampler(num_nodes, x, y, edge_index, edge_weight, edge_rv)
-        max_batch_size = min(math.ceil(train_mask.sum()/10.0), 1024)
+        max_batch_size = min(math.ceil(train_mask.sum()/10.0), 512)
     else:
         raise Exception('unexpected dataset encountered')
 
@@ -207,7 +207,7 @@ def run(dataset, split, model_name, dim_hidden, num_layers, num_hops, num_sample
         num_hops = 0 if (model_name == 'GBPN' and epoch == 1) else max_num_hops
         train(num_hops=num_hops, num_samples=num_samples)
 
-        if epoch % max(int(num_epoches*0.10), 20) == 0:
+        if epoch % max(int(num_epoches*0.10), 10) == 0:
             train_accuracy, val_accuracy, test_accuracy = evaluation(num_hops=num_hops)
             if val_accuracy > opt_val:
                 opt_val = val_accuracy
