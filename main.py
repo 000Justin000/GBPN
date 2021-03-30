@@ -49,7 +49,7 @@ def roc_auc(log_b, y):
     return roc_auc_score(y, np.exp(log_b[:, 1]))
 
 
-def run(dataset, homo_ratio, split, model_name, dim_hidden, num_layers, dropout_p, device, learning_rate, num_epoches, weighted_BP, learn_H, eval_C, verbose):
+def run(dataset, split, model_name, dim_hidden, num_layers, num_hops, num_samples, dropout_p, device, learning_rate, num_epoches, weighted_BP, learn_H, eval_C, verbose):
     if dataset == 'Cora':
         data = load_citation('Cora', split=split)
         c_weight = None
@@ -76,14 +76,6 @@ def run(dataset, homo_ratio, split, model_name, dim_hidden, num_layers, dropout_
         accuracy_fun = classification_accuracy
     elif dataset == 'Sex':
         data = load_sexual_interaction(split=split)
-        c_weight = None
-        accuracy_fun = classification_accuracy
-    elif dataset == 'Animal2':
-        data = load_animal2(homo_ratio=homo_ratio, split=split)
-        c_weight = None
-        accuracy_fun = classification_accuracy
-    elif dataset == 'Animal3':
-        data = load_animal3(homo_ratio=homo_ratio, split=split)
         c_weight = None
         accuracy_fun = classification_accuracy
     elif dataset == 'Squirrel':
@@ -132,23 +124,9 @@ def run(dataset, homo_ratio, split, model_name, dim_hidden, num_layers, dropout_
     if dataset in ['Cora', 'CiteSeer', 'PubMed', 'Coauthor_CS', 'Coauthor_Physics', 'County_Facebook', 'Sex', 'Animal2', 'Animal3', 'Squirrel', 'Chameleon']:
         graph_sampler = FullgraphSampler(num_nodes, x, y, edge_index, edge_weight, edge_rv)
         max_batch_size = -1
-        if model_name == 'MLP':
-            num_hops = 0
-        elif model_name == 'GBPN':
-            num_hops = 5
-        else:
-            num_hops = num_layers
-        num_samples = -1
     elif dataset in ['OGBN_arXiv', 'OGBN_Products', 'JPMC_Fraud_Detection', 'Elliptic_Bitcoin']:
         graph_sampler = SubtreeSampler(num_nodes, x, y, edge_index, edge_weight, edge_rv)
         max_batch_size = min(math.ceil(train_mask.sum()/10.0), 1024)
-        if model_name == 'MLP':
-            num_hops = 0
-        elif model_name == 'GBPN':
-            num_hops = 2
-        else:
-            num_hops = num_layers
-        num_samples = 5
     else:
         raise Exception('unexpected dataset encountered')
 
@@ -252,11 +230,12 @@ torch.manual_seed(0)
 torch.set_printoptions(precision=4, threshold=None, edgeitems=5, linewidth=300, profile=None, sci_mode=False)
 parser = argparse.ArgumentParser('model')
 parser.add_argument('--dataset', type=str, default='Cora')
-parser.add_argument('--homo_ratio', type=float, default=0.5)
 parser.add_argument('--split', metavar='N', type=float, nargs=3, default=None)
 parser.add_argument('--model_name', type=str, default='GBPN')
 parser.add_argument('--dim_hidden', type=int, default=256)
 parser.add_argument('--num_layers', type=int, default=2)
+parser.add_argument('--num_hops', type=int, default=2)
+parser.add_argument('--num_samples', type=int, default=-1)
 parser.add_argument('--dropout_p', type=float, default=0.0)
 parser.add_argument('--device', type=str, default='cpu')
 parser.add_argument('--learning_rate', type=float, default=0.01)
@@ -279,7 +258,7 @@ if not args.develop:
 
 test_acc = []
 for _ in range(args.num_trials):
-    test_acc.append(run(args.dataset, args.homo_ratio, args.split, args.model_name, args.dim_hidden, args.num_layers, args.dropout_p, args.device, args.learning_rate, args.num_epoches, args.weighted_BP, args.learn_H, args.eval_C, args.verbose))
+    test_acc.append(run(args.dataset, args.split, args.model_name, args.dim_hidden, args.num_layers, args.num_hops, args.num_samples, args.dropout_p, args.device, args.learning_rate, args.num_epoches, args.weighted_BP, args.learn_H, args.eval_C, args.verbose))
 
 print(args)
 print('overall test accuracies: {:7.3f} ± {:7.3f}'.format(np.mean(test_acc)*100, np.std(test_acc)*100))
