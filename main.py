@@ -101,13 +101,13 @@ def run(dataset, split, model_name, dim_hidden, num_layers, num_hops, num_sample
         accuracy_fun = roc_auc
     elif dataset == 'JPMC_Payment0':
         x, y, info = load_jpmc_payment('0')
-        data = preprocess_gnn_jpmc_fraud(x, y, info, split=split)
+        data = preprocess_gnn_jpmc_payment(x, y, info, split=split)
         _, cts = data.y.unique(return_counts=True)
         c_weight = (cts**-1.0) / (cts**-1.0).sum()
         accuracy_fun = roc_auc
     elif dataset == 'JPMC_Payment1':
         x, y, info = load_jpmc_payment('1')
-        data = preprocess_gnn_jpmc_fraud(x, y, info, split=split)
+        data = preprocess_gnn_jpmc_payment(x, y, info, split=split)
         _, cts = data.y.unique(return_counts=True)
         c_weight = (cts**-1.0) / (cts**-1.0).sum()
         accuracy_fun = roc_auc
