@@ -130,7 +130,7 @@ def run(dataset, split, model_name, dim_hidden, num_layers, num_hops, num_sample
     if dataset in ['Cora', 'CiteSeer', 'PubMed', 'Coauthor_CS', 'Coauthor_Physics', 'County_Facebook', 'Sex', 'Animal2', 'Animal3', 'Squirrel', 'Chameleon']:
         graph_sampler = FullgraphSampler(num_nodes, x, y, edge_index, edge_weight, edge_rv)
         max_batch_size = -1
-    elif dataset in ['OGBN_arXiv', 'OGBN_Products', 'JPMC_Fraud_Detection', 'Elliptic_Bitcoin']:
+    elif dataset in ['OGBN_arXiv', 'OGBN_Products', 'JPMC_Payment0', 'JPMC_Payment1', 'Elliptic_Bitcoin']:
         graph_sampler = SubtreeSampler(num_nodes, x, y, edge_index, edge_weight, edge_rv)
         max_batch_size = min(math.ceil(train_mask.sum()/10.0), 512)
     else:
