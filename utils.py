@@ -676,7 +676,7 @@ def load_ogbn(name='products', transform=None, split=None):
     return data if (transform is None) else transform(data)
 
 
-def load_jpmc_fraud():
+def load_jpmc_payment(dataset_id):
 
     def time_encoding(dt_str):
         dt = datetime.fromisoformat(dt_str)
@@ -692,13 +692,13 @@ def load_jpmc_fraud():
         emb = np.concatenate((np.sin(2 * np.pi * tfs), np.cos(2 * np.pi * tfs)))
         return emb
 
-    dat = pd.read_csv('datasets/aml/jpmc/jpmc_synthetic.csv', delimiter=',', skipinitialspace=True)
+    dat = pd.read_csv('datasets/aml/jpmc/payment{}.csv'.format(dataset_id), delimiter=',', skipinitialspace=True)
 
     # get time embedding
     time_emb = torch.tensor(dat['Time_step'].apply(time_encoding).array)
 
     # get logarithmic transformed USD amount
-    log_usd = torch.tensor(np.log(dat['USD_Amount']).array)
+    log_usd = torch.tensor(np.log(dat['USD_Amount'] + 1.0).array)
 
     # get one-hot encoding for sender country and bene country
     all_countries = pd.concat((dat['Sender_Country'], dat['Bene_Country'])).unique()
@@ -709,11 +709,14 @@ def load_jpmc_fraud():
     bene_cty_emb = F.one_hot(bene_cid, len(all_countries))
 
     # get one-hot encoding for sector
-    all_sid = dat['Sector'].unique()
-    all_sid.sort()
-    assert np.all(all_sid == np.arange(len(all_sid)))
-    sid = torch.tensor(dat['Sector'])
-    sct_emb = F.one_hot(sid, len(all_sid))
+    if 'Sector' in dat.columns:
+        all_sid = dat['Sector'].unique()
+        all_sid.sort()
+        assert np.all(all_sid == np.arange(len(all_sid)))
+        sid = torch.tensor(dat['Sector'])
+        sct_emb = F.one_hot(sid, len(all_sid))
+    else:
+        sct_emb = torch.zeros(dat.shape[0], 0)
 
     # get one-hot encoding for transaction type
     all_tst = dat['Transaction_Type'].unique()
@@ -749,7 +752,7 @@ def pad_sequence(sequences, batch_first=False, padding_value=0.0):
     return out_tensor, mask_tensor
 
 
-def preprocess_rnn_jpmc_fraud(feature, label, info, previous_label_as_feature=False):
+def preprocess_rnn_jpmc_payment(feature, label, info, previous_label_as_feature=False):
     info['index'] = info.index
     group = info[['index', 'Sender_Id']].groupby('Sender_Id')['index'].apply(np.array).reset_index(name='indices')
 
@@ -767,7 +770,7 @@ def preprocess_rnn_jpmc_fraud(feature, label, info, previous_label_as_feature=Fa
     return feature_padded, label_padded, feature_mask
 
 
-def preprocess_gnn_jpmc_fraud(feature, label, info, transform=None, split=[0.3, 0.2, 0.5]):
+def preprocess_gnn_jpmc_payment(feature, label, info, transform=None, split=[0.3, 0.2, 0.5]):
     last_seen = defaultdict(lambda: -1)
     edge_idx_list = []
     for i in range(info.shape[0]):

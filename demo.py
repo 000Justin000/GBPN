@@ -101,7 +101,7 @@ def evaluation(num_hops=2):
     return train_accuracy, val_accuracy, test_accuracy
 
 
-run_demo = True
+run_demo = False
 if run_demo:
     optimal_val_accuracy = 0.0
     optimal_test_accuracy = 0.0
@@ -170,7 +170,7 @@ ax2.legend(loc='lower center', ncol=2)
 # ax3.plot(all_hops, test_loss, color='tab:green', linestyle='dotted', marker='.')
 
 fig.tight_layout()
-plt.savefig('convergence.pdf', bbox_inches='tight', pad_inches=0)
+plt.savefig('gbpn_convergence.svg', bbox_inches='tight', pad_inches=0)
 plt.show()
 
 # plot accuracy visualization
@@ -190,7 +190,7 @@ label_colors = np.array(['tab:red', 'tab:green', 'tab:blue'])
 ax3.scatter(coords[:,0], coords[:,1], c=label_colors[y.numpy()], s=5.0, alpha=0.3)
 
 fig.tight_layout()
-plt.savefig('visualization_labels.pdf', bbox_inches='tight', pad_inches=0)
+plt.savefig('gbpn_labels.svg', bbox_inches='tight', pad_inches=0)
 plt.show()
 
 correct_step = torch.ones(num_nodes, dtype=torch.int64)*-1
@@ -209,10 +209,9 @@ ax4.set_ylim(ylims)
 for i in range(6):
     mask = correct_step == i
     ax4.scatter(coords[mask,0], coords[mask,1], color=cmap(i), s=5.0*0.7**i, label=r'$k={:d}$'.format(i))
-ax4.legend(loc='lower right', ncol=3, fontsize=10, markerscale=2.0, framealpha=1.0)
-
-fig.tight_layout()
-plt.savefig('visualization_predictions.pdf', bbox_inches='tight', pad_inches=0)
+    ax4.legend(loc='lower right', ncol=3, fontsize=10, markerscale=2.0, framealpha=1.0)
+    fig.tight_layout()
+    plt.savefig('gbpn_predictions{:d}.svg'.format(i), bbox_inches='tight', pad_inches=0)
 plt.show()
 
 print('finished')

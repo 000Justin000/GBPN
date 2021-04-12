@@ -21,7 +21,7 @@ import matplotlib.pyplot as plt
 def get_scaling(deg0, deg1):
     assert deg0.shape == deg1.shape
     scaling = torch.ones(deg0.shape[0]).to(deg0.device)
-    scaling[deg1 != 0] = (deg0 / deg1)[deg1 != 0]
+#   scaling[deg1 != 0] = (deg0 / deg1)[deg1 != 0]
     return scaling
 
 
@@ -99,8 +99,14 @@ def run(dataset, split, model_name, dim_hidden, num_layers, num_hops, num_sample
         _, cts = data.y[data.y >= 0].unique(return_counts=True)
         c_weight = (cts**-1.0) / (cts**-1.0).sum()
         accuracy_fun = roc_auc
-    elif dataset == 'JPMC_Fraud_Detection':
-        x, y, info = load_jpmc_fraud()
+    elif dataset == 'JPMC_Payment0':
+        x, y, info = load_jpmc_payment('0')
+        data = preprocess_gnn_jpmc_fraud(x, y, info, split=split)
+        _, cts = data.y.unique(return_counts=True)
+        c_weight = (cts**-1.0) / (cts**-1.0).sum()
+        accuracy_fun = roc_auc
+    elif dataset == 'JPMC_Payment1':
+        x, y, info = load_jpmc_payment('1')
         data = preprocess_gnn_jpmc_fraud(x, y, info, split=split)
         _, cts = data.y.unique(return_counts=True)
         c_weight = (cts**-1.0) / (cts**-1.0).sum()
