@@ -250,7 +250,7 @@ class BPConv(MessagePassing):
         self.n_channels = n_channels
 
     def get_logH(self):
-        logH = F.logsigmoid((self.param + self.param.transpose(0,1)) * 10.0)
+        logH = F.logsigmoid((self.param + self.param.transpose(0,1)))
         return (logH if self.learn_H else logH.detach().fill_diagonal_(0.0))
 
     def forward(self, x, edge_index, edge_weight, info):

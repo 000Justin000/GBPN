@@ -218,10 +218,10 @@ def run(dataset, split, model_name, dim_hidden, num_layers, num_hops, num_sample
             if val_accuracy > opt_val:
                 opt_val = val_accuracy
                 opt_test = test_accuracy
+            if type(model) == GBPN and verbose:
+                print()
+                print(model.bp_conv.get_logH().exp(), flush=True)
         print(flush=True)
-
-        if type(model) == GBPN and learn_H and verbose:
-            print(model.bp_conv.get_logH().exp(), flush=True)
 
     if verbose:
         print('optimal val accuracy: {:7.5f}, optimal test accuracy: {:7.5f}\n'.format(opt_val, opt_test))
