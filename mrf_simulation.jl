@@ -43,6 +43,10 @@ function heatbath!(grid::Array{Int,2},     # class label
     for _ in 1:iters
         stepheatbath!(grid, h=h, H=H, temp=temp, verbose=false)
     end
+    # next heatmap the final class labels
+    if plot
+        heatmap(grid);
+    end
 end
 
 n, c = 51, 3;
@@ -57,4 +61,3 @@ H = [0.9 0.1 0.6;
      0.1 0.9 0.6;
      0.6 0.6 0.2]
 heatbath!(grid, h, H; iters=1000000, temp=1.4)
-heatmap(grid);
