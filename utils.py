@@ -21,6 +21,20 @@ from datetime import datetime, timedelta
 from collections import defaultdict
 
 
+class MultiOptimizer:
+
+    def __init__(self, *optimizers):
+        self.optimizers = optimizers
+
+    def zero_grad(self):
+        for op in self.optimizers:
+            op.zero_grad()
+
+    def step(self):
+        for op in self.optimizers:
+            op.step()
+
+
 class MLP(nn.Module):
 
     def __init__(self, dim_in, dim_out, dim_hidden=128, num_layers=2, activation=nn.ReLU(), dropout_p=0.0):
@@ -246,12 +260,15 @@ class BPConv(MessagePassing):
     def __init__(self, n_channels, learn_H=False):
         super(BPConv, self).__init__(aggr='add')
         self.learn_H = learn_H
-        self.param = nn.Parameter(torch.zeros(n_channels, n_channels))
+        self.param = nn.Parameter(torch.eye(n_channels) * 0.0)
+        # self.PM_Net = MLP(n_channels*n_channels, n_channels*n_channels, num_layers=3)
         self.n_channels = n_channels
 
     def get_logH(self):
-        logH = F.logsigmoid((self.param + self.param.transpose(0,1)))
-        return (logH if self.learn_H else logH.detach().fill_diagonal_(0.0))
+        PM = self.param
+        # PM = self.PM_Net(self.param.reshape(-1)).reshape((self.n_channels, self.n_channels))
+        logH = F.logsigmoid(PM + PM.t())
+        return (logH if self.learn_H else F.logsigmoid(torch.zeros(self.n_channels, self.n_channels)).fill_diagonal_(0.0).to(logH.device))
 
     def forward(self, x, edge_index, edge_weight, info):
         # x has shape [N, n_channels]
@@ -276,15 +293,28 @@ class BPConv(MessagePassing):
         return log_b
 
 
+class LogEvidentialProb(nn.Module):
+
+    def __init__(self, dim=-1):
+        super(LogEvidentialProb, self).__init__()
+        self.dim = dim
+
+    def forward(self, x):
+        evidence = nn.functional.softplus(x, beta=5.0) + 0.1
+        return torch.log(evidence / evidence.sum(dim=self.dim, keepdim=True))
+
+
 class GBPN(nn.Module):
 
     def __init__(self, dim_in, dim_out, dim_hidden=32, num_layers=0, activation=nn.ReLU(), dropout_p=0.0, learn_H=False):
         super(GBPN, self).__init__()
-        self.transform = GMLP(dim_in, dim_out, dim_hidden=dim_hidden, num_layers=num_layers, activation=activation, dropout_p=dropout_p)
+        self.transform = nn.Sequential(MLP(dim_in, dim_out, dim_hidden=dim_hidden, num_layers=num_layers, activation=activation, dropout_p=dropout_p), nn.LogSoftmax())
         self.bp_conv = BPConv(dim_out, learn_H)
 
-    def forward(self, x, edge_index, edge_weight, edge_rv, agg_scaling=None, K=5):
-        log_b0 = self.transform(x, edge_index)
+    def forward(self, x, edge_index, edge_weight, edge_rv, phi=None, agg_scaling=None, K=5):
+        log_b0 = self.transform(x)
+        if phi is not None:
+            log_b0 = log_normalize(log_b0 + phi)
         info = {'log_b0': log_b0, 'log_msg_': None, 'edge_rv': edge_rv, 'agg_scaling': agg_scaling}
         log_b = log_b0
         for _ in range(K):
@@ -297,12 +327,10 @@ class GBPN(nn.Module):
         for batch_size, _, _, _, _, \
             _, _, subgraph_x, _, _, \
             subgraph_edge_index, _, _, _ in sampler.get_generator(max_batch_size=max_batch_size, num_hops=0):
-            log_b0_list.append(self.transform(subgraph_x.to(device), subgraph_edge_index.to(device))[:batch_size].cpu())
+            log_b0_list.append(self.transform(subgraph_x.to(device))[:batch_size].cpu())
         log_b0 = torch.cat(log_b0_list, dim=0)
-
         if phi is not None:
-            log_b0 = log_b0 + phi
-
+            log_b0 = log_normalize(log_b0 + phi)
         log_b_ = log_b0
         log_msg_ = torch.zeros(sampler.edge_index.shape[1], log_b0.shape[1], dtype=torch.float32)
         for _ in range(K):
@@ -332,10 +360,7 @@ class FullgraphSampler:
         self.edge_rv = edge_rv
         self.deg = degree(edge_index[1], num_nodes)
 
-    def get_generator(self, mask=None, shuffle=False, max_batch_size=-1, num_hops=0, num_samples=-1, device='cpu'):
-        # assert shuffle == False
-        assert max_batch_size == -1
-        assert num_samples == -1
+    def get_generator(self, mask=None, device='cpu', **kwargs):
 
         def generator():
             batch_nodes = torch.arange(self.num_nodes, dtype=torch.int64) if (mask is None) else mask.nonzero(as_tuple=True)[0]
@@ -370,7 +395,7 @@ class SubtreeSampler:
         self.G.add_edges_from(torch.cat((edge_index, torch.arange(edge_index.shape[1]).reshape(1,-1)), dim=0).transpose(0,1).numpy())
         self.deg = degree(edge_index[1], num_nodes)
 
-    def get_generator(self, mask=None, shuffle=False, max_batch_size=-1, num_hops=0, num_samples=-1, device='cpu'):
+    def get_generator(self, mask=None, shuffle=True, max_batch_size=-1, num_hops=0, num_samples=-1, device='cpu'):
         idx = torch.arange(self.num_nodes, dtype=torch.int64) if (mask is None) else mask.nonzero(as_tuple=True)[0]
         if shuffle:
             idx = idx[torch.randperm(idx.shape[0])]
@@ -380,7 +405,6 @@ class SubtreeSampler:
         n_batch = math.ceil(idx.shape[0] / max_batch_size)
 
         def generator():
-            edge_oid2nid = torch.zeros(self.edge_index.shape[1], dtype=torch.int64)
             for batch_nodes in idx.chunk(n_batch):
                 batch_size = batch_nodes.shape[0]
 
@@ -814,6 +838,26 @@ def load_elliptic_bitcoin(transform=None, split=None):
     edge_num1 = list(map(lambda x: id2num[x], edge_ids['txId1']))
     edge_num2 = list(map(lambda x: id2num[x], edge_ids['txId2']))
     edge_index = torch.stack((torch.tensor(edge_num1), torch.tensor(edge_num2)), dim=0)
+
+    num_nodes = features.shape[0]
+    train_idx, val_idx, test_idx = rand_split(num_nodes, split)
+    train_idx, val_idx, test_idx = torch.tensor(train_idx), torch.tensor(val_idx), torch.tensor(test_idx)
+
+    data = Data(x=features, y=labels, edge_index=edge_index)
+    data.train_mask = torch.zeros(num_nodes, dtype=torch.bool).scatter_(0, train_idx, True) & (labels != -1)
+    data.val_mask = torch.zeros(num_nodes, dtype=torch.bool).scatter_(0, val_idx, True) & (labels != -1)
+    data.test_mask = torch.zeros(num_nodes, dtype=torch.bool).scatter_(0, test_idx, True) & (labels != -1)
+
+    data.edge_index, data.edge_weight, data.edge_rv = process_edge_index(num_nodes, data.edge_index, None)
+
+    return data if (transform is None) else transform(data)
+
+
+def load_ising(transform=None, split=[0.3, 0.2, 0.5], interaction='+', dataset_id=0):
+    edge_index = torch.tensor((pd.read_csv('datasets/ising{}/adj'.format(interaction), sep='\t', header=None)-1).to_numpy().T)
+    features = torch.tensor(pd.read_csv('datasets/ising{}/coord'.format(interaction), sep='\t', header=None).to_numpy(), dtype=torch.float32)
+    labels = torch.tensor(pd.read_csv('datasets/ising{}/label'.format(interaction), sep='\t', header=None).to_numpy(), dtype=torch.int64)[:,dataset_id]
+    labels[labels == -1] = 0
 
     num_nodes = features.shape[0]
     train_idx, val_idx, test_idx = rand_split(num_nodes, split)

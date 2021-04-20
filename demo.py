@@ -57,7 +57,7 @@ if edge_weight is None:
 c_weight = None
 accuracy_fun = classification_accuracy
 
-model = GBPN(num_features, num_classes, dim_hidden=256, num_layers=num_layers, activation=nn.LeakyReLU(), dropout_p=0.1, learn_H=learn_H)
+model = GBPN(num_features, num_classes, dim_hidden=256, num_layers=num_layers, activation=nn.LeakyReLU(), dropout_p=0.6, learn_H=learn_H)
 optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate, weight_decay=2.5e-4)
 
 graph_sampler = FullgraphSampler(num_nodes, x, y, edge_index, edge_weight, edge_rv)
@@ -101,7 +101,7 @@ def evaluation(num_hops=2):
     return train_accuracy, val_accuracy, test_accuracy
 
 
-run_demo = False
+run_demo = True
 if run_demo:
     optimal_val_accuracy = 0.0
     optimal_test_accuracy = 0.0
@@ -122,7 +122,7 @@ model.load_state_dict(torch.load('model.pt'))
 
 with torch.no_grad():
     model.eval()
-    log_b0 = model.transform(x, edge_index)
+    log_b0 = model.transform(x)
     edge_weight = torch.ones(edge_index.shape[1])
     agg_scaling = torch.ones(x.shape[0])
     info = {'log_b0': log_b0,
