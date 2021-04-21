@@ -308,7 +308,7 @@ class GBPN(nn.Module):
 
     def __init__(self, dim_in, dim_out, dim_hidden=32, num_layers=0, activation=nn.ReLU(), dropout_p=0.0, learn_H=False):
         super(GBPN, self).__init__()
-        self.transform = nn.Sequential(MLP(dim_in, dim_out, dim_hidden=dim_hidden, num_layers=num_layers, activation=activation, dropout_p=dropout_p), nn.LogSoftmax())
+        self.transform = nn.Sequential(MLP(dim_in, dim_out, dim_hidden=dim_hidden, num_layers=num_layers, activation=activation, dropout_p=dropout_p), nn.LogSoftmax(dim=-1))
         self.bp_conv = BPConv(dim_out, learn_H)
 
     def forward(self, x, edge_index, edge_weight, edge_rv, phi=None, agg_scaling=None, K=5):
@@ -873,10 +873,10 @@ def load_ising(transform=None, split=[0.3, 0.2, 0.5], interaction='+', dataset_i
     return data if (transform is None) else transform(data)
 
 
-def load_mrf(transform=None, split=[0.3, 0.2, 0.5], dataset_id=0):
-    edge_index = torch.tensor((pd.read_csv('datasets/mrf/adj', sep='\t', header=None)-1).to_numpy().T)
-    features = torch.tensor(pd.read_csv('datasets/mrf/coord', sep='\t', header=None).to_numpy(), dtype=torch.float32)
-    labels = torch.tensor(pd.read_csv('datasets/mrf/label', sep='\t', header=None).to_numpy(), dtype=torch.int64)[:,dataset_id]
+def load_mrf(transform=None, split=[0.3, 0.2, 0.5], interaction='+', dataset_id=0):
+    edge_index = torch.tensor((pd.read_csv('datasets/mrf{}/adj'.format(interaction), sep='\t', header=None)-1).to_numpy().T)
+    features = torch.tensor(pd.read_csv('datasets/mrf{}/coord'.format(interaction), sep='\t', header=None).to_numpy(), dtype=torch.float32)
+    labels = torch.tensor(pd.read_csv('datasets/mrf{}/label'.format(interaction), sep='\t', header=None).to_numpy(), dtype=torch.int64)[:,dataset_id]
 
     num_nodes = features.shape[0]
     train_idx, val_idx, test_idx = rand_split(num_nodes, split)
