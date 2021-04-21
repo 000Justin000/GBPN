@@ -109,6 +109,10 @@ def run(dataset, split, model_name, dim_hidden, num_layers, num_hops, num_sample
         data = load_ising(split=split, interaction=dataset[-1], dataset_id=np.random.randint(10))
         c_weight = None
         accuracy_fun = classification_accuracy
+    elif dataset == 'Simulated_MRF':
+        data = load_mrf(split=split, dataset_id=np.random.randint(10))
+        c_weight = None
+        accuracy_fun = classification_accuracy
     else:
         raise Exception('unexpected dataset')
 
@@ -125,7 +129,7 @@ def run(dataset, split, model_name, dim_hidden, num_layers, num_hops, num_sample
     if (model_name == 'GBPN') and weighted_BP:
         edge_weight = ((deg[edge_index[0]] * deg[edge_index[1]])**-0.5 * deg.mean())
 
-    if dataset in ['Cora', 'CiteSeer', 'PubMed', 'Coauthor_CS', 'Coauthor_Physics', 'County_Facebook', 'Sex', 'Animal2', 'Animal3', 'Squirrel', 'Chameleon', 'Ising+', 'Ising-']:
+    if dataset in ['Cora', 'CiteSeer', 'PubMed', 'Coauthor_CS', 'Coauthor_Physics', 'County_Facebook', 'Sex', 'Animal2', 'Animal3', 'Squirrel', 'Chameleon', 'Ising+', 'Ising-', 'Simulated_MRF']:
         graph_sampler = FullgraphSampler(num_nodes, x, y, edge_index, edge_weight, edge_rv)
         max_batch_size = -1
     elif dataset in ['OGBN_arXiv', 'OGBN_Products', 'JPMC_Payment0', 'JPMC_Payment1', 'Elliptic_Bitcoin']:

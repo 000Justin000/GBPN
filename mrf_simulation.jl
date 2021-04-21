@@ -1,3 +1,4 @@
+using DelimitedFiles;
 using StatsBase;
 using Printf;
 using Plots;
@@ -50,7 +51,6 @@ function heatbath!(grid::Array{Int,2},     # class label
 end
 
 n, c = 51, 3;
-grid = rand(1:c, n, n);
 l = range(-1.0, 1.0, length=n);
 f = [[l[i],l[j]] for j in 1:n for i in 1:n];
 s = zeros(n,n,c);
@@ -60,4 +60,12 @@ h = 1.0 ./ (1.0 .+ exp.(-s * 0.2));
 H = [0.9 0.1 0.6; 
      0.1 0.9 0.6;
      0.6 0.6 0.2]
-heatbath!(grid, h, H; iters=1000000, temp=1.4)
+
+labels = []
+board = zeros(n, n);
+for _ in 1:10
+    board = rand(1:c, n, n);
+    heatbath!(board, h, H; iters=1000000, temp=1.4);
+    push!(labels, board[:].-1);
+end
+writedlm("labels", hcat(labels...));
