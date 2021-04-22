@@ -395,7 +395,7 @@ class SubtreeSampler:
         self.G.add_edges_from(torch.cat((edge_index, torch.arange(edge_index.shape[1]).reshape(1,-1)), dim=0).transpose(0,1).numpy())
         self.deg = degree(edge_index[1], num_nodes)
 
-    def get_generator(self, mask=None, shuffle=True, max_batch_size=-1, num_hops=0, num_samples=-1, device='cpu'):
+    def get_generator(self, mask=None, shuffle=False, max_batch_size=-1, num_hops=0, num_samples=-1, device='cpu'):
         idx = torch.arange(self.num_nodes, dtype=torch.int64) if (mask is None) else mask.nonzero(as_tuple=True)[0]
         if shuffle:
             idx = idx[torch.randperm(idx.shape[0])]
