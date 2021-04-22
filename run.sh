@@ -1,6 +1,6 @@
 # make device="cuda:0" run_Ising_P
 # make device="cuda:0" run_Ising_M
-make device="cuda:0" run_MRF_P
+# make device="cuda:0" run_MRF_P
 make device="cuda:0" run_MRF_M
 # make device="cuda:0" run_Sex
 # make device="cuda:0" run_County_Facebook

@@ -37,20 +37,15 @@ function heatbath!(board::Array{Int,2},     # class label
                    H::Array{Float64,2};    # coupling potential
                    temp::Float64 = 1.0,    # temperature
                    iters::Integer = 50000, # number of iterations
-                   plot::Bool = true,      # plot flag
                    verbose::Bool = true)   # verbose flag
 
     @assert iters > 100 "ArgumentError: \"iters\" must be higher than 100"
     for _ in 1:iters
         stepheatbath!(board, h=h, H=H, temp=temp, verbose=false)
     end
-    # next visualize the final class labels
-    if plot
-        visualize(board);
-    end
 end
 
-function visualize(board)
+function visualize(board, i=nothing)
     n = size(board, 1);
     l = range(-1.0, 1.0, length=n);
     x = [l[i] for j in 1:n for i in 1:n];
@@ -60,7 +55,8 @@ function visualize(board)
     scatter!(h, x[c .== 1], y[c .== 1], color=:black, label="");
     scatter!(h, x[c .== 2], y[c .== 2], color=:white, label="");
     scatter!(h, x[c .== 3], y[c .== 3], color=:red,   label="");
-    savefig(h, "board.svg");
+    fname = ((i == nothing) ? "board.svg" : ("board"*string(i)*".svg"));
+    savefig(h, fname);
     display(h);
 end
 
@@ -68,19 +64,19 @@ n, c = 51, 3;
 l = range(-1.0, 1.0, length=n);
 f = [[l[i],l[j]] for j in 1:n for i in 1:n];
 
-H = [0.9 0.1 0.6; 
-     0.1 0.9 0.6;
-     0.6 0.6 0.2]
-hconst = 0.65
-hscale = 0.20
-temp = 1.40
+# H = [0.9 0.1 0.6; 
+#      0.1 0.9 0.6;
+#      0.6 0.6 0.2]
+# hconst = 0.65
+# hscale = 0.20
+# temp = 1.40
 
-# H = [0.3 0.1 0.6; 
-#      0.1 0.9 0.1;
-#      0.6 0.1 0.3]
-# hconst = 0.0
-# hscale = 0.30
-# temp = 1.80
+H = [0.3 0.1 0.6; 
+     0.1 0.9 0.1;
+     0.6 0.1 0.3]
+hconst = 0.00
+hscale = 0.60
+temp = 1.50
 
 s = zeros(n,n,c);
 s[:,:,1] = (l.^2 .+ l'.^2) .- hconst;
@@ -90,9 +86,10 @@ h = 1.0 ./ (1.0 .+ exp.(-s * hscale));
 labels = []
 board = rand(1:c, n, n);
 visualize(board);
-for _ in 1:10
+for i in 0:9
     board[:,:] = rand(1:c, n, n);
     heatbath!(board, h, H; iters=1000000, temp=temp);
+    visualize(board, i);
     push!(labels, board[:].-1);
 end
 writedlm("labels", hcat(labels...));
