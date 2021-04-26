@@ -15,7 +15,7 @@ evaluator = Evaluator(name='ogbn-products')
 data = dataset[0]
 
 train_idx = split_idx['train']
-train_loader = NeighborSampler(data.edge_index, node_idx=train_idx, sizes=[5, 5], batch_size=512, shuffle=True, num_workers=12)
+train_loader = NeighborSampler(data.edge_index, node_idx=train_idx, sizes=[10, 10, 10], batch_size=512, shuffle=True, num_workers=12)
 subgraph_loader = NeighborSampler(data.edge_index, node_idx=None, sizes=[-1], batch_size=1024, shuffle=False, num_workers=12)
 
 
@@ -88,8 +88,8 @@ class GAT(torch.nn.Module):
         return x_all
 
 
-device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-model = GAT(dataset.num_features, 128, dataset.num_classes, num_layers=2, heads=4)
+device = torch.device('cuda:1' if torch.cuda.is_available() else 'cpu')
+model = GAT(dataset.num_features, 128, dataset.num_classes, num_layers=3, heads=4)
 model = model.to(device)
 
 x = data.x.to(device)
@@ -141,7 +141,7 @@ def test():
 
 
 test_accs = []
-for run in range(1, 11):
+for run in range(3):
     print('')
     print(f'Run {run:02d}:')
     print('')
