@@ -15,6 +15,7 @@ from torch_geometric.nn import GCNConv, SAGEConv, GATConv
 from torch_geometric.nn.conv.gcn_conv import gcn_norm
 from torch_geometric.utils import degree, subgraph, remove_self_loops, to_undirected, contains_self_loops, is_undirected, stochastic_blockmodel_graph, k_hop_subgraph
 from torch_geometric.data import Data
+from torch_geometric.data import NeighborSampler
 from torch_geometric.datasets import Planetoid, Coauthor, WikipediaNetwork
 from ogb.nodeproppred import PygNodePropPredDataset
 from datetime import datetime, timedelta
@@ -408,7 +409,10 @@ class SubtreeSampler:
             for batch_nodes in idx.chunk(n_batch):
                 batch_size = batch_nodes.shape[0]
 
-                T = nx.sample_subtree(self.G, batch_nodes.tolist(), num_hops, num_samples)
+                if (num_hops == 1 and num_samples == -1):
+                    T = nx.onehop_subgraph(self.G, batch_nodes.tolist())
+                else:
+                    T = nx.sample_subtree(self.G, batch_nodes.tolist(), num_hops, num_samples)
                 subgraph_nodes = torch.tensor(T.get_nodes(), dtype=torch.int64)
                 subgraph_size = subgraph_nodes.shape[0]
                 T_edges = torch.tensor(T.get_edges(), dtype=torch.int64)

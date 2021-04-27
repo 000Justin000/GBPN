@@ -65,7 +65,14 @@ struct Graph {
     }
 };
 
-void dfs(Graph& G, Graph& T, int r, int rid, int max_d, int num_samples) {
+void subtree_dfs(Graph& G, Graph& T, int r, int rid, int max_d, int num_samples) {
+    /* G: the original graph
+       T: the sampled subtree
+       r: root node id in the original graph G
+       rid: root node id in the combined forest TT
+       max_d: maximum depth
+       num_samples: number of neighbors to sample */
+
     vector<tuple<int,int,int,int>> stack;
     if (max_d > 0)
         stack.push_back(make_tuple(r, rid, 0, -1));
@@ -128,7 +135,7 @@ Graph sample_subtree(Graph& G, vector<int> batch_nodes, int max_d, int num_sampl
     #pragma omp parallel for
     for (unsigned rid=0; rid<batch_size; rid++)
     {
-        dfs(G, TList[rid], batch_nodes[rid], 0, max_d, num_samples);
+        subtree_dfs(G, TList[rid], batch_nodes[rid], 0, max_d, num_samples);
     }
 
     vector<vector<int>> l2g;
@@ -154,6 +161,48 @@ Graph sample_subtree(Graph& G, vector<int> batch_nodes, int max_d, int num_sampl
     return TT;    
 }
 
+Graph onehop_subgraph(Graph& G, vector<int> batch_nodes) {
+    unsigned batch_size = batch_nodes.size();
+
+    Graph S = Graph(batch_nodes);
+    
+    // map from the original indices of batch nodes to indices in the new graph S
+    map<int,int> b2g_map;
+    for (unsigned rid=0; rid<batch_size; rid++)
+        b2g_map[batch_nodes[rid]] = rid;
+
+    // map from the original indices of neighboring nodes to indices in the new graph S
+    map<int,int> n2g_map;
+    for (unsigned uid=0; uid<batch_size; uid++)
+    {
+        int u = batch_nodes[uid];
+        for (auto arc: G.nbrs[u])
+        {
+            int v = arc.first;
+            int vid;
+
+            if (n2g_map.find(v) != n2g_map.end())
+            {
+                vid = n2g_map[v];
+            }
+            else
+            {
+                vid = S.number_of_nodes();
+                S.add_node(v);
+                n2g_map[v] = vid;
+            }
+
+            int uvid = arc.second;
+            int vuid = lower_bound(G.nbrs[v].begin(), G.nbrs[v].end(), make_pair(u,0), comp_first)->second;
+
+            S.add_edge(uid, vid, uvid);
+            S.add_edge(vid, uid, vuid);
+        }
+    }
+
+    return S;
+}
+
 PYBIND11_MODULE(cnetworkx, m) {
     py::class_<Graph>(m, "Graph")
         .def(py::init<int>())
@@ -163,5 +212,6 @@ PYBIND11_MODULE(cnetworkx, m) {
         .def("get_nodes", &Graph::get_nodes)
         .def("get_edges", &Graph::get_edges);
     
-   m.def("sample_subtree", &sample_subtree);
+   m.def("sample_subtree",  &sample_subtree);
+   m.def("onehop_subgraph", &onehop_subgraph);
 }
