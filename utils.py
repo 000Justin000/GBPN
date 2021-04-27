@@ -579,7 +579,7 @@ def load_county_facebook(transform=None, split=[0.3, 0.2, 0.5], normalize=True):
     dat = pd.read_csv('datasets/county_facebook/dat.csv')
     adj = pd.read_csv('datasets/county_facebook/adj.csv')
 
-    x = torch.tensor(dat.values[:, 3:9], dtype=torch.float32)
+    x = torch.tensor(dat.values[:, 0:9], dtype=torch.float32)
     if normalize:
         x = (x - x.mean(dim=0)) / x.std(dim=0)
     y = torch.tensor(dat.values[:, 9] < dat.values[:, 10], dtype=torch.int64)
