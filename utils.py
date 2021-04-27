@@ -15,7 +15,6 @@ from torch_geometric.nn import GCNConv, SAGEConv, GATConv
 from torch_geometric.nn.conv.gcn_conv import gcn_norm
 from torch_geometric.utils import degree, subgraph, remove_self_loops, to_undirected, contains_self_loops, is_undirected, stochastic_blockmodel_graph, k_hop_subgraph
 from torch_geometric.data import Data
-from torch_geometric.data import NeighborSampler
 from torch_geometric.datasets import Planetoid, Coauthor, WikipediaNetwork
 from ogb.nodeproppred import PygNodePropPredDataset
 from datetime import datetime, timedelta
