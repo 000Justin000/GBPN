@@ -1,5 +1,5 @@
 build_cnetworkx:
-	c++ -O3 -Wall -shared -fopenmp -std=c++17 -fPIC $(shell python3 -m pybind11 --includes) cnetworkx.cpp -o cnetworkx$(shell python3-config --extension-suffix)
+	c++ -O3 -Wall -shared -std=c++17 -fPIC $(shell python3 -m pybind11 --includes) cnetworkx.cpp -o cnetworkx$(shell python3-config --extension-suffix)
 
 run_Ising_P:
 	python main.py --dataset Ising+               --split 0.3 0.2 0.5 --model_name MLP  --dim_hidden 256 --num_layers 2 --num_hops 0 --dropout_p 0.1 --learning_rate 1.0e-3 --num_epoches 500 --num_trials 30 --device $(device)                    --verbose
