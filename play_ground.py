@@ -9,9 +9,9 @@ from torch_geometric.data import NeighborSampler
 from torch_geometric.nn import GATConv
 
 root = 'datasets'
-dataset = PygNodePropPredDataset('ogbn-products', root)
+dataset = PygNodePropPredDataset('ogbn-arxiv', root)
 split_idx = dataset.get_idx_split()
-evaluator = Evaluator(name='ogbn-products')
+evaluator = Evaluator(name='ogbn-arxiv')
 data = dataset[0]
 
 train_idx = split_idx['train']
@@ -88,7 +88,7 @@ class GAT(torch.nn.Module):
         return x_all
 
 
-device = torch.device('cuda:1' if torch.cuda.is_available() else 'cpu')
+device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
 model = GAT(dataset.num_features, 128, dataset.num_classes, num_layers=3, heads=4)
 model = model.to(device)
 

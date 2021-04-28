@@ -212,6 +212,6 @@ PYBIND11_MODULE(cnetworkx, m) {
         .def("get_nodes", &Graph::get_nodes)
         .def("get_edges", &Graph::get_edges);
     
-   m.def("sample_subtree",  &sample_subtree);
-   m.def("onehop_subgraph", &onehop_subgraph);
+    m.def("sample_subtree",  &sample_subtree);
+    m.def("onehop_subgraph", &onehop_subgraph);
 }

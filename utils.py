@@ -260,13 +260,11 @@ class BPConv(MessagePassing):
     def __init__(self, n_channels, learn_H=False):
         super(BPConv, self).__init__(aggr='add')
         self.learn_H = learn_H
-        self.param = nn.Parameter(torch.eye(n_channels) * 0.0)
-        # self.PM_Net = MLP(n_channels*n_channels, n_channels*n_channels, num_layers=3)
+        self.param = nn.Parameter(torch.zeros(n_channels, n_channels))
         self.n_channels = n_channels
 
     def get_logH(self):
         PM = self.param
-        # PM = self.PM_Net(self.param.reshape(-1)).reshape((self.n_channels, self.n_channels))
         logH = F.logsigmoid(PM + PM.t())
         return (logH if self.learn_H else F.logsigmoid(torch.zeros(self.n_channels, self.n_channels)).fill_diagonal_(0.0).to(logH.device))
 
@@ -418,7 +416,8 @@ class SubtreeSampler:
                 subgraph_edge_index = T_edges[:,0:2].t() if T_edges.shape[0] > 0 else torch.zeros(2, 0, dtype=torch.int64)
                 subgraph_edge_oid = T_edges[:,2] if T_edges.shape[0] > 0 else torch.zeros(0, dtype=torch.int64)
 
-                assert subgraph_size == subgraph_edge_index.shape[1]//2 + batch_size
+                if not (num_hops == 1 and num_samples == -1):
+                    assert subgraph_size == subgraph_edge_index.shape[1]//2 + batch_size
                 assert torch.all(subgraph_nodes[subgraph_edge_index.reshape(-1)] == self.edge_index[:,subgraph_edge_oid].reshape(-1))
 
                 subgraph_edge_index, subgraph_edge_oid, subgraph_edge_rv = process_edge_index(subgraph_nodes.shape[0], subgraph_edge_index, subgraph_edge_oid)
