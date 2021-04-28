@@ -12,7 +12,7 @@ from torch_geometric.nn import GCNConv
 from torch_geometric.transforms import ToSparseTensor
 from torch_geometric.nn import MessagePassing
 from torch_geometric.utils import degree, is_undirected, subgraph
-from sklearn.metrics import roc_auc_score
+from sklearn.metrics import roc_auc_score, precision_recall_curve, f1_score
 from utils import *
 import matplotlib
 import matplotlib.pyplot as plt
@@ -47,6 +47,21 @@ def roc_auc(log_b, y):
     if type(y) == torch.Tensor:
         y = y.detach().cpu().numpy()
     return roc_auc_score(y, np.exp(log_b[:, 1]))
+
+
+def optimal_f1_score(log_b, y, optimal_threshold=None):
+    if type(log_b) == torch.Tensor:
+        log_b = log_b.detach().cpu().numpy()
+    if type(y) == torch.Tensor:
+        y = y.detach().cpu().numpy()
+    y_probs = np.exp(log_b[:, 1])
+    if optimal_threshold == None:
+        precisions, recalls, thresholds = precision_recall_curve(y, y_probs)
+        f1_scores = 2*recalls*precisions/(recalls+precisions)
+        return np.max(f1_scores), thresholds[np.argmax(f1_scores)]
+    else:
+        y_preds = (y_probs > optimal_threshold).astype(int)
+        return f1_score(y, y_preds)
 
 
 def run(dataset, split, model_name, dim_hidden, num_layers, num_hops, num_samples, dropout_p, device, learning_rate, num_epoches, weighted_BP, learn_H, eval_C, verbose):
@@ -98,13 +113,13 @@ def run(dataset, split, model_name, dim_hidden, num_layers, num_hops, num_sample
         data = load_elliptic_bitcoin(split=split)
         _, cts = data.y[data.y >= 0].unique(return_counts=True)
         c_weight = (cts**-1.0) / (cts**-1.0).sum()
-        accuracy_fun = roc_auc
+        accuracy_fun = optimal_f1_score
     elif dataset in ['JPMC_Payment0', 'JPMC_Payment1']:
         x, y, info = load_jpmc_payment(dataset[-1])
         data = preprocess_gnn_jpmc_payment(x, y, info, split=split)
         _, cts = data.y.unique(return_counts=True)
         c_weight = (cts**-1.0) / (cts**-1.0).sum()
-        accuracy_fun = roc_auc
+        accuracy_fun = optimal_f1_score
     elif dataset in ['Ising+', 'Ising-']:
         data = load_ising(split=split, interaction=dataset[-1], dataset_id=np.random.randint(10))
         c_weight = None
@@ -186,7 +201,10 @@ def run(dataset, split, model_name, dim_hidden, num_layers, num_hops, num_sample
             log_b_list.append(subgraph_log_b[:batch_size].detach().cpu())
             gth_y_list.append(batch_y.cpu())
         mean_loss = total_loss / int(train_mask.sum())
-        accuracy = accuracy_fun(torch.cat(log_b_list, dim=0), torch.cat(gth_y_list, dim=0))
+        if accuracy_fun == optimal_f1_score:
+            accuracy, _ = optimal_f1_score(torch.cat(log_b_list, dim=0), torch.cat(gth_y_list, dim=0))
+        else:
+            accuracy = accuracy_fun(torch.cat(log_b_list, dim=0), torch.cat(gth_y_list, dim=0))
         if verbose:
             print('step {:5d}, train loss: {:5.3f}, train accuracy: {:5.3f}'.format(epoch, mean_loss, accuracy), end='    ', flush=True)
         return accuracy
@@ -195,9 +213,14 @@ def run(dataset, split, model_name, dim_hidden, num_layers, num_hops, num_sample
     def evaluation(num_hops=2):
         model.eval()
         log_b = model.inference(graph_sampler, max_batch_size, device, K=num_hops)
-        train_accuracy = accuracy_fun(log_b[train_mask], y[train_mask])
-        val_accuracy = accuracy_fun(log_b[val_mask], y[val_mask])
-        test_accuracy = accuracy_fun(log_b[test_mask], y[test_mask])
+        if accuracy_fun == optimal_f1_score:
+            train_accuracy, _               = optimal_f1_score(log_b[train_mask], y[train_mask])
+            val_accuracy, optimal_threshold = optimal_f1_score(log_b[val_mask], y[val_mask])
+            test_accuracy                   = optimal_f1_score(log_b[test_mask], y[test_mask], optimal_threshold=optimal_threshold)
+        else:
+            train_accuracy = accuracy_fun(log_b[train_mask], y[train_mask])
+            val_accuracy = accuracy_fun(log_b[val_mask], y[val_mask])
+            test_accuracy = accuracy_fun(log_b[test_mask], y[test_mask])
         if verbose:
             print('inductive accuracy: ({:5.3f}, {:5.3f}, {:5.3f})'.format(train_accuracy, val_accuracy, test_accuracy), end='    ', flush=True)
 
@@ -206,9 +229,14 @@ def run(dataset, split, model_name, dim_hidden, num_layers, num_hops, num_sample
             phi[train_mask] = torch.log(F.one_hot(y[train_mask], num_classes).float())
             log_b = model.inference(graph_sampler, max_batch_size, device, phi=phi, K=num_hops)
 
-            train_accuracy = accuracy_fun(log_b[train_mask], y[train_mask])
-            val_accuracy = accuracy_fun(log_b[val_mask], y[val_mask])
-            test_accuracy = accuracy_fun(log_b[test_mask], y[test_mask])
+            if accuracy_fun == optimal_f1_score:
+                train_accuracy, _               = optimal_f1_score(log_b[train_mask], y[train_mask])
+                val_accuracy, optimal_threshold = optimal_f1_score(log_b[val_mask], y[val_mask])
+                test_accuracy                   = optimal_f1_score(log_b[test_mask], y[test_mask], optimal_threshold=optimal_threshold)
+            else:
+                train_accuracy = accuracy_fun(log_b[train_mask], y[train_mask])
+                val_accuracy = accuracy_fun(log_b[val_mask], y[val_mask])
+                test_accuracy = accuracy_fun(log_b[test_mask], y[test_mask])
             if verbose:
                 print('transductive accuracy: ({:5.3f}, {:5.3f}, {:5.3f})'.format(train_accuracy, val_accuracy, test_accuracy), end='', flush=True)
 
