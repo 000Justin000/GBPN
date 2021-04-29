@@ -214,9 +214,9 @@ def run(dataset, split, model_name, dim_hidden, num_layers, num_hops, num_sample
         model.eval()
         log_b = model.inference(graph_sampler, max_batch_size, device, K=num_hops)
         if accuracy_fun == optimal_f1_score:
-            train_accuracy, _               = optimal_f1_score(log_b[train_mask], y[train_mask])
+            train_accuracy, _ = optimal_f1_score(log_b[train_mask], y[train_mask])
             val_accuracy, optimal_threshold = optimal_f1_score(log_b[val_mask], y[val_mask])
-            test_accuracy                   = optimal_f1_score(log_b[test_mask], y[test_mask], optimal_threshold=optimal_threshold)
+            test_accuracy = optimal_f1_score(log_b[test_mask], y[test_mask], optimal_threshold=optimal_threshold)
         else:
             train_accuracy = accuracy_fun(log_b[train_mask], y[train_mask])
             val_accuracy = accuracy_fun(log_b[val_mask], y[val_mask])
@@ -230,9 +230,9 @@ def run(dataset, split, model_name, dim_hidden, num_layers, num_hops, num_sample
             log_b = model.inference(graph_sampler, max_batch_size, device, phi=phi, K=num_hops)
 
             if accuracy_fun == optimal_f1_score:
-                train_accuracy, _               = optimal_f1_score(log_b[train_mask], y[train_mask])
+                train_accuracy, _ = optimal_f1_score(log_b[train_mask], y[train_mask])
                 val_accuracy, optimal_threshold = optimal_f1_score(log_b[val_mask], y[val_mask])
-                test_accuracy                   = optimal_f1_score(log_b[test_mask], y[test_mask], optimal_threshold=optimal_threshold)
+                test_accuracy = optimal_f1_score(log_b[test_mask], y[test_mask], optimal_threshold=optimal_threshold)
             else:
                 train_accuracy = accuracy_fun(log_b[train_mask], y[train_mask])
                 val_accuracy = accuracy_fun(log_b[val_mask], y[val_mask])
@@ -244,7 +244,7 @@ def run(dataset, split, model_name, dim_hidden, num_layers, num_hops, num_sample
 
     max_num_hops = num_hops
     best_val, opt_val, opt_test = 0.0, 0.0, 0.0
-    for epoch in range(1,num_epoches+1):
+    for epoch in range(1, num_epoches+1):
         num_hops = 0 if (model_name == 'GBPN' and epoch <= 0) else max_num_hops
         train(num_hops=num_hops, num_samples=num_samples)
 

@@ -280,6 +280,8 @@ class BPConv(MessagePassing):
             x_j = x_j - info['log_msg_'][info['edge_rv']]
         logC = self.get_logH().unsqueeze(0) * edge_weight.unsqueeze(-1).unsqueeze(-1)
         log_msg = log_normalize(torch.logsumexp(x_j.unsqueeze(-1) + logC, dim=-2))
+        # apply damping
+        log_msg = info['log_msg_'] + 0.8 * (log_msg - info['log_msg_'])
         info['log_msg_'] = log_msg
         return log_msg
 
