@@ -21,7 +21,7 @@ import matplotlib.pyplot as plt
 def get_scaling(deg0, deg1):
     assert deg0.shape == deg1.shape
     scaling = torch.ones(deg0.shape[0]).to(deg0.device)
-#   scaling[deg1 != 0] = (deg0 / deg1)[deg1 != 0]
+    scaling[deg1 != 0] = (deg0 / deg1)[deg1 != 0]
     return scaling
 
 
