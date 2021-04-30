@@ -57,7 +57,7 @@ def optimal_f1_score(log_b, y, optimal_threshold=None):
     y_probs = np.exp(log_b[:, 1])
     if optimal_threshold == None:
         precisions, recalls, thresholds = precision_recall_curve(y, y_probs)
-        f1_scores = 2*recalls*precisions/(recalls+precisions)
+        f1_scores = 2*recalls*precisions/(recalls+precisions+sys.float_info.epsilon)
         return np.max(f1_scores), thresholds[np.argmax(f1_scores)]
     else:
         y_preds = (y_probs > optimal_threshold).astype(int)
@@ -162,7 +162,7 @@ def run(dataset, split, model_name, dim_hidden, num_layers, num_hops, num_sample
     elif model_name == 'SAGE':
         model = SAGE(num_features, num_classes, dim_hidden=dim_hidden, num_layers=num_layers, activation=nn.ReLU(), dropout_p=dropout_p)
     elif model_name == 'GAT':
-        model = GAT(num_features, num_classes, dim_hidden=dim_hidden//2, num_layers=num_layers, num_heads=4, activation=nn.ELU(), dropout_p=dropout_p)
+        model = GAT(num_features, num_classes, dim_hidden=dim_hidden//4, num_layers=num_layers, num_heads=4, activation=nn.ELU(), dropout_p=dropout_p)
     elif model_name == 'GBPN':
         model = GBPN(num_features, num_classes, dim_hidden=dim_hidden, num_layers=num_layers, activation=nn.ReLU(), dropout_p=dropout_p, learn_H=learn_H)
     else:

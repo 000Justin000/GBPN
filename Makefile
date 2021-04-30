@@ -107,12 +107,19 @@ run_Elliptic_Bitcoin:
 	python main.py --dataset Elliptic_Bitcoin     --split 0.3 0.2 0.5 --model_name GBPN --dim_hidden 256 --num_layers 2 --num_hops 2 --num_samples 5 --dropout_p 0.1 --learning_rate 1.0e-3 --num_epoches 100 --num_trials  3 --device $(device) --learn_H          --verbose
 	python main.py --dataset Elliptic_Bitcoin     --split 0.3 0.2 0.5 --model_name GBPN --dim_hidden 256 --num_layers 2 --num_hops 2 --num_samples 5 --dropout_p 0.1 --learning_rate 1.0e-3 --num_epoches 100 --num_trials  3 --device $(device) --learn_H --eval_C --verbose
 
-run_JPMC_Fraud_Detection:
-	python main.py --dataset JPMC_Fraud_Detection --split 0.3 0.2 0.5 --model_name MLP  --dim_hidden 256 --num_layers 2 --num_hops 0 --num_samples 5 --dropout_p 0.1 --learning_rate 1.0e-3 --num_epoches 100 --num_trials  3 --device $(device)                    --verbose
-	python main.py --dataset JPMC_Fraud_Detection --split 0.3 0.2 0.5 --model_name SAGE --dim_hidden 256 --num_layers 2 --num_hops 2 --num_samples 5 --dropout_p 0.1 --learning_rate 1.0e-3 --num_epoches 100 --num_trials  3 --device $(device)                    --verbose
-	python main.py --dataset JPMC_Fraud_Detection --split 0.3 0.2 0.5 --model_name GAT  --dim_hidden 256 --num_layers 2 --num_hops 2 --num_samples 5 --dropout_p 0.1 --learning_rate 1.0e-3 --num_epoches 100 --num_trials  3 --device $(device)                    --verbose
-	python main.py --dataset JPMC_Fraud_Detection --split 0.3 0.2 0.5 --model_name GBPN --dim_hidden 256 --num_layers 2 --num_hops 2 --num_samples 5 --dropout_p 0.1 --learning_rate 1.0e-3 --num_epoches 100 --num_trials  3 --device $(device) --learn_H          --verbose
-	python main.py --dataset JPMC_Fraud_Detection --split 0.3 0.2 0.5 --model_name GBPN --dim_hidden 256 --num_layers 2 --num_hops 2 --num_samples 5 --dropout_p 0.1 --learning_rate 1.0e-3 --num_epoches 100 --num_trials  3 --device $(device) --learn_H --eval_C --verbose
+run_JPMC_Payment0:
+	python main.py --dataset JPMC_Payment0        --split 0.3 0.2 0.5 --model_name MLP  --dim_hidden 256 --num_layers 2 --num_hops 0 --num_samples 5 --dropout_p 0.1 --learning_rate 1.0e-3 --num_epoches 100 --num_trials  3 --device $(device)                    --verbose
+	python main.py --dataset JPMC_Payment0        --split 0.3 0.2 0.5 --model_name SAGE --dim_hidden 256 --num_layers 2 --num_hops 2 --num_samples 5 --dropout_p 0.1 --learning_rate 1.0e-3 --num_epoches 100 --num_trials  3 --device $(device)                    --verbose
+	python main.py --dataset JPMC_Payment0        --split 0.3 0.2 0.5 --model_name GAT  --dim_hidden 256 --num_layers 2 --num_hops 2 --num_samples 5 --dropout_p 0.1 --learning_rate 1.0e-3 --num_epoches 100 --num_trials  3 --device $(device)                    --verbose
+	python main.py --dataset JPMC_Payment0        --split 0.3 0.2 0.5 --model_name GBPN --dim_hidden 256 --num_layers 2 --num_hops 2 --num_samples 5 --dropout_p 0.1 --learning_rate 1.0e-3 --num_epoches 100 --num_trials  3 --device $(device) --learn_H          --verbose
+	python main.py --dataset JPMC_Payment0        --split 0.3 0.2 0.5 --model_name GBPN --dim_hidden 256 --num_layers 2 --num_hops 2 --num_samples 5 --dropout_p 0.1 --learning_rate 1.0e-3 --num_epoches 100 --num_trials  3 --device $(device) --learn_H --eval_C --verbose
+
+run_JPMC_Payment1:
+	python main.py --dataset JPMC_Payment1        --split 0.3 0.2 0.5 --model_name MLP  --dim_hidden 256 --num_layers 2 --num_hops 0 --num_samples 5 --dropout_p 0.1 --learning_rate 1.0e-3 --num_epoches 100 --num_trials  3 --device $(device)                    --verbose
+	python main.py --dataset JPMC_Payment1        --split 0.3 0.2 0.5 --model_name SAGE --dim_hidden 256 --num_layers 2 --num_hops 2 --num_samples 5 --dropout_p 0.1 --learning_rate 1.0e-3 --num_epoches 100 --num_trials  3 --device $(device)                    --verbose
+	python main.py --dataset JPMC_Payment1        --split 0.3 0.2 0.5 --model_name GAT  --dim_hidden 256 --num_layers 2 --num_hops 2 --num_samples 5 --dropout_p 0.1 --learning_rate 1.0e-3 --num_epoches 100 --num_trials  3 --device $(device)                    --verbose
+	python main.py --dataset JPMC_Payment1        --split 0.3 0.2 0.5 --model_name GBPN --dim_hidden 256 --num_layers 2 --num_hops 2 --num_samples 5 --dropout_p 0.1 --learning_rate 1.0e-3 --num_epoches 100 --num_trials  3 --device $(device) --learn_H          --verbose
+	python main.py --dataset JPMC_Payment1        --split 0.3 0.2 0.5 --model_name GBPN --dim_hidden 256 --num_layers 2 --num_hops 2 --num_samples 5 --dropout_p 0.1 --learning_rate 1.0e-3 --num_epoches 100 --num_trials  3 --device $(device) --learn_H --eval_C --verbose
 
 run_arXiv:
 	python main.py --dataset OGBN_arXiv                               --model_name MLP  --dim_hidden 256 --num_layers 2 --num_hops 0 --num_samples 5 --dropout_p 0.1 --learning_rate 1.0e-3 --num_epoches 100 --num_trials  3 --device $(device)                    --verbose
