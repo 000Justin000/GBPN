@@ -275,7 +275,7 @@ class BPConv(MessagePassing):
 
     def message(self, x_j, edge_weight, info):
         # x_j has shape [E, n_channels]
-        if (info['log_msg_'] is not None):
+        if info['log_msg_'] is not None:
             x_j = x_j - info['log_msg_'][info['edge_rv']]
         logC = self.get_logH().unsqueeze(0) * edge_weight.unsqueeze(-1).unsqueeze(-1)
         log_msg_raw = torch.logsumexp(x_j.unsqueeze(-1) + logC, dim=-2)
