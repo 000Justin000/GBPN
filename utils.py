@@ -270,7 +270,7 @@ class BPConv(MessagePassing):
     def forward(self, x, edge_index, edge_weight, info):
         # x has shape [N, n_channels]
         # edge_index has shape [2, E]
-        # info has 4 fields: 'log_b0', 'log_msg_', 'edge_rv', 'agg_scaling'
+        # info has 4 fields: 'log_b0', 'log_msg_', 'edge_rv', 'msg_scaling'
         return self.propagate(edge_index, edge_weight=edge_weight, x=x, info=info)
 
     def message(self, x_j, edge_weight, info):
@@ -278,14 +278,15 @@ class BPConv(MessagePassing):
         if (info['log_msg_'] is not None) and False:
             x_j = x_j - info['log_msg_'][info['edge_rv']]
         logC = self.get_logH().unsqueeze(0) * edge_weight.unsqueeze(-1).unsqueeze(-1)
-        log_msg = log_normalize(torch.logsumexp(x_j.unsqueeze(-1) + logC, dim=-2))
+        log_msg_raw = torch.logsumexp(x_j.unsqueeze(-1) + logC, dim=-2)
+        if info['msg_scaling'] is not None:
+            log_msg_raw = log_msg_raw * info['msg_scaling'].unsqueeze(-1)
+        log_msg = log_normalize(log_msg_raw)
         info['log_msg_'] = log_msg
         return log_msg
 
     def update(self, agg_log_msg, info):
         log_b_raw = info['log_b0'] + agg_log_msg
-        if info['agg_scaling'] is not None:
-            log_b_raw = log_b_raw + (info['agg_scaling']-1.0).unsqueeze(-1) * agg_log_msg.detach()
         log_b = log_normalize(log_b_raw)
         return log_b
 
@@ -297,11 +298,11 @@ class GBPN(nn.Module):
         self.transform = nn.Sequential(MLP(dim_in, dim_out, dim_hidden=dim_hidden, num_layers=num_layers, activation=activation, dropout_p=dropout_p), nn.LogSoftmax(dim=-1))
         self.bp_conv = BPConv(dim_out, learn_H)
 
-    def forward(self, x, edge_index, edge_weight, edge_rv, phi=None, agg_scaling=None, K=5):
+    def forward(self, x, edge_index, edge_weight, edge_rv, phi=None, msg_scaling=None, K=5):
         log_b0 = self.transform(x)
         if phi is not None:
             log_b0 = log_normalize(log_b0 + phi)
-        info = {'log_b0': log_b0, 'log_msg_': None, 'edge_rv': edge_rv, 'agg_scaling': agg_scaling}
+        info = {'log_b0': log_b0, 'log_msg_': None, 'edge_rv': edge_rv, 'msg_scaling': msg_scaling}
         log_b = log_b0
         for _ in range(K):
             log_b = self.bp_conv(log_b, edge_index, edge_weight, info)
@@ -325,7 +326,7 @@ class GBPN(nn.Module):
             for batch_size, batch_nodes, _, _, _, \
                 subgraph_size, subgraph_nodes, _, _, _, \
                 subgraph_edge_index, subgraph_edge_weight, subgraph_edge_rv, subgraph_edge_oid in sampler.get_generator(max_batch_size=max_batch_size, num_hops=1):
-                info = {'log_b0': log_b0[subgraph_nodes].to(device), 'log_msg_': log_msg_[subgraph_edge_oid].to(device), 'edge_rv': subgraph_edge_rv.to(device), 'agg_scaling': None}
+                info = {'log_b0': log_b0[subgraph_nodes].to(device), 'log_msg_': log_msg_[subgraph_edge_oid].to(device), 'edge_rv': subgraph_edge_rv.to(device), 'msg_scaling': None}
                 log_b[batch_nodes] = self.bp_conv(log_b_[subgraph_nodes].to(device), subgraph_edge_index.to(device), subgraph_edge_weight.to(device), info)[:batch_size].cpu()
                 subgraph_edge_mask = subgraph_edge_index[1] < batch_size
                 log_msg[subgraph_edge_oid[subgraph_edge_mask]] = info['log_msg_'][subgraph_edge_mask].cpu()

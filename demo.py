@@ -124,11 +124,10 @@ with torch.no_grad():
     model.eval()
     log_b0 = model.transform(x)
     edge_weight = torch.ones(edge_index.shape[1])
-    agg_scaling = torch.ones(x.shape[0])
     info = {'log_b0': log_b0,
             'log_msg_': (-np.log(num_classes)) * torch.ones(edge_index.shape[1], num_classes),
             'edge_rv': edge_rv,
-            'agg_scaling': agg_scaling}
+            'msg_scaling': None}
     log_b = log_b0
 
     all_hops = range(21)
