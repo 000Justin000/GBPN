@@ -12,5 +12,5 @@
 # make device="cuda:1" run_Elliptic_Bitcoin
 # make device="cuda:1" run_JPMC_Payment0
 # make device="cuda:1" run_JPMC_Payment1
-# make device="cuda:1" run_arXiv
+  make device="cuda:1" run_arXiv
 # make device="cuda:2" run_Products
