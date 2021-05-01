@@ -264,8 +264,7 @@ class BPConv(MessagePassing):
         self.n_channels = n_channels
 
     def get_logH(self):
-        PM = self.param
-        logH = F.logsigmoid(PM + PM.t())
+        logH = F.logsigmoid(self.param + self.param.t())
         return (logH if self.learn_H else F.logsigmoid(torch.zeros(self.n_channels, self.n_channels)).fill_diagonal_(0.0).to(logH.device))
 
     def forward(self, x, edge_index, edge_weight, info):
@@ -276,13 +275,10 @@ class BPConv(MessagePassing):
 
     def message(self, x_j, edge_weight, info):
         # x_j has shape [E, n_channels]
-        if info['log_msg_'] is not None:
+        if (info['log_msg_'] is not None) and False:
             x_j = x_j - info['log_msg_'][info['edge_rv']]
         logC = self.get_logH().unsqueeze(0) * edge_weight.unsqueeze(-1).unsqueeze(-1)
         log_msg = log_normalize(torch.logsumexp(x_j.unsqueeze(-1) + logC, dim=-2))
-        # apply damping
-        if info['log_msg_'] is not None:
-            log_msg = log_normalize(info['log_msg_'] + 1.0 * (log_msg - info['log_msg_']))
         info['log_msg_'] = log_msg
         return log_msg
 
@@ -292,17 +288,6 @@ class BPConv(MessagePassing):
             log_b_raw = log_b_raw + (info['agg_scaling']-1.0).unsqueeze(-1) * agg_log_msg.detach()
         log_b = log_normalize(log_b_raw)
         return log_b
-
-
-class LogEvidentialProb(nn.Module):
-
-    def __init__(self, dim=-1):
-        super(LogEvidentialProb, self).__init__()
-        self.dim = dim
-
-    def forward(self, x):
-        evidence = nn.functional.softplus(x, beta=5.0) + 0.1
-        return torch.log(evidence / evidence.sum(dim=self.dim, keepdim=True))
 
 
 class GBPN(nn.Module):
