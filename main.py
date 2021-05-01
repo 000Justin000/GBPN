@@ -21,7 +21,7 @@ import matplotlib.pyplot as plt
 def get_scaling(deg0, deg1):
     assert deg0.shape == deg1.shape
     scaling = torch.ones(deg0.shape[0]).to(deg0.device)
-#   scaling[deg1 != 0] = (deg0 / deg1)[deg1 != 0]
+    scaling[deg1 != 0] = (deg0 / deg1)[deg1 != 0]
     return scaling
 
 
@@ -183,7 +183,8 @@ def run(dataset, split, model_name, dim_hidden, num_layers, num_hops, num_sample
             subgraph_size, subgraph_nodes, subgraph_x, subgraph_y, subgraph_deg, \
             subgraph_edge_index, subgraph_edge_weight, subgraph_edge_rv, _ in graph_sampler.get_generator(mask=train_mask, shuffle=True, max_batch_size=max_batch_size, num_hops=num_hops, num_samples=num_samples, device=device):
 
-            agg_scaling = get_scaling(deg[subgraph_nodes].to(device), degree(subgraph_edge_index[1], subgraph_size))
+            subgraph_deg = degree(subgraph_edge_index[1], subgraph_size).cpu()
+            msg_scaling = get_scaling(deg[subgraph_nodes[subgraph_edge_index[1]]], subgraph_deg[subgraph_edge_index[1]]).to(device)
 
             phi = torch.zeros(subgraph_size, num_classes).to(device)
             if type(model) == GBPN and eval_C:
@@ -193,7 +194,7 @@ def run(dataset, split, model_name, dim_hidden, num_layers, num_hops, num_sample
                 phi[anchor_mask[subgraph_nodes]] = torch.log(F.one_hot(subgraph_y[anchor_mask[subgraph_nodes]], num_classes).float())
 
             optimizer.zero_grad()
-            subgraph_log_b = model(subgraph_x, subgraph_edge_index, edge_weight=subgraph_edge_weight, edge_rv=subgraph_edge_rv, phi=phi, agg_scaling=agg_scaling, K=num_hops)
+            subgraph_log_b = model(subgraph_x, subgraph_edge_index, edge_weight=subgraph_edge_weight, edge_rv=subgraph_edge_rv, phi=phi, msg_scaling=msg_scaling, K=num_hops)
             loss = F.nll_loss(subgraph_log_b[:batch_size], batch_y, weight=c_weight)
             loss.backward()
             optimizer.step()
