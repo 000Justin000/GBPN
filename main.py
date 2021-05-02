@@ -171,7 +171,7 @@ def run(dataset, split, model_name, dim_hidden, num_layers, num_hops, num_sample
 
     if model_name == 'GBPN':
         optimizer = MultiOptimizer(torch.optim.AdamW(model.transform.parameters(), lr=learning_rate, weight_decay=2.5e-4),
-                                   torch.optim.AdamW(model.bp_conv.parameters(), lr=1.0e-2, weight_decay=2.5e-4))
+                                   torch.optim.AdamW(model.bp_conv.parameters(), lr=learning_rate*10, weight_decay=2.5e-4))
     else:
         optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate, weight_decay=2.5e-4)
 
@@ -185,6 +185,7 @@ def run(dataset, split, model_name, dim_hidden, num_layers, num_hops, num_sample
 
             subgraph_deg = degree(subgraph_edge_index[1], subgraph_size).cpu()
             msg_scaling = get_scaling(deg[subgraph_nodes[subgraph_edge_index[1]]], subgraph_deg[subgraph_edge_index[1]]).to(device)
+            msg_scaling = None
 
             phi = torch.zeros(subgraph_size, num_classes).to(device)
             if type(model) == GBPN and eval_C:
