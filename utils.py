@@ -35,6 +35,24 @@ class MultiOptimizer:
             op.step()
 
 
+class LogsumexpFunction(torch.autograd.function.Function):
+    @staticmethod
+    def forward(self, x0, x1):
+        m = torch.max(x0, x1)
+        m = m.masked_fill_(torch.isinf(m), 0)
+        e0 = (x0 - m).exp_()
+        e1 = (x1 - m).exp_()
+        e = (e0 + e1)
+        self.save_for_backward(e0, e1, e)
+        return e.log().add_(m)
+
+    @staticmethod
+    def backward(self, grad_output):
+        e0, e1, e = self.saved_tensors
+        g = grad_output / e.clamp_(min=1.0e-16)
+        return g * e0, g * e1
+
+
 class MLP(nn.Module):
 
     def __init__(self, dim_in, dim_out, dim_hidden=128, num_layers=2, activation=nn.ReLU(), dropout_p=0.0):
@@ -307,7 +325,7 @@ class GBPN(nn.Module):
         for _ in range(K):
             log_b = self.bp_conv(log_b_, edge_index, edge_weight, info)
             log_b_ = log_b
-        return torch.logsumexp(torch.stack((log_b0+math.log(0.2), log_b_+math.log(0.8)), dim=-1), dim=-1)
+        return LogsumexpFunction.apply(log_b0+math.log(0.2), log_b_+math.log(0.8))
 
     @torch.no_grad()
     def inference(self, sampler, max_batch_size, device, phi=None, K=5):
@@ -333,7 +351,7 @@ class GBPN(nn.Module):
                 log_msg[subgraph_edge_oid[subgraph_edge_mask]] = info['log_msg_'][subgraph_edge_mask].cpu()
             log_b_ = log_b
             log_msg_ = log_msg
-        return torch.logsumexp(torch.stack((log_b0+math.log(0.2), log_b_+math.log(0.8)), dim=-1), dim=-1)
+        return LogsumexpFunction.apply(log_b0+math.log(0.2), log_b_+math.log(0.8))
 
 
 class FullgraphSampler:
@@ -418,6 +436,23 @@ class SubtreeSampler:
                       subgraph_edge_index.to(device), subgraph_edge_weight.to(device), subgraph_edge_rv.to(device), subgraph_edge_oid.to(device)
 
         return generator()
+
+
+def logsumexp(value, dim=None, keepdim=False):
+    """Numerically stable implementation of the operation
+
+    value.exp().sum(dim, keepdim).log()
+    """
+    if dim is not None:
+        m, _ = torch.max(value, dim=dim, keepdim=True)
+        value0 = value - m
+        if keepdim is False:
+            m = m.squeeze(dim)
+        return m + torch.log(torch.sum(torch.exp(value0), dim=dim, keepdim=keepdim))
+    else:
+        m = torch.max(value)
+        sum_exp = torch.sum(torch.exp(value - m))
+        return m + torch.log(sum_exp)
 
 
 def rand_split(x, ps):

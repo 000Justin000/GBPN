@@ -188,15 +188,17 @@ def run(dataset, split, model_name, dim_hidden, num_layers, num_hops, num_sample
             msg_scaling = None
 
             phi = torch.zeros(subgraph_size, num_classes).to(device)
+            backpp_mask = torch.ones(batch_size, dtype=torch.bool).to(device)
             if type(model) == GBPN and eval_C:
                 backpp_nodes = batch_nodes[torch.rand(batch_size) > 0.5]
                 anchor_mask = train_mask.clone()
                 anchor_mask[backpp_nodes] = False
                 phi[anchor_mask[subgraph_nodes]] = torch.log(F.one_hot(subgraph_y[anchor_mask[subgraph_nodes]], num_classes).float())
+                backpp_mask[anchor_mask[batch_nodes]] = False
 
             optimizer.zero_grad()
             subgraph_log_b = model(subgraph_x, subgraph_edge_index, edge_weight=subgraph_edge_weight, edge_rv=subgraph_edge_rv, phi=phi, msg_scaling=msg_scaling, K=num_hops)
-            loss = F.nll_loss(subgraph_log_b[:batch_size], batch_y, weight=c_weight)
+            loss = F.nll_loss(subgraph_log_b[:batch_size][backpp_mask], batch_y[backpp_mask], weight=c_weight)
             loss.backward()
             optimizer.step()
             total_loss += float(loss)*batch_size
