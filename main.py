@@ -185,7 +185,6 @@ def run(dataset, split, model_name, dim_hidden, num_layers, num_hops, num_sample
 
             subgraph_deg = degree(subgraph_edge_index[1], subgraph_size).cpu()
             msg_scaling = get_scaling(deg[subgraph_nodes[subgraph_edge_index[1]]], subgraph_deg[subgraph_edge_index[1]]).to(device)
-            msg_scaling = None
 
             phi = torch.zeros(subgraph_size, num_classes).to(device)
             backpp_mask = torch.ones(batch_size, dtype=torch.bool).to(device)

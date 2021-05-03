@@ -325,7 +325,7 @@ class GBPN(nn.Module):
         for _ in range(K):
             log_b = self.bp_conv(log_b_, edge_index, edge_weight, info)
             log_b_ = log_b
-        return LogsumexpFunction.apply(log_b0+math.log(0.2), log_b_+math.log(0.8))
+        return LogsumexpFunction.apply(log_b0+math.log(0.5), log_b_+math.log(0.5))
 
     @torch.no_grad()
     def inference(self, sampler, max_batch_size, device, phi=None, K=5):
@@ -351,7 +351,7 @@ class GBPN(nn.Module):
                 log_msg[subgraph_edge_oid[subgraph_edge_mask]] = info['log_msg_'][subgraph_edge_mask].cpu()
             log_b_ = log_b
             log_msg_ = log_msg
-        return LogsumexpFunction.apply(log_b0+math.log(0.2), log_b_+math.log(0.8))
+        return LogsumexpFunction.apply(log_b0+math.log(0.5), log_b_+math.log(0.5))
 
 
 class FullgraphSampler:
