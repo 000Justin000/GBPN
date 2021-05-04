@@ -165,6 +165,8 @@ def run(dataset, split, model_name, dim_hidden, num_layers, num_hops, num_sample
         model = GAT(num_features, num_classes, dim_hidden=dim_hidden//4, num_layers=num_layers, num_heads=4, activation=nn.ELU(), dropout_p=dropout_p)
     elif model_name == 'GBPN':
         model = GBPN(num_features, num_classes, dim_hidden=dim_hidden, num_layers=num_layers, activation=nn.ReLU(), dropout_p=dropout_p, learn_H=learn_H)
+    elif model_name == 'GPPN':
+        model = GPPN(num_features, num_classes, dim_hidden=dim_hidden, num_layers=num_layers, activation=nn.ReLU(), dropout_p=dropout_p)
     else:
         raise Exception('unexpected model type')
     model = model.to(device)
@@ -188,7 +190,7 @@ def run(dataset, split, model_name, dim_hidden, num_layers, num_hops, num_sample
 
             phi = torch.zeros(subgraph_size, num_classes).to(device)
             backpp_mask = torch.ones(batch_size, dtype=torch.bool).to(device)
-            if type(model) == GBPN and eval_C:
+            if type(model) in [GBPN, GPPN] and eval_C:
                 backpp_nodes = batch_nodes[torch.rand(batch_size) > 0.5]
                 anchor_mask = train_mask.clone()
                 anchor_mask[backpp_nodes] = False
@@ -227,7 +229,7 @@ def run(dataset, split, model_name, dim_hidden, num_layers, num_hops, num_sample
         if verbose:
             print('inductive accuracy: ({:5.3f}, {:5.3f}, {:5.3f})'.format(train_accuracy, val_accuracy, test_accuracy), end='    ', flush=True)
 
-        if type(model) == GBPN and eval_C:
+        if type(model) in [GBPN, GPPN] and eval_C:
             phi = torch.zeros(num_nodes, num_classes)
             phi[train_mask] = torch.log(F.one_hot(y[train_mask], num_classes).float())
             log_b = model.inference(graph_sampler, max_batch_size, device, phi=phi, K=num_hops)
