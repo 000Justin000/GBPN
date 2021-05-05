@@ -188,6 +188,7 @@ def run(dataset, split, model_name, dim_hidden, num_layers, num_hops, num_sample
 
             subgraph_deg = degree(subgraph_edge_index[1], subgraph_size).cpu()
             msg_scaling = get_scaling(deg[subgraph_nodes[subgraph_edge_index[1]]], subgraph_deg[subgraph_edge_index[1]]).to(device)
+            msg_scaling = None
 
             phi = torch.zeros(subgraph_size, num_classes).to(device)
             backpp_mask = torch.ones(batch_size, dtype=torch.bool).to(device)
@@ -254,7 +255,7 @@ def run(dataset, split, model_name, dim_hidden, num_layers, num_hops, num_sample
         num_hops = 0 if (model_name == 'GBPN' and epoch <= 0) else max_num_hops
         train(num_hops=num_hops, num_samples=num_samples)
 
-        if epoch % max(int(num_epoches*0.01), 10) == 0:
+        if epoch % max(int(num_epoches*0.1), 10) == 0:
             train_accuracy, val_accuracy, test_accuracy = evaluation(num_hops=num_hops)
             if val_accuracy > opt_val:
                 opt_val = val_accuracy
