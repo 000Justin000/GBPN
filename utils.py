@@ -9,12 +9,13 @@ import pandas as pd
 import cnetworkx as nx
 import numba
 import torch_sparse
-from torch_sparse import SparseTensor, coalesce
+from torch_sparse import SparseTensor, coalesce, cat
 from torch_geometric.nn import MessagePassing
 from torch_geometric.nn import GCNConv, SAGEConv, GATConv
 from torch_geometric.nn.conv.gcn_conv import gcn_norm
 from torch_geometric.utils import degree, subgraph, remove_self_loops, to_undirected, contains_self_loops, is_undirected, stochastic_blockmodel_graph, k_hop_subgraph
 from torch_geometric.data import Data
+from torch_geometric.data import ClusterData
 from torch_geometric.datasets import Planetoid, Coauthor, WikipediaNetwork
 from ogb.nodeproppred import PygNodePropPredDataset
 from datetime import datetime, timedelta
@@ -425,23 +426,20 @@ class FullgraphSampler:
 
     def get_generator(self, mask=None, device='cpu', **kwargs):
 
-        def generator():
-            batch_nodes = torch.arange(self.num_nodes, dtype=torch.int64) if (mask is None) else mask.nonzero(as_tuple=True)[0]
+        batch_nodes = torch.arange(self.num_nodes, dtype=torch.int64) if (mask is None) else mask.nonzero(as_tuple=True)[0]
 
-            subgraph_nodes = torch.cat((batch_nodes, torch.tensor(list(set(range(self.num_nodes)) - set(batch_nodes.tolist())), dtype=torch.int64)), dim=0)
-            subgraph_edge_index, subgraph_edge_oid = subgraph(subgraph_nodes, self.edge_index, torch.arange(self.edge_index.shape[1]), relabel_nodes=True, num_nodes=self.num_nodes)
-            subgraph_edge_index, subgraph_edge_oid, subgraph_edge_rv = process_edge_index(subgraph_nodes.shape[0], subgraph_edge_index, subgraph_edge_oid)
+        subgraph_nodes = torch.cat((batch_nodes, torch.tensor(list(set(range(self.num_nodes)) - set(batch_nodes.tolist())), dtype=torch.int64)), dim=0)
+        subgraph_edge_index, subgraph_edge_oid = subgraph(subgraph_nodes, self.edge_index, torch.arange(self.edge_index.shape[1]), relabel_nodes=True, num_nodes=self.num_nodes)
+        subgraph_edge_index, subgraph_edge_oid, subgraph_edge_rv = process_edge_index(subgraph_nodes.shape[0], subgraph_edge_index, subgraph_edge_oid)
 
-            subgraph_edge_weight = self.edge_weight[subgraph_edge_oid]
+        subgraph_edge_weight = self.edge_weight[subgraph_edge_oid]
 
-            batch_size = batch_nodes.shape[0]
-            subgraph_size = subgraph_nodes.shape[0]
+        batch_size = batch_nodes.shape[0]
+        subgraph_size = subgraph_nodes.shape[0]
 
-            yield batch_size, batch_nodes.to(device), self.x[batch_nodes].to(device), self.y[batch_nodes].to(device), self.deg[batch_nodes].to(device), \
-                  subgraph_size, subgraph_nodes.to(device), self.x[subgraph_nodes].to(device), self.y[subgraph_nodes].to(device), self.deg[subgraph_nodes].to(device), \
-                  subgraph_edge_index.to(device), subgraph_edge_weight.to(device), subgraph_edge_rv.to(device), subgraph_edge_oid.to(device)
-
-        return generator()
+        yield batch_size, batch_nodes.to(device), self.x[batch_nodes].to(device), self.y[batch_nodes].to(device), self.deg[batch_nodes].to(device), \
+              subgraph_size, subgraph_nodes.to(device), self.x[subgraph_nodes].to(device), self.y[subgraph_nodes].to(device), self.deg[subgraph_nodes].to(device), \
+              subgraph_edge_index.to(device), subgraph_edge_weight.to(device), subgraph_edge_rv.to(device), subgraph_edge_oid.to(device)
 
 
 class SubtreeSampler:
@@ -459,19 +457,72 @@ class SubtreeSampler:
         self.deg = degree(edge_index[1], num_nodes)
 
     def get_generator(self, mask=None, shuffle=False, max_batch_size=-1, num_hops=0, num_samples=-1, device='cpu'):
-        idx = torch.arange(self.num_nodes, dtype=torch.int64) if (mask is None) else mask.nonzero(as_tuple=True)[0]
+
+        nodes = torch.arange(self.num_nodes, dtype=torch.int64) if (mask is None) else mask.nonzero(as_tuple=True)[0]
         if shuffle:
-            idx = idx[torch.randperm(idx.shape[0])]
+            nodes = nodes[torch.randperm(nodes.shape[0])]
         if max_batch_size == -1:
             max_batch_size = self.num_nodes
+        n_batch = math.ceil(nodes.shape[0] / max_batch_size)
 
-        n_batch = math.ceil(idx.shape[0] / max_batch_size)
+        for batch_nodes in nodes.chunk(n_batch):
+            batch_size = batch_nodes.shape[0]
+            if num_hops == 1 and num_samples == -1:
+                T = nx.onehop_subgraph(self.G, batch_nodes.tolist())
+            else:
+                T = nx.sample_subtree(self.G, batch_nodes.tolist(), num_hops, num_samples)
+                assert len(T.get_nodes()) == len(T.get_edges())//2 + batch_size
+            subgraph_nodes = torch.tensor(T.get_nodes(), dtype=torch.int64)
+            subgraph_size = subgraph_nodes.shape[0]
+            T_edges = torch.tensor(T.get_edges(), dtype=torch.int64)
+            subgraph_edge_index = T_edges[:,0:2].t() if T_edges.shape[0] > 0 else torch.zeros(2, 0, dtype=torch.int64)
+            subgraph_edge_oid = T_edges[:,2] if T_edges.shape[0] > 0 else torch.zeros(0, dtype=torch.int64)
 
-        def generator():
-            for batch_nodes in idx.chunk(n_batch):
+            assert torch.all(subgraph_nodes[subgraph_edge_index.reshape(-1)] == self.edge_index[:,subgraph_edge_oid].reshape(-1))
+
+            subgraph_edge_index, subgraph_edge_oid, subgraph_edge_rv = process_edge_index(subgraph_nodes.shape[0], subgraph_edge_index, subgraph_edge_oid)
+            subgraph_edge_weight = self.edge_weight[subgraph_edge_oid]
+
+            yield batch_size, batch_nodes.to(device), self.x[batch_nodes].to(device), self.y[batch_nodes].to(device), self.deg[batch_nodes].to(device), \
+                  subgraph_size, subgraph_nodes.to(device), self.x[subgraph_nodes].to(device), self.y[subgraph_nodes].to(device), self.deg[subgraph_nodes].to(device), \
+                  subgraph_edge_index.to(device), subgraph_edge_weight.to(device), subgraph_edge_rv.to(device), subgraph_edge_oid.to(device)
+
+
+class ClusterSampler:
+
+    def __init__(self, num_nodes, x, y, edge_index, edge_weight, edge_rv, train_mask=None, val_mask=None, test_mask=None):
+        self.device = edge_index.device
+        self.num_nodes = num_nodes
+        self.x = x
+        self.y = y
+        self.edge_index = edge_index
+        self.edge_weight = edge_weight
+        self.edge_rv = edge_rv
+        self.G = nx.Graph(num_nodes)
+        self.G.add_edges_from(torch.cat((edge_index, torch.arange(edge_index.shape[1]).reshape(1,-1)), dim=0).transpose(0,1).numpy())
+        self.deg = degree(edge_index[1], num_nodes)
+
+        data = Data(x=x, y=y, edge_index=edge_index)
+        data.train_mask = train_mask
+        data.val_mask = val_mask
+        data.test_mask = test_mask
+        data.edge_weight = edge_weight
+        data.deg = degree(edge_index[1], num_nodes)
+        self.cluster_data = ClusterData(data, num_parts=max(num_nodes//512, 10), recursive=False)
+
+
+    def get_generator(self, mask=None, shuffle=False, max_batch_size=-1, num_hops=0, num_samples=-1, device='cpu'):
+        nodes = torch.arange(self.num_nodes, dtype=torch.int64) if (mask is None) else mask.nonzero(as_tuple=True)[0]
+        if shuffle:
+            nodes = nodes[torch.randperm(nodes.shape[0])]
+        if max_batch_size == -1:
+            max_batch_size = self.num_nodes
+        n_batch = math.ceil(nodes.shape[0] / max_batch_size)
+
+        if num_hops == 0 or (num_hops == 1 and num_samples == -1):
+            for batch_nodes in nodes.chunk(n_batch):
                 batch_size = batch_nodes.shape[0]
-
-                if (num_hops == 1 and num_samples == -1):
+                if num_hops == 1 and num_samples == -1:
                     T = nx.onehop_subgraph(self.G, batch_nodes.tolist())
                 else:
                     T = nx.sample_subtree(self.G, batch_nodes.tolist(), num_hops, num_samples)
@@ -481,8 +532,6 @@ class SubtreeSampler:
                 subgraph_edge_index = T_edges[:,0:2].t() if T_edges.shape[0] > 0 else torch.zeros(2, 0, dtype=torch.int64)
                 subgraph_edge_oid = T_edges[:,2] if T_edges.shape[0] > 0 else torch.zeros(0, dtype=torch.int64)
 
-                if not (num_hops == 1 and num_samples == -1):
-                    assert subgraph_size == subgraph_edge_index.shape[1]//2 + batch_size
                 assert torch.all(subgraph_nodes[subgraph_edge_index.reshape(-1)] == self.edge_index[:,subgraph_edge_oid].reshape(-1))
 
                 subgraph_edge_index, subgraph_edge_oid, subgraph_edge_rv = process_edge_index(subgraph_nodes.shape[0], subgraph_edge_index, subgraph_edge_oid)
@@ -491,8 +540,36 @@ class SubtreeSampler:
                 yield batch_size, batch_nodes.to(device), self.x[batch_nodes].to(device), self.y[batch_nodes].to(device), self.deg[batch_nodes].to(device), \
                       subgraph_size, subgraph_nodes.to(device), self.x[subgraph_nodes].to(device), self.y[subgraph_nodes].to(device), self.deg[subgraph_nodes].to(device), \
                       subgraph_edge_index.to(device), subgraph_edge_weight.to(device), subgraph_edge_rv.to(device), subgraph_edge_oid.to(device)
+        else:
+            partitions = torch.arange(self.cluster_data.num_parts, dtype=torch.int64)
+            if shuffle:
+                partitions = partitions[torch.randperm(partitions.shape[0])]
+            n_batch = math.ceil(partitions.shape[0] / 10)
 
-        return generator()
+            for batch_partitions in partitions.chunk(n_batch):
+                start = self.cluster_data.partptr[batch_partitions].tolist()
+                end = self.cluster_data.partptr[batch_partitions + 1].tolist()
+                node_idx = torch.cat([torch.arange(s, e) for s, e in zip(start, end)])
+
+                batch_nodes = node_idx[self.cluster_data.data.train_mask[node_idx]]
+                subgraph_nodes = torch.cat((batch_nodes, node_idx[torch.logical_not(self.cluster_data.data.train_mask[node_idx])]), dim=0)
+                batch_size = batch_nodes.shape[0]
+                subgraph_size = subgraph_nodes.shape[0]
+
+                adj = self.cluster_data.data.adj
+                adj = adj.index_select(0, subgraph_nodes)
+                adj = adj.index_select(1, subgraph_nodes)
+                row, col, subgraph_edge_oid = adj.coo()
+                subgraph_edge_index = torch.stack([row, col], dim=0)
+
+                assert torch.all(self.cluster_data.perm[subgraph_nodes[subgraph_edge_index.reshape(-1)]] == self.edge_index[:,subgraph_edge_oid].reshape(-1))
+
+                subgraph_edge_index, subgraph_edge_oid, subgraph_edge_rv = process_edge_index(subgraph_nodes.shape[0], subgraph_edge_index, subgraph_edge_oid)
+                subgraph_edge_weight = self.cluster_data.data.edge_weight[subgraph_edge_oid]
+
+                yield batch_size, batch_nodes.to(device), self.cluster_data.data.x[batch_nodes].to(device), self.cluster_data.data.y[batch_nodes].to(device), self.cluster_data.data.deg[batch_nodes].to(device), \
+                      subgraph_size, subgraph_nodes.to(device), self.cluster_data.data.x[subgraph_nodes].to(device), self.cluster_data.data.y[subgraph_nodes].to(device), self.cluster_data.data.deg[subgraph_nodes].to(device), \
+                      subgraph_edge_index.to(device), subgraph_edge_weight.to(device), subgraph_edge_rv.to(device), subgraph_edge_oid.to(device)
 
 
 def rand_split(x, ps):
