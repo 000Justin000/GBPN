@@ -326,7 +326,7 @@ class GBPN(nn.Module):
         for _ in range(K):
             log_b = self.bp_conv(log_b_, edge_index, edge_weight, info)
             log_b_ = log_b
-        return LogsumexpFunction.apply(log_b0+math.log(0.2), log_b_+math.log(0.8))
+        return LogsumexpFunction.apply(log_b0+torch.log(torch.tensor(0.0)), log_b_+torch.log(torch.tensor(1.0)))
 
     @torch.no_grad()
     def inference(self, sampler, max_batch_size, device, phi=None, K=5):
@@ -352,7 +352,7 @@ class GBPN(nn.Module):
                 log_msg[subgraph_edge_oid[subgraph_edge_mask]] = info['log_msg_'][subgraph_edge_mask].cpu()
             log_b_ = log_b
             log_msg_ = log_msg
-        return LogsumexpFunction.apply(log_b0+math.log(0.2), log_b_+math.log(0.8))
+        return LogsumexpFunction.apply(log_b0+torch.log(torch.tensor(0.0)), log_b_+torch.log(torch.tensor(1.0)))
 
 
 class GPPN(nn.Module):
@@ -382,7 +382,7 @@ class GPPN(nn.Module):
                 x = self.activation(x)
             else:
                 x = F.log_softmax(x, dim=-1)
-        return LogsumexpFunction.apply(log_b0+math.log(0.2), x+math.log(0.8))
+        return LogsumexpFunction.apply(log_b0+torch.log(torch.tensor(0.2)), x+torch.log(torch.tensor(0.8)))
 
     @torch.no_grad()
     def inference(self, sampler, max_batch_size, device, phi=None, **kwargs):
@@ -409,7 +409,7 @@ class GPPN(nn.Module):
                     x = F.log_softmax(x, dim=-1)
                 x_all[batch_nodes] = x[:batch_nodes.shape[0]].cpu()
             x_all_ = x_all
-        return LogsumexpFunction.apply(log_b0+math.log(0.2), x_all+math.log(0.8))
+        return LogsumexpFunction.apply(log_b0+torch.log(torch.tensor(0.2)), x_all+torch.log(torch.tensor(0.8)))
 
 
 class FullgraphSampler:
