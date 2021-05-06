@@ -312,28 +312,30 @@ class BPConv(MessagePassing):
 
 class GBPN(nn.Module):
 
-    def __init__(self, dim_in, dim_out, dim_hidden=32, num_layers=0, activation=nn.ReLU(), dropout_p=0.0, learn_H=False):
+    def __init__(self, dim_in, dim_out, dim_hidden=32, num_layers=0, activation=nn.ReLU(), dropout_p=0.0, deg_scaling=False, learn_H=False):
         super(GBPN, self).__init__()
         self.transform = nn.Sequential(MLP(dim_in, dim_out, dim_hidden=dim_hidden, num_layers=num_layers, activation=activation, dropout_p=dropout_p), nn.LogSoftmax(dim=-1))
+        self.deg_scaling = deg_scaling
         self.bp_conv = BPConv(dim_out, learn_H)
 
     def compute_log_probabilities(self, log_b0, log_b, deg):
         alpha = torch.ones_like(deg)
-        alpha[deg != 0.0] = 1.0 / deg[deg != 0.0]
+        alpha[deg != 0.0] = 1.0 / torch.sqrt(deg[deg != 0.0])
         log_p = log_b * alpha.unsqueeze(-1)
         log_p[alpha != 1.0] += log_b0[alpha != 1.0] * (1.0 - alpha[alpha != 1.0]).unsqueeze(-1)
         return log_p
 
     def forward(self, x, edge_index, edge_weight, edge_rv, deg, deg_ori, phi=None, K=5):
         log_b0 = self.transform(x) if (phi is None) else log_normalize(self.transform(x) + phi)
-        msg_scaling = get_scaling(deg_ori[edge_index[1]], deg[edge_index[1]]) if ((deg is not None) and (deg_ori is not None)) else None
+        msg_scaling = get_scaling(deg_ori[edge_index[1]], deg[edge_index[1]]) if (self.deg_scaling and (deg is not None) and (deg_ori is not None)) else None
         info = {'log_b0': log_b0, 'log_msg_': None, 'edge_rv': edge_rv, 'msg_scaling': msg_scaling}
         log_b_ = log_b0
         for _ in range(K):
             log_b = self.bp_conv(log_b_, edge_index, edge_weight, info)
             log_b_ = log_b
-        return self.compute_log_probabilities(log_b0, log_b, deg_ori)
-        # return LogsumexpFunction.apply(log_b0+torch.log(torch.tensor(0.0)), log_b_+torch.log(torch.tensor(1.0)))
+        # return log_b
+        # return LogsumexpFunction.apply(log_b0+torch.log(torch.tensor(0.2)), log_b_+torch.log(torch.tensor(0.8)))
+        return self.compute_log_probabilities(log_b0, log_b, deg_ori if self.deg_scaling else deg)
 
     @torch.no_grad()
     def inference(self, sampler, max_batch_size, device, phi=None, K=5):
@@ -357,8 +359,9 @@ class GBPN(nn.Module):
                 log_msg[subgraph_edge_oid[subgraph_edge_mask]] = info['log_msg_'][subgraph_edge_mask].cpu()
             log_b_ = log_b
             log_msg_ = log_msg
+        # return log_b
+        # return LogsumexpFunction.apply(log_b0+torch.log(torch.tensor(0.2)), log_b_+torch.log(torch.tensor(0.8)))
         return self.compute_log_probabilities(log_b0, log_b, sampler.deg.to(device))
-        # return LogsumexpFunction.apply(log_b0+torch.log(torch.tensor(0.0)), log_b_+torch.log(torch.tensor(1.0)))
 
 
 class GPPN(nn.Module):
