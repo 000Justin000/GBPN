@@ -188,7 +188,6 @@ def run(dataset, split, model_name, dim_hidden, num_layers, num_hops, num_sample
 
             subgraph_deg = degree(subgraph_edge_index[1], subgraph_size).cpu()
             msg_scaling = get_scaling(deg[subgraph_nodes[subgraph_edge_index[1]]], subgraph_deg[subgraph_edge_index[1]]).to(device)
-            msg_scaling = None
 
             phi = torch.zeros(subgraph_size, num_classes).to(device)
             backpp_mask = torch.ones(batch_size, dtype=torch.bool).to(device)
@@ -216,10 +215,11 @@ def run(dataset, split, model_name, dim_hidden, num_layers, num_hops, num_sample
             print('step {:5d}, train loss: {:5.3f}, train accuracy: {:5.3f}'.format(epoch, mean_loss, accuracy), end='    ', flush=True)
         return accuracy
 
-    @torch.no_grad()
-    def evaluation(num_hops=2):
-        model.eval()
-        log_b = model.inference(graph_sampler, max_batch_size, device, K=num_hops)
+
+    def loss_and_accuracy(y, log_b):
+        train_loss = F.nll_loss(log_b[train_mask], y[train_mask], weight=c_weight)
+        val_loss = F.nll_loss(log_b[val_mask], y[val_mask], weight=c_weight)
+        test_loss = F.nll_loss(log_b[test_mask], y[test_mask], weight=c_weight)
         if accuracy_fun == optimal_f1_score:
             train_accuracy, _ = optimal_f1_score(log_b[train_mask], y[train_mask])
             val_accuracy, optimal_threshold = optimal_f1_score(log_b[val_mask], y[val_mask])
@@ -228,47 +228,67 @@ def run(dataset, split, model_name, dim_hidden, num_layers, num_hops, num_sample
             train_accuracy = accuracy_fun(log_b[train_mask], y[train_mask])
             val_accuracy = accuracy_fun(log_b[val_mask], y[val_mask])
             test_accuracy = accuracy_fun(log_b[test_mask], y[test_mask])
+        return train_loss, val_loss, test_loss, train_accuracy, val_accuracy, test_accuracy
+
+
+    def accuracy_degree_correlation(log_b, y, deg):
+        nll = log_b.gather(-1, y.reshape(-1,1))
+        crs = log_b.argmax(dim=-1) == y
+        _, perm = deg.sort()
+        deg_avg = [float(batch.float().mean()) for batch in deg[perm].chunk(10)]
+        nll_avg = [float(batch.float().mean()) for batch in nll[perm].chunk(10)]
+        crs_avg = [float(batch.float().mean()) for batch in crs[perm].chunk(10)]
+        return deg_avg, nll_avg, crs_avg
+
+
+    @torch.no_grad()
+    def evaluation(num_hops=2):
+        model.eval()
+        log_b = model.inference(graph_sampler, max_batch_size, device, K=num_hops)
+        train_loss, val_loss, test_loss, train_accuracy, val_accuracy, test_accuracy = loss_and_accuracy(y, log_b)
         if verbose:
-            print('inductive accuracy: ({:5.3f}, {:5.3f}, {:5.3f})'.format(train_accuracy, val_accuracy, test_accuracy), end='    ', flush=True)
+            print('inductive loss / accuracy: ({:5.3f}, {:5.3f}, {:5.3f}) / ({:5.3f}, {:5.3f}, {:5.3f})'.format(train_loss, val_loss, test_loss, train_accuracy, val_accuracy, test_accuracy), end='    ', flush=True)
 
         if type(model) in [GBPN, GPPN] and eval_C:
             phi = torch.zeros(num_nodes, num_classes)
             phi[train_mask] = torch.log(F.one_hot(y[train_mask], num_classes).float())
             log_b = model.inference(graph_sampler, max_batch_size, device, phi=phi, K=num_hops)
-
-            if accuracy_fun == optimal_f1_score:
-                train_accuracy, _ = optimal_f1_score(log_b[train_mask], y[train_mask])
-                val_accuracy, optimal_threshold = optimal_f1_score(log_b[val_mask], y[val_mask])
-                test_accuracy = optimal_f1_score(log_b[test_mask], y[test_mask], optimal_threshold=optimal_threshold)
-            else:
-                train_accuracy = accuracy_fun(log_b[train_mask], y[train_mask])
-                val_accuracy = accuracy_fun(log_b[val_mask], y[val_mask])
-                test_accuracy = accuracy_fun(log_b[test_mask], y[test_mask])
+            train_loss, val_loss, test_loss, train_accuracy, val_accuracy, test_accuracy = loss_and_accuracy(y, log_b)
             if verbose:
-                print('transductive accuracy: ({:5.3f}, {:5.3f}, {:5.3f})'.format(train_accuracy, val_accuracy, test_accuracy), end='', flush=True)
+                print('transductive loss / accuracy: ({:5.3f}, {:5.3f}, {:5.3f}) / ({:5.3f}, {:5.3f}, {:5.3f})'.format(train_loss, val_loss, test_loss, train_accuracy, val_accuracy, test_accuracy), end='', flush=True)
 
-        return train_accuracy, val_accuracy, test_accuracy
+        return train_accuracy, val_accuracy, test_accuracy, log_b
 
     max_num_hops = num_hops
-    best_val, opt_val, opt_test = 0.0, 0.0, 0.0
+    opt_val, opt_test = 0.0, 0.0
+    opt_deg_avg, opt_nll_avg, opt_crs_avg = None, None, None
     for epoch in range(1, num_epoches+1):
         num_hops = 0 if (model_name == 'GBPN' and epoch <= 0) else max_num_hops
         train(num_hops=num_hops, num_samples=num_samples)
 
         if epoch % max(int(num_epoches*0.1), 10) == 0:
-            train_accuracy, val_accuracy, test_accuracy = evaluation(num_hops=num_hops)
+            train_accuracy, val_accuracy, test_accuracy, log_b = evaluation(num_hops=num_hops)
+            deg_avg, nll_avg, crs_avg = accuracy_degree_correlation(log_b[test_mask], y[test_mask], deg[test_mask])
+
             if val_accuracy > opt_val:
                 opt_val = val_accuracy
                 opt_test = test_accuracy
+                opt_deg_avg = deg_avg
+                opt_nll_avg = nll_avg
+                opt_crs_avg = crs_avg
             if type(model) == GBPN and verbose:
                 print()
                 print(model.bp_conv.get_logH().exp(), flush=True)
         print(flush=True)
 
     if verbose:
-        print('optimal val accuracy: {:7.5f}, optimal test accuracy: {:7.5f}\n'.format(opt_val, opt_test))
+        print('optimal val accuracy: {:7.5f}, optimal test accuracy: {:7.5f}'.format(opt_val, opt_test))
+        print('optimal deg average: [' + ' '.join(map(lambda f: '{:7.3f}'.format(f), opt_deg_avg)) + ']')
+        print('optimal nll average: [' + ' '.join(map(lambda f: '{:7.3f}'.format(f), opt_nll_avg)) + ']')
+        print('optimal crs average: [' + ' '.join(map(lambda f: '{:7.3f}'.format(f), opt_crs_avg)) + ']')
+        print()
 
-    return opt_test
+    return opt_test, opt_deg_avg, opt_nll_avg, opt_crs_avg
 
 
 random.seed(0)
@@ -305,10 +325,20 @@ if not args.develop:
     sys.stderr = open(outpath + '/' + commit + '.err', 'w')
 
 test_acc = []
+test_deg_avg = []
+test_nll_avg = []
+test_crs_avg = []
 for _ in range(args.num_trials):
-    test_acc.append(run(args.dataset, args.split, args.model_name, args.dim_hidden, args.num_layers, args.num_hops, args.num_samples, args.dropout_p, args.device, args.learning_rate, args.num_epoches, args.weighted_BP, args.learn_H, args.eval_C, args.verbose))
+    opt_test, opt_deg_avg, opt_nll_avg, opt_crs_avg = run(args.dataset, args.split, args.model_name, args.dim_hidden, args.num_layers, args.num_hops, args.num_samples, args.dropout_p, args.device, args.learning_rate, args.num_epoches, args.weighted_BP, args.learn_H, args.eval_C, args.verbose)
+    test_acc.append(opt_test)
+    test_deg_avg.append(opt_deg_avg)
+    test_nll_avg.append(opt_nll_avg)
+    test_crs_avg.append(opt_crs_avg)
+
+list_avg = lambda ll: list(map(lambda l: sum(l)/len(l), zip(*ll)))
 
 print(args)
 print('overall test accuracies: {:7.3f} ± {:7.3f}'.format(np.mean(test_acc)*100, np.std(test_acc)*100))
-
-print('finish')
+print('optimal deg average: [' + ' '.join(map(lambda f: '{:7.3f}'.format(f), list_avg(test_deg_avg))) + ']')
+print('optimal nll average: [' + ' '.join(map(lambda f: '{:7.3f}'.format(f), list_avg(test_nll_avg))) + ']')
+print('optimal crs average: [' + ' '.join(map(lambda f: '{:7.3f}'.format(f), list_avg(test_crs_avg))) + ']')
