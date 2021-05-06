@@ -148,8 +148,8 @@ def run(dataset, split, model_name, dim_hidden, num_layers, num_hops, num_sample
         graph_sampler = FullgraphSampler(num_nodes, x, y, edge_index, edge_weight, edge_rv)
         max_batch_size = -1
     elif dataset in ['OGBN_arXiv', 'OGBN_Products', 'JPMC_Payment0', 'JPMC_Payment1', 'Elliptic_Bitcoin']:
-        # graph_sampler = SubtreeSampler(num_nodes, x, y, edge_index, edge_weight, edge_rv)
-        graph_sampler = ClusterSampler(num_nodes, x, y, edge_index, edge_weight, edge_rv, train_mask, val_mask, test_mask)
+        graph_sampler = SubtreeSampler(num_nodes, x, y, edge_index, edge_weight, edge_rv)
+        # graph_sampler = ClusterSampler(num_nodes, x, y, edge_index, edge_weight, edge_rv, train_mask, val_mask, test_mask)
         max_batch_size = min(math.ceil(train_mask.sum()/10.0), 512)
     else:
         raise Exception('unexpected dataset encountered')
@@ -186,9 +186,6 @@ def run(dataset, split, model_name, dim_hidden, num_layers, num_hops, num_sample
             subgraph_size, subgraph_nodes, subgraph_x, subgraph_y, subgraph_deg, \
             subgraph_edge_index, subgraph_edge_weight, subgraph_edge_rv, _ in graph_sampler.get_generator(mask=train_mask, shuffle=True, max_batch_size=max_batch_size, num_hops=num_hops, num_samples=num_samples, device=device):
 
-            subgraph_deg = degree(subgraph_edge_index[1], subgraph_size).cpu()
-            msg_scaling = get_scaling(deg[subgraph_nodes[subgraph_edge_index[1]]], subgraph_deg[subgraph_edge_index[1]]).to(device)
-
             phi = torch.zeros(subgraph_size, num_classes).to(device)
             backpp_mask = torch.ones(batch_size, dtype=torch.bool).to(device)
             if type(model) in [GBPN, GPPN] and eval_C:
@@ -199,7 +196,7 @@ def run(dataset, split, model_name, dim_hidden, num_layers, num_hops, num_sample
                 backpp_mask[anchor_mask[batch_nodes]] = False
 
             optimizer.zero_grad()
-            subgraph_log_b = model(subgraph_x, subgraph_edge_index, edge_weight=subgraph_edge_weight, edge_rv=subgraph_edge_rv, phi=phi, msg_scaling=msg_scaling, K=num_hops)
+            subgraph_log_b = model(subgraph_x, subgraph_edge_index, edge_weight=subgraph_edge_weight, edge_rv=subgraph_edge_rv, phi=phi, deg=degree(subgraph_edge_index[1], subgraph_size), deg_ori=deg[subgraph_nodes].to(device), K=num_hops)
             loss = F.nll_loss(subgraph_log_b[:batch_size][backpp_mask], batch_y[backpp_mask], weight=c_weight)
             loss.backward()
             optimizer.step()
