@@ -357,7 +357,7 @@ class GBPN(nn.Module):
                 log_msg[subgraph_edge_oid[subgraph_edge_mask]] = info['log_msg_'][subgraph_edge_mask].cpu()
             log_b_ = log_b
             log_msg_ = log_msg
-        return self.compute_log_probabilities(log_b0, log_b, sampler.deg.to(device))
+        return self.compute_log_probabilities(log_b0, log_b, sampler.deg)
         # return LogsumexpFunction.apply(log_b0+torch.log(torch.tensor(0.0)), log_b_+torch.log(torch.tensor(1.0)))
 
 
