@@ -18,13 +18,6 @@ import matplotlib
 import matplotlib.pyplot as plt
 
 
-def get_scaling(deg0, deg1):
-    assert deg0.shape == deg1.shape
-    scaling = torch.ones(deg0.shape[0]).to(deg0.device)
-    scaling[deg1 != 0] = (deg0 / deg1)[deg1 != 0]
-    return scaling
-
-
 def get_cts(edge_index, y):
     idx, cts = torch.stack((y[edge_index[0]], y[edge_index[1]]), dim=0).unique(dim=1, return_counts=True)
     ctsm = torch.zeros(y.max() + 1, y.max() + 1, device=y.device)
@@ -196,13 +189,14 @@ def run(dataset, split, model_name, dim_hidden, num_layers, num_hops, num_sample
                 backpp_mask[anchor_mask[batch_nodes]] = False
 
             optimizer.zero_grad()
-            subgraph_log_b = model(subgraph_x, subgraph_edge_index, edge_weight=subgraph_edge_weight, edge_rv=subgraph_edge_rv, phi=phi, deg=degree(subgraph_edge_index[1], subgraph_size), deg_ori=deg[subgraph_nodes].to(device), K=num_hops)
+            subgraph_log_b = model(subgraph_x, subgraph_edge_index, edge_weight=subgraph_edge_weight, edge_rv=subgraph_edge_rv,
+                                   deg=degree(subgraph_edge_index[1], subgraph_size), deg_ori=deg[subgraph_nodes].to(device), phi=phi, K=num_hops)
             loss = F.nll_loss(subgraph_log_b[:batch_size][backpp_mask], batch_y[backpp_mask], weight=c_weight)
             loss.backward()
             optimizer.step()
             total_loss += float(loss)*batch_size
-            log_b_list.append(subgraph_log_b[:batch_size].detach().cpu())
-            gth_y_list.append(batch_y.cpu())
+            log_b_list.append(subgraph_log_b[:batch_size][backpp_mask].detach().cpu())
+            gth_y_list.append(batch_y[backpp_mask].cpu())
         mean_loss = total_loss / int(train_mask.sum())
         if accuracy_fun == optimal_f1_score:
             accuracy, _ = optimal_f1_score(torch.cat(log_b_list, dim=0), torch.cat(gth_y_list, dim=0))
