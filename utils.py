@@ -361,7 +361,7 @@ class GBPN(nn.Module):
             log_msg_ = log_msg
         # return log_b
         # return LogsumexpFunction.apply(log_b0+torch.log(torch.tensor(0.2)), log_b_+torch.log(torch.tensor(0.8)))
-        return self.compute_log_probabilities(log_b0, log_b, sampler.deg.to(device))
+        return self.compute_log_probabilities(log_b0, log_b, sampler.deg)
 
 
 class GPPN(nn.Module):
