@@ -57,7 +57,7 @@ def optimal_f1_score(log_b, y, optimal_threshold=None):
         return f1_score(y, y_preds)
 
 
-def run(dataset, split, model_name, dim_hidden, num_layers, num_hops, num_samples, dropout_p, device, learning_rate, num_epoches, weighted_BP, learn_H, eval_C, verbose):
+def run(dataset, split, model_name, dim_hidden, num_layers, num_hops, num_samples, dropout_p, device, learning_rate, num_epoches, weighted_BP, deg_scaling, learn_H, eval_C, verbose):
     if dataset == 'Cora':
         data = load_citation('Cora', split=split)
         c_weight = None
@@ -141,8 +141,8 @@ def run(dataset, split, model_name, dim_hidden, num_layers, num_hops, num_sample
         graph_sampler = FullgraphSampler(num_nodes, x, y, edge_index, edge_weight, edge_rv)
         max_batch_size = -1
     elif dataset in ['OGBN_arXiv', 'OGBN_Products', 'JPMC_Payment0', 'JPMC_Payment1', 'Elliptic_Bitcoin']:
-        graph_sampler = SubtreeSampler(num_nodes, x, y, edge_index, edge_weight, edge_rv)
-        # graph_sampler = ClusterSampler(num_nodes, x, y, edge_index, edge_weight, edge_rv, train_mask, val_mask, test_mask)
+        # graph_sampler = SubtreeSampler(num_nodes, x, y, edge_index, edge_weight, edge_rv)
+        graph_sampler = ClusterSampler(num_nodes, x, y, edge_index, edge_weight, edge_rv, train_mask, val_mask, test_mask)
         max_batch_size = min(math.ceil(train_mask.sum()/10.0), 512)
     else:
         raise Exception('unexpected dataset encountered')
@@ -158,7 +158,7 @@ def run(dataset, split, model_name, dim_hidden, num_layers, num_hops, num_sample
     elif model_name == 'GAT':
         model = GAT(num_features, num_classes, dim_hidden=dim_hidden//4, num_layers=num_layers, num_heads=4, activation=nn.ELU(), dropout_p=dropout_p)
     elif model_name == 'GBPN':
-        model = GBPN(num_features, num_classes, dim_hidden=dim_hidden, num_layers=num_layers, activation=nn.ReLU(), dropout_p=dropout_p, learn_H=learn_H)
+        model = GBPN(num_features, num_classes, dim_hidden=dim_hidden, num_layers=num_layers, activation=nn.ReLU(), dropout_p=dropout_p, deg_scaling=deg_scaling, learn_H=learn_H)
     elif model_name == 'GPPN':
         model = GPPN(num_features, num_classes, dim_hidden=dim_hidden, num_layers=num_layers, activation=nn.ReLU(), dropout_p=dropout_p)
     else:
@@ -301,11 +301,12 @@ parser.add_argument('--learning_rate', type=float, default=0.01)
 parser.add_argument('--num_epoches', type=int, default=20)
 parser.add_argument('--num_trials', type=int, default=10)
 parser.add_argument('--weighted_BP', action='store_true')
+parser.add_argument('--deg_scaling', action='store_true')
 parser.add_argument('--learn_H', action='store_true')
 parser.add_argument('--eval_C', action='store_true')
 parser.add_argument('--verbose', action='store_true')
 parser.add_argument('--develop', action='store_true')
-parser.set_defaults(weighted_BP=False, learn_H=False, eval_C=False, verbose=False, develop=False)
+parser.set_defaults(weighted_BP=False, deg_scaling=False, learn_H=False, eval_C=False, verbose=False, develop=False)
 args = parser.parse_args()
 
 outpath = create_outpath(args.dataset, args.model_name)
@@ -320,7 +321,7 @@ test_deg_avg = []
 test_nll_avg = []
 test_crs_avg = []
 for _ in range(args.num_trials):
-    opt_test, opt_deg_avg, opt_nll_avg, opt_crs_avg = run(args.dataset, args.split, args.model_name, args.dim_hidden, args.num_layers, args.num_hops, args.num_samples, args.dropout_p, args.device, args.learning_rate, args.num_epoches, args.weighted_BP, args.learn_H, args.eval_C, args.verbose)
+    opt_test, opt_deg_avg, opt_nll_avg, opt_crs_avg = run(args.dataset, args.split, args.model_name, args.dim_hidden, args.num_layers, args.num_hops, args.num_samples, args.dropout_p, args.device, args.learning_rate, args.num_epoches, args.weighted_BP, args.deg_scaling, args.learn_H, args.eval_C, args.verbose)
     test_acc.append(opt_test)
     test_deg_avg.append(opt_deg_avg)
     test_nll_avg.append(opt_nll_avg)
