@@ -141,8 +141,8 @@ def run(dataset, split, model_name, dim_hidden, num_layers, num_hops, num_sample
         graph_sampler = FullgraphSampler(num_nodes, x, y, edge_index, edge_weight, edge_rv)
         max_batch_size = -1
     elif dataset in ['OGBN_arXiv', 'OGBN_Products', 'JPMC_Payment0', 'JPMC_Payment1', 'Elliptic_Bitcoin']:
-        # graph_sampler = SubtreeSampler(num_nodes, x, y, edge_index, edge_weight, edge_rv)
-        graph_sampler = ClusterSampler(num_nodes, x, y, edge_index, edge_weight, edge_rv, train_mask, val_mask, test_mask)
+        graph_sampler = SubtreeSampler(num_nodes, x, y, edge_index, edge_weight, edge_rv)
+        # graph_sampler = ClusterSampler(num_nodes, x, y, edge_index, edge_weight, edge_rv, train_mask, val_mask, test_mask)
         max_batch_size = min(math.ceil(train_mask.sum()/10.0), 512)
     else:
         raise Exception('unexpected dataset encountered')
@@ -260,6 +260,10 @@ def run(dataset, split, model_name, dim_hidden, num_layers, num_hops, num_sample
         if epoch % max(int(num_epoches*0.1), 10) == 0:
             train_accuracy, val_accuracy, test_accuracy, log_b = evaluation(num_hops=num_hops)
             deg_avg, nll_avg, crs_avg = accuracy_degree_correlation(log_b[test_mask], y[test_mask], deg[test_mask])
+            print()
+            print('deg average: [' + ' '.join(map(lambda f: '{:7.3f}'.format(f), deg_avg)) + ']')
+            print('nll average: [' + ' '.join(map(lambda f: '{:7.3f}'.format(f), nll_avg)) + ']')
+            print('crs average: [' + ' '.join(map(lambda f: '{:7.3f}'.format(f), crs_avg)) + ']')
 
             if val_accuracy > opt_val:
                 opt_val = val_accuracy
@@ -268,7 +272,6 @@ def run(dataset, split, model_name, dim_hidden, num_layers, num_hops, num_sample
                 opt_nll_avg = nll_avg
                 opt_crs_avg = crs_avg
             if type(model) == GBPN and verbose:
-                print()
                 print(model.bp_conv.get_logH().exp(), flush=True)
         print(flush=True)
 

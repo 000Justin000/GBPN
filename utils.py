@@ -16,7 +16,7 @@ from torch_geometric.nn.conv.gcn_conv import gcn_norm
 from torch_geometric.utils import degree, subgraph, remove_self_loops, to_undirected, contains_self_loops, is_undirected, stochastic_blockmodel_graph, k_hop_subgraph
 from torch_geometric.data import Data
 from torch_geometric.data import ClusterData
-from torch_geometric.datasets import Planetoid, Coauthor, WikipediaNetwork
+from torch_geometric.datasets import Planetoid, SNAPDataset, Coauthor, WikipediaNetwork
 from ogb.nodeproppred import PygNodePropPredDataset
 from datetime import datetime, timedelta
 from collections import defaultdict
@@ -318,11 +318,19 @@ class GBPN(nn.Module):
         self.deg_scaling = deg_scaling
         self.bp_conv = BPConv(dim_out, learn_H)
 
-    def compute_log_probabilities(self, log_b0, log_b, deg):
-        alpha = torch.ones_like(deg)
-        alpha[deg != 0.0] = 1.0 / torch.sqrt(deg[deg != 0.0])
-        log_p = log_b * alpha.unsqueeze(-1)
-        log_p[alpha != 1.0] += log_b0[alpha != 1.0] * (1.0 - alpha[alpha != 1.0]).unsqueeze(-1)
+    def compute_log_probabilities(self, log_b0, log_b, deg, option=1):
+        if option == 0:
+            log_p = log_b
+        elif option == 1:
+            log_p = LogsumexpFunction.apply(log_b0 + torch.tensor(0.2).log(), log_b + torch.tensor(0.8).log())
+        elif option in [2, 3]:
+            alpha = torch.ones_like(deg)
+            alpha[deg != 0.0] = 1.0 / deg[deg != 0.0]
+            if option == 2:
+                log_p = log_b * alpha.unsqueeze(-1)
+                log_p[alpha != 1.0] += log_b0[alpha != 1.0] * (1.0 - alpha[alpha != 1.0]).unsqueeze(-1)
+            else:
+                log_p = LogsumexpFunction.apply(log_b0 + (1.0 - alpha).log().unsqueeze(-1), log_b + alpha.log().unsqueeze(-1))
         return log_p
 
     def forward(self, x, edge_index, edge_weight, edge_rv, deg, deg_ori, phi=None, K=5):
@@ -333,8 +341,6 @@ class GBPN(nn.Module):
         for _ in range(K):
             log_b = self.bp_conv(log_b_, edge_index, edge_weight, info)
             log_b_ = log_b
-        # return log_b
-        # return LogsumexpFunction.apply(log_b0+torch.log(torch.tensor(0.2)), log_b_+torch.log(torch.tensor(0.8)))
         return self.compute_log_probabilities(log_b0, log_b, deg_ori if self.deg_scaling else deg)
 
     @torch.no_grad()
@@ -359,8 +365,6 @@ class GBPN(nn.Module):
                 log_msg[subgraph_edge_oid[subgraph_edge_mask]] = info['log_msg_'][subgraph_edge_mask].cpu()
             log_b_ = log_b
             log_msg_ = log_msg
-        # return log_b
-        # return LogsumexpFunction.apply(log_b0+torch.log(torch.tensor(0.2)), log_b_+torch.log(torch.tensor(0.8)))
         return self.compute_log_probabilities(log_b0, log_b, sampler.deg)
 
 
@@ -674,6 +678,11 @@ def process_edge_index(num_nodes, edge_index, edge_attr=None):
     assert torch.all(edge_index[:, edge_rv] == edge_index.flip(dims=[0]))
 
     return edge_index, (None if edge_attr is None else edge_attr[...,od]), edge_rv
+
+
+def load_snap(name='ego-gplus', transform=None, split=None):
+    data = SNAPDataset(root='datasets', name=name)[0]
+    pass
 
 
 def load_citation(name='Cora', transform=None, split=None):
