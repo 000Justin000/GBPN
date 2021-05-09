@@ -322,15 +322,25 @@ class GBPN(nn.Module):
         if option == 0:
             log_p = log_b
         elif option == 1:
-            log_p = LogsumexpFunction.apply(log_b0 + torch.tensor(0.2).log(), log_b + torch.tensor(0.8).log())
-        elif option in [2, 3]:
+            log_p = LogsumexpFunction.apply(log_b0 + torch.tensor(0.1).log(), log_b + torch.tensor(0.9).log())
+        elif option == 2:
             alpha = torch.ones_like(deg)
             alpha[deg != 0.0] = 1.0 / deg[deg != 0.0]
-            if option == 2:
-                log_p = log_b * alpha.unsqueeze(-1)
-                log_p[alpha != 1.0] += log_b0[alpha != 1.0] * (1.0 - alpha[alpha != 1.0]).unsqueeze(-1)
-            else:
-                log_p = LogsumexpFunction.apply(log_b0 + (1.0 - alpha).log().unsqueeze(-1), log_b + alpha.log().unsqueeze(-1))
+            log_p = log_b * alpha.unsqueeze(-1)
+            log_p[alpha != 1.0] += log_b0[alpha != 1.0] * (1.0 - alpha[alpha != 1.0]).unsqueeze(-1)
+        elif option == 3:
+            alpha = torch.ones_like(deg)
+            alpha[deg != 0.0] = 1.0 / deg[deg != 0.0].sqrt()
+            log_p = log_b * alpha.unsqueeze(-1)
+            log_p[alpha != 1.0] += log_b0[alpha != 1.0] * (1.0 - alpha[alpha != 1.0]).unsqueeze(-1)
+        elif option == 4:
+            alpha = torch.ones_like(deg)
+            alpha[deg != 0.0] = 1.0 / deg[deg != 0.0]
+            log_p = log_b * alpha.unsqueeze(-1)
+        elif option == 5:
+            alpha = torch.ones_like(deg)
+            alpha[deg != 0.0] = 1.0 / deg[deg != 0.0].sqrt()
+            log_p = log_b * alpha.unsqueeze(-1)
         return log_p
 
     def forward(self, x, edge_index, edge_weight, edge_rv, deg, deg_ori, phi=None, K=5):

@@ -101,6 +101,7 @@ void subtree_dfs(Graph& G, Graph& T, int r, int rid, int max_d, int num_samples)
             selected_nbr = nbr;
         else
             sample(nbr.begin(), nbr.end(), back_inserter(selected_nbr), num_samples, mt19937{random_device{}()});
+            // sample(nbr.begin(), nbr.end(), back_inserter(selected_nbr), (d == 0) ? max(int(nbr.size()*0.1), num_samples) : num_samples, mt19937{random_device{}()});
 
         for (auto arc: selected_nbr)
         {
