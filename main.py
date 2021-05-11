@@ -106,6 +106,7 @@ def run(dataset, split, model_name, dim_hidden, num_layers, num_hops, num_sample
     elif dataset == 'Elliptic_Bitcoin':
         data = load_elliptic_bitcoin(split=split)
         _, cts = data.y[data.y >= 0].unique(return_counts=True)
+        data.y[data.y < 0] = 0
         c_weight = (cts**-1.0) / (cts**-1.0).sum()
         accuracy_fun = optimal_f1_score
     elif dataset in ['JPMC_Payment0', 'JPMC_Payment1']:
@@ -197,8 +198,8 @@ def run(dataset, split, model_name, dim_hidden, num_layers, num_hops, num_sample
 
 
     if model_name == 'LP':
-        log_b = log_normalize(model(y, adj_t, train_mask, post_step=lambda y: y.clamp_(1.0e-15,1.0e0)).log())
-        train_loss, val_loss, test_loss, train_accuracy, val_accuracy, test_accuracy = loss_and_accuracy(y, log_b)
+        log_b = log_normalize(model(y.to(device), adj_t.to(device), train_mask.to(device), post_step=lambda y: y.clamp_(1.0e-15,1.0e0)).log()).cpu()
+        train_loss, val_loss, test_loss, train_accuracy, val_accuracy, test_accuracy = loss_and_accuracy(y.to(device), log_b.to(device))
         deg_avg, nll_avg, crs_avg = accuracy_degree_correlation(log_b[test_mask], y[test_mask], deg[test_mask])
         print('optimal val accuracy: {:7.5f}, optimal test accuracy: {:7.5f}'.format(val_accuracy, test_accuracy))
         print('optimal deg average: [' + ' '.join(map(lambda f: '{:7.3f}'.format(f), deg_avg)) + ']')
@@ -252,7 +253,7 @@ def run(dataset, split, model_name, dim_hidden, num_layers, num_hops, num_sample
     def evaluation(num_hops=2):
         model.eval()
         log_b = model.inference(graph_sampler, max_batch_size, device, K=num_hops)
-        train_loss, val_loss, test_loss, train_accuracy, val_accuracy, test_accuracy = loss_and_accuracy(y, log_b)
+        train_loss, val_loss, test_loss, train_accuracy, val_accuracy, test_accuracy = loss_and_accuracy(y.to(device), log_b.to(device))
         if verbose:
             print('inductive loss / accuracy: ({:5.3f}, {:5.3f}, {:5.3f}) / ({:5.3f}, {:5.3f}, {:5.3f})'.format(train_loss, val_loss, test_loss, train_accuracy, val_accuracy, test_accuracy), end='    ', flush=True)
 
@@ -260,7 +261,7 @@ def run(dataset, split, model_name, dim_hidden, num_layers, num_hops, num_sample
             phi = torch.zeros(num_nodes, num_classes)
             phi[train_mask] = torch.log(F.one_hot(y[train_mask], num_classes).float())
             log_b = model.inference(graph_sampler, max_batch_size, device, phi=phi, K=num_hops)
-            train_loss, val_loss, test_loss, train_accuracy, val_accuracy, test_accuracy = loss_and_accuracy(y, log_b)
+            train_loss, val_loss, test_loss, train_accuracy, val_accuracy, test_accuracy = loss_and_accuracy(y.to(device), log_b.to(device))
             if verbose:
                 print('transductive loss / accuracy: ({:5.3f}, {:5.3f}, {:5.3f}) / ({:5.3f}, {:5.3f}, {:5.3f})'.format(train_loss, val_loss, test_loss, train_accuracy, val_accuracy, test_accuracy), end='', flush=True)
 
