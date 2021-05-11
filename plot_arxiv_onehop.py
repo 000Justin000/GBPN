@@ -31,8 +31,8 @@ crs_avg = np.array([[  0.505,  0.557,  0.596,  0.625,  0.660,  0.678,  0.698,  0
 
 
 nn = np.array([1, 2, 3, 4, 5, 6])
-ll = np.mean(pll_avg[:,:], axis=1)
-ac = np.mean(crs_avg[:,:], axis=1)
+ll = np.mean(pll_avg[:,:3], axis=1)
+ac = np.mean(crs_avg[:,:3], axis=1)
 
 fig, ax1 = plt.subplots(figsize=(6.0, 4.5))
 ax1.set_xlabel('max degree during training', fontsize=16.5)
@@ -43,11 +43,11 @@ ln1 = ax1.plot(nn, ac, color='tab:blue', linestyle='solid', marker='o', markered
 ax2 = ax1.twinx()
 ax2.set_ylabel(r'log-likelihood', color='tab:red', fontsize=16.5)
 ax2.set_xlim([0.5, 6.5])
-ax2.set_ylim([-1.4, -1.1])
+# ax2.set_ylim([-1.4, -1.1])
 ax2.set_xticks([1, 2, 3, 4, 5, 6])
 ax2.set_xticklabels([r"full", r"$100$", r"$50$", r"$20$", r"$10$", r"$5$"])
-ax2.set_yticks([-1.40, -1.35, -1.30, -1.25, -1.20, -1.15, -1.10])
-ax2.set_yticklabels(["-1.40", "-1.35", "-1.30", "-1.25", "-1.20", "-1.15", "-1.10"])
+# ax2.set_yticks([-1.40, -1.35, -1.30, -1.25, -1.20, -1.15, -1.10])
+# ax2.set_yticklabels(["-1.40", "-1.35", "-1.30", "-1.25", "-1.20", "-1.15", "-1.10"])
 ax2.tick_params(axis='y', labelcolor='tab:red')
 ln2 = ax2.plot(nn, ll, color='tab:red', linestyle='solid', marker='o', markeredgecolor='k', markersize=6, label='log-likelihood')
 
