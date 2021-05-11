@@ -312,17 +312,20 @@ class BPConv(MessagePassing):
 
 class GBPN(nn.Module):
 
-    def __init__(self, dim_in, dim_out, dim_hidden=32, num_layers=0, activation=nn.ReLU(), dropout_p=0.0, deg_scaling=False, learn_H=False):
+    def __init__(self, dim_in, dim_out, dim_hidden=32, num_layers=0, activation=nn.ReLU(), dropout_p=0.0, loss_option=0, deg_scaling=False, learn_H=False):
         super(GBPN, self).__init__()
         self.transform = nn.Sequential(MLP(dim_in, dim_out, dim_hidden=dim_hidden, num_layers=num_layers, activation=activation, dropout_p=dropout_p), nn.LogSoftmax(dim=-1))
+        self.loss_option = loss_option
         self.deg_scaling = deg_scaling
         self.bp_conv = BPConv(dim_out, learn_H)
+        self.loss_option = loss_option
 
-    def compute_log_probabilities(self, log_b0, log_b, deg, option=5):
+    def compute_log_probabilities(self, log_b0, log_b, deg, option=None):
+        option = option if (option is not None) else self.loss_option
         if option == 0:
             log_p = log_b
         elif option == 1:
-            log_p = LogsumexpFunction.apply(log_b0 + torch.tensor(0.1).log(), log_b + torch.tensor(0.9).log())
+            log_p = LogsumexpFunction.apply(log_b0 + torch.tensor(0.5).log(), log_b + torch.tensor(0.5).log())
         elif option == 2:
             alpha = torch.ones_like(deg)
             alpha[deg != 0.0] = 1.0 / deg[deg != 0.0]

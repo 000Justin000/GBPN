@@ -58,7 +58,7 @@ def optimal_f1_score(log_b, y, optimal_threshold=None):
         return f1_score(y, y_preds)
 
 
-def run(dataset, split, model_name, dim_hidden, num_layers, num_hops, num_samples, dropout_p, device, learning_rate, num_epoches, weighted_BP, deg_scaling, learn_H, eval_C, verbose):
+def run(dataset, split, model_name, dim_hidden, num_layers, num_hops, num_samples, dropout_p, device, learning_rate, num_epoches, loss_option, weighted_BP, deg_scaling, learn_H, eval_C, verbose):
     if dataset == 'Cora':
         data = load_citation('Cora', split=split)
         c_weight = None
@@ -154,7 +154,7 @@ def run(dataset, split, model_name, dim_hidden, num_layers, num_hops, num_sample
         perm = (col * num_nodes + row).argsort()
         row, col = row[perm], col[perm]
         adj_t = SparseTensor(row=col, col=row, sparse_sizes=(num_nodes, num_nodes), is_sorted=True)
-        model = LabelPropagation(num_layers=50, alpha=0.90)
+        model = LabelPropagation(num_layers=50, alpha=0.00)
     elif model_name == 'MLP':
         model = GMLP(num_features, num_classes, dim_hidden=dim_hidden, num_layers=num_layers, activation=nn.ReLU(), dropout_p=dropout_p)
     elif model_name == 'SGC':
@@ -166,11 +166,10 @@ def run(dataset, split, model_name, dim_hidden, num_layers, num_hops, num_sample
     elif model_name == 'GAT':
         model = GAT(num_features, num_classes, dim_hidden=dim_hidden//4, num_layers=num_layers, num_heads=4, activation=nn.ELU(), dropout_p=dropout_p)
     elif model_name == 'GBPN':
-        model = GBPN(num_features, num_classes, dim_hidden=dim_hidden, num_layers=num_layers, activation=nn.ReLU(), dropout_p=dropout_p, deg_scaling=deg_scaling, learn_H=learn_H)
+        model = GBPN(num_features, num_classes, dim_hidden=dim_hidden, num_layers=num_layers, activation=nn.ReLU(), dropout_p=dropout_p, loss_option=loss_option, deg_scaling=deg_scaling, learn_H=learn_H)
     else:
         raise Exception('unexpected model type')
     model = model.to(device)
-
 
     def loss_and_accuracy(y, log_b):
         train_loss = F.nll_loss(log_b[train_mask], y[train_mask], weight=c_weight)
@@ -186,7 +185,6 @@ def run(dataset, split, model_name, dim_hidden, num_layers, num_hops, num_sample
             test_accuracy = accuracy_fun(log_b[test_mask], y[test_mask])
         return train_loss, val_loss, test_loss, train_accuracy, val_accuracy, test_accuracy
 
-
     def accuracy_degree_correlation(log_b, y, deg):
         nll = log_b.gather(-1, y.reshape(-1,1))
         crs = log_b.argmax(dim=-1) == y
@@ -196,22 +194,30 @@ def run(dataset, split, model_name, dim_hidden, num_layers, num_hops, num_sample
         crs_avg = [float(batch.float().mean()) for batch in crs[perm].chunk(10)]
         return deg_avg, nll_avg, crs_avg
 
-
     if model_name == 'LP':
-        log_b = log_normalize(model(y.to(device), adj_t.to(device), train_mask.to(device), post_step=lambda y: y.clamp_(1.0e-15,1.0e0)).log()).cpu()
-        train_loss, val_loss, test_loss, train_accuracy, val_accuracy, test_accuracy = loss_and_accuracy(y.to(device), log_b.to(device))
-        deg_avg, nll_avg, crs_avg = accuracy_degree_correlation(log_b[test_mask], y[test_mask], deg[test_mask])
-        print('optimal val accuracy: {:7.5f}, optimal test accuracy: {:7.5f}'.format(val_accuracy, test_accuracy))
-        print('optimal deg average: [' + ' '.join(map(lambda f: '{:7.3f}'.format(f), deg_avg)) + ']')
-        print('optimal nll average: [' + ' '.join(map(lambda f: '{:7.3f}'.format(f), nll_avg)) + ']')
-        print('optimal crs average: [' + ' '.join(map(lambda f: '{:7.3f}'.format(f), crs_avg)) + ']')
-        return test_accuracy, deg_avg, nll_avg, crs_avg
+        opt_val, opt_test = 0.0, 0.0
+        opt_deg_avg, opt_nll_avg, opt_crs_avg = None, None, None
+        for alpha in [0.0, 0.3, 0.5, 0.7, 0.9, 0.95, 0.99]:
+            model.alpha = alpha
+            log_b = log_normalize(model(y.to(device), adj_t.to(device), train_mask.to(device), post_step=lambda y: y.clamp_(1.0e-15,1.0e0)).log()).cpu()
+            train_loss, val_loss, test_loss, train_accuracy, val_accuracy, test_accuracy = loss_and_accuracy(y.to(device), log_b.to(device))
+            deg_avg, nll_avg, crs_avg = accuracy_degree_correlation(log_b[test_mask], y[test_mask], deg[test_mask])
+            if val_accuracy > opt_val:
+                opt_val = val_accuracy
+                opt_test = test_accuracy
+                opt_deg_avg = deg_avg
+                opt_nll_avg = nll_avg
+                opt_crs_avg = crs_avg
+        print('optimal val accuracy: {:7.5f}, optimal test accuracy: {:7.5f}'.format(opt_val, opt_test))
+        print('optimal deg average: [' + ' '.join(map(lambda f: '{:7.3f}'.format(f), opt_deg_avg)) + ']')
+        print('optimal nll average: [' + ' '.join(map(lambda f: '{:7.3f}'.format(f), opt_nll_avg)) + ']')
+        print('optimal crs average: [' + ' '.join(map(lambda f: '{:7.3f}'.format(f), opt_crs_avg)) + ']')
+        return opt_test, opt_deg_avg, opt_nll_avg, opt_crs_avg
     elif model_name == 'GBPN':
         optimizer = MultiOptimizer(torch.optim.AdamW(model.transform.parameters(), lr=learning_rate, weight_decay=2.5e-4),
                                    torch.optim.AdamW(model.bp_conv.parameters(), lr=learning_rate*10, weight_decay=2.5e-4))
     else:
         optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate, weight_decay=2.5e-4)
-
 
     def train(num_hops=2, num_samples=5):
         model.train()
@@ -247,7 +253,6 @@ def run(dataset, split, model_name, dim_hidden, num_layers, num_hops, num_sample
         if verbose:
             print('step {:5d}, train loss: {:5.3f}, train accuracy: {:5.3f}'.format(epoch, mean_loss, accuracy), end='    ', flush=True)
         return accuracy
-
 
     @torch.no_grad()
     def evaluation(num_hops=2):
@@ -320,6 +325,7 @@ parser.add_argument('--device', type=str, default='cpu')
 parser.add_argument('--learning_rate', type=float, default=0.01)
 parser.add_argument('--num_epoches', type=int, default=20)
 parser.add_argument('--num_trials', type=int, default=10)
+parser.add_argument('--loss_option', type=int, default=0)
 parser.add_argument('--weighted_BP', action='store_true')
 parser.add_argument('--deg_scaling', action='store_true')
 parser.add_argument('--learn_H', action='store_true')
@@ -341,7 +347,7 @@ test_deg_avg = []
 test_nll_avg = []
 test_crs_avg = []
 for _ in range(args.num_trials):
-    opt_test, opt_deg_avg, opt_nll_avg, opt_crs_avg = run(args.dataset, args.split, args.model_name, args.dim_hidden, args.num_layers, args.num_hops, args.num_samples, args.dropout_p, args.device, args.learning_rate, args.num_epoches, args.weighted_BP, args.deg_scaling, args.learn_H, args.eval_C, args.verbose)
+    opt_test, opt_deg_avg, opt_nll_avg, opt_crs_avg = run(args.dataset, args.split, args.model_name, args.dim_hidden, args.num_layers, args.num_hops, args.num_samples, args.dropout_p, args.device, args.learning_rate, args.num_epoches, args.loss_option, args.weighted_BP, args.deg_scaling, args.learn_H, args.eval_C, args.verbose)
     test_acc.append(opt_test)
     test_deg_avg.append(opt_deg_avg)
     test_nll_avg.append(opt_nll_avg)
