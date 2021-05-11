@@ -318,7 +318,7 @@ class GBPN(nn.Module):
         self.deg_scaling = deg_scaling
         self.bp_conv = BPConv(dim_out, learn_H)
 
-    def compute_log_probabilities(self, log_b0, log_b, deg, option=1):
+    def compute_log_probabilities(self, log_b0, log_b, deg, option=5):
         if option == 0:
             log_p = log_b
         elif option == 1:
@@ -341,7 +341,7 @@ class GBPN(nn.Module):
             alpha = torch.ones_like(deg)
             alpha[deg != 0.0] = 1.0 / deg[deg != 0.0].sqrt()
             log_p = log_b * alpha.unsqueeze(-1)
-        return log_p
+        return log_normalize(log_p)
 
     def forward(self, x, edge_index, edge_weight, edge_rv, deg, deg_ori, phi=None, K=5):
         log_b0 = self.transform(x) if (phi is None) else log_normalize(self.transform(x) + phi)
