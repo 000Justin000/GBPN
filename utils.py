@@ -318,7 +318,7 @@ class GBPN(nn.Module):
         self.deg_scaling = deg_scaling
         self.bp_conv = BPConv(dim_out, learn_H)
 
-    def compute_log_probabilities(self, log_b0, log_b, deg, option=1):
+    def compute_log_probabilities(self, log_b0, log_b, deg, option=5):
         if option == 0:
             log_p = log_b
         elif option == 1:
@@ -341,7 +341,7 @@ class GBPN(nn.Module):
             alpha = torch.ones_like(deg)
             alpha[deg != 0.0] = 1.0 / deg[deg != 0.0].sqrt()
             log_p = log_b * alpha.unsqueeze(-1)
-        return log_p
+        return log_normalize(log_p)
 
     def forward(self, x, edge_index, edge_weight, edge_rv, deg, deg_ori, phi=None, K=5):
         log_b0 = self.transform(x) if (phi is None) else log_normalize(self.transform(x) + phi)
@@ -376,63 +376,6 @@ class GBPN(nn.Module):
             log_b_ = log_b
             log_msg_ = log_msg
         return self.compute_log_probabilities(log_b0, log_b, sampler.deg)
-
-
-class GPPN(nn.Module):
-
-    def __init__(self, dim_in, dim_out, dim_hidden=128, num_layers=2, activation=nn.ReLU(), dropout_p=0.0):
-        super(GPPN, self).__init__()
-        assert num_layers >= 2
-        self.transform = nn.Sequential(MLP(dim_in, dim_out, dim_hidden=dim_hidden, num_layers=num_layers, activation=activation, dropout_p=dropout_p), nn.LogSoftmax(dim=-1))
-        self.num_layers = num_layers
-        self.convs = nn.ModuleList()
-        self.convs.append(SAGEConv(dim_out, dim_hidden))
-        for _ in range(num_layers-2):
-            self.convs.append(SAGEConv(dim_hidden, dim_hidden))
-        self.convs.append(SAGEConv(dim_hidden, dim_out))
-        self.activation = activation
-        self.dropout = nn.Dropout(dropout_p)
-
-    def forward(self, x, edge_index, phi=None, **kwargs):
-        log_b0 = self.transform(x)
-        if phi is not None:
-            log_b0 = log_normalize(log_b0 + phi)
-        x = log_b0.exp()
-        for i, conv in enumerate(self.convs):
-            x = conv(x, edge_index)
-            if i < self.num_layers-1:
-                x = self.dropout(x)
-                x = self.activation(x)
-            else:
-                x = F.log_softmax(x, dim=-1)
-        return LogsumexpFunction.apply(log_b0+torch.log(torch.tensor(0.2)), x+torch.log(torch.tensor(0.8)))
-
-    @torch.no_grad()
-    def inference(self, sampler, max_batch_size, device, phi=None, **kwargs):
-        log_b0_list = []
-        for batch_size, _, _, _, _, \
-            _, _, subgraph_x, _, _, \
-            subgraph_edge_index, _, _, _ in sampler.get_generator(max_batch_size=max_batch_size, num_hops=0):
-            log_b0_list.append(self.transform(subgraph_x.to(device))[:batch_size].cpu())
-        log_b0 = torch.cat(log_b0_list, dim=0)
-        if phi is not None:
-            log_b0 = log_normalize(log_b0 + phi)
-        x_all_ = log_b0.exp()
-        for i, conv in enumerate(self.convs):
-            x_all = torch.zeros(sampler.num_nodes, conv.out_channels, dtype=torch.float32)
-            for _, batch_nodes, _, _, _, \
-                _, subgraph_nodes, _, _, _, \
-                subgraph_edge_index, _, _, _ in sampler.get_generator(max_batch_size=max_batch_size, num_hops=1):
-                x, subgraph_edge_index = x_all_[subgraph_nodes].to(device), subgraph_edge_index.to(device)
-                x = conv(x, subgraph_edge_index)
-                if i < self.num_layers-1:
-                    x = self.dropout(x)
-                    x = self.activation(x)
-                else:
-                    x = F.log_softmax(x, dim=-1)
-                x_all[batch_nodes] = x[:batch_nodes.shape[0]].cpu()
-            x_all_ = x_all
-        return LogsumexpFunction.apply(log_b0+torch.log(torch.tensor(0.2)), x_all+torch.log(torch.tensor(0.8)))
 
 
 class FullgraphSampler:

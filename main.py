@@ -11,6 +11,7 @@ from torch_geometric.data import NeighborSampler
 from torch_geometric.nn import GCNConv
 from torch_geometric.transforms import ToSparseTensor
 from torch_geometric.nn import MessagePassing
+from torch_geometric.nn.models import LabelPropagation
 from torch_geometric.utils import degree, is_undirected, subgraph
 from sklearn.metrics import roc_auc_score, precision_recall_curve, f1_score
 from utils import *
@@ -147,7 +148,13 @@ def run(dataset, split, model_name, dim_hidden, num_layers, num_hops, num_sample
     else:
         raise Exception('unexpected dataset encountered')
 
-    if model_name == 'MLP':
+    if model_name == 'LP':
+        row, col = edge_index
+        perm = (col * num_nodes + row).argsort()
+        row, col = row[perm], col[perm]
+        adj_t = SparseTensor(row=col, col=row, sparse_sizes=(num_nodes, num_nodes), is_sorted=True)
+        model = LabelPropagation(num_layers=50, alpha=0.90)
+    elif model_name == 'MLP':
         model = GMLP(num_features, num_classes, dim_hidden=dim_hidden, num_layers=num_layers, activation=nn.ReLU(), dropout_p=dropout_p)
     elif model_name == 'SGC':
         model = SGC(num_features, num_classes, dim_hidden=dim_hidden, num_layers=num_layers, dropout_p=dropout_p)
@@ -159,52 +166,9 @@ def run(dataset, split, model_name, dim_hidden, num_layers, num_hops, num_sample
         model = GAT(num_features, num_classes, dim_hidden=dim_hidden//4, num_layers=num_layers, num_heads=4, activation=nn.ELU(), dropout_p=dropout_p)
     elif model_name == 'GBPN':
         model = GBPN(num_features, num_classes, dim_hidden=dim_hidden, num_layers=num_layers, activation=nn.ReLU(), dropout_p=dropout_p, deg_scaling=deg_scaling, learn_H=learn_H)
-    elif model_name == 'GPPN':
-        model = GPPN(num_features, num_classes, dim_hidden=dim_hidden, num_layers=num_layers, activation=nn.ReLU(), dropout_p=dropout_p)
     else:
         raise Exception('unexpected model type')
     model = model.to(device)
-
-    if model_name == 'GBPN':
-        optimizer = MultiOptimizer(torch.optim.AdamW(model.transform.parameters(), lr=learning_rate, weight_decay=2.5e-4),
-                                   torch.optim.AdamW(model.bp_conv.parameters(), lr=learning_rate*10, weight_decay=2.5e-4))
-    else:
-        optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate, weight_decay=2.5e-4)
-
-    def train(num_hops=2, num_samples=5):
-        model.train()
-        total_loss = 0.0
-        log_b_list, gth_y_list = [], []
-        for batch_size, batch_nodes, _, batch_y, _, \
-            subgraph_size, subgraph_nodes, subgraph_x, subgraph_y, subgraph_deg, \
-            subgraph_edge_index, subgraph_edge_weight, subgraph_edge_rv, _ in graph_sampler.get_generator(mask=train_mask, shuffle=True, max_batch_size=max_batch_size, num_hops=num_hops, num_samples=num_samples, device=device):
-
-            phi = torch.zeros(subgraph_size, num_classes).to(device)
-            backpp_mask = torch.ones(batch_size, dtype=torch.bool).to(device)
-            if type(model) in [GBPN, GPPN] and eval_C:
-                backpp_nodes = batch_nodes[torch.rand(batch_size) > 0.5]
-                anchor_mask = train_mask.clone()
-                anchor_mask[backpp_nodes] = False
-                phi[anchor_mask[subgraph_nodes]] = torch.log(F.one_hot(subgraph_y[anchor_mask[subgraph_nodes]], num_classes).float())
-                backpp_mask[anchor_mask[batch_nodes]] = False
-
-            optimizer.zero_grad()
-            subgraph_log_b = model(subgraph_x, subgraph_edge_index, edge_weight=subgraph_edge_weight, edge_rv=subgraph_edge_rv,
-                                   deg=degree(subgraph_edge_index[1], subgraph_size), deg_ori=deg[subgraph_nodes].to(device), phi=phi, K=num_hops)
-            loss = F.nll_loss(subgraph_log_b[:batch_size][backpp_mask], batch_y[backpp_mask], weight=c_weight)
-            loss.backward()
-            optimizer.step()
-            total_loss += float(loss)*batch_size
-            log_b_list.append(subgraph_log_b[:batch_size][backpp_mask].detach().cpu())
-            gth_y_list.append(batch_y[backpp_mask].cpu())
-        mean_loss = total_loss / int(train_mask.sum())
-        if accuracy_fun == optimal_f1_score:
-            accuracy, _ = optimal_f1_score(torch.cat(log_b_list, dim=0), torch.cat(gth_y_list, dim=0))
-        else:
-            accuracy = accuracy_fun(torch.cat(log_b_list, dim=0), torch.cat(gth_y_list, dim=0))
-        if verbose:
-            print('step {:5d}, train loss: {:5.3f}, train accuracy: {:5.3f}'.format(epoch, mean_loss, accuracy), end='    ', flush=True)
-        return accuracy
 
 
     def loss_and_accuracy(y, log_b):
@@ -232,6 +196,58 @@ def run(dataset, split, model_name, dim_hidden, num_layers, num_hops, num_sample
         return deg_avg, nll_avg, crs_avg
 
 
+    if model_name == 'LP':
+        log_b = log_normalize(model(y, adj_t, train_mask).log())
+        train_loss, val_loss, test_loss, train_accuracy, val_accuracy, test_accuracy = loss_and_accuracy(y, log_b)
+        deg_avg, nll_avg, crs_avg = accuracy_degree_correlation(log_b[test_mask], y[test_mask], deg[test_mask])
+        print('optimal val accuracy: {:7.5f}, optimal test accuracy: {:7.5f}'.format(val_accuracy, test_accuracy))
+        print('optimal deg average: [' + ' '.join(map(lambda f: '{:7.3f}'.format(f), deg_avg)) + ']')
+        print('optimal nll average: [' + ' '.join(map(lambda f: '{:7.3f}'.format(f), nll_avg)) + ']')
+        print('optimal crs average: [' + ' '.join(map(lambda f: '{:7.3f}'.format(f), crs_avg)) + ']')
+        return test_accuracy, deg_avg, nll_avg, crs_avg
+    elif model_name == 'GBPN':
+        optimizer = MultiOptimizer(torch.optim.AdamW(model.transform.parameters(), lr=learning_rate, weight_decay=2.5e-4),
+                                   torch.optim.AdamW(model.bp_conv.parameters(), lr=learning_rate*10, weight_decay=2.5e-4))
+    else:
+        optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate, weight_decay=2.5e-4)
+
+
+    def train(num_hops=2, num_samples=5):
+        model.train()
+        total_loss = 0.0
+        log_b_list, gth_y_list = [], []
+        for batch_size, batch_nodes, _, batch_y, _, \
+            subgraph_size, subgraph_nodes, subgraph_x, subgraph_y, subgraph_deg, \
+            subgraph_edge_index, subgraph_edge_weight, subgraph_edge_rv, _ in graph_sampler.get_generator(mask=train_mask, shuffle=True, max_batch_size=max_batch_size, num_hops=num_hops, num_samples=num_samples, device=device):
+
+            phi = torch.zeros(subgraph_size, num_classes).to(device)
+            backpp_mask = torch.ones(batch_size, dtype=torch.bool).to(device)
+            if type(model) == GBPN and eval_C:
+                backpp_nodes = batch_nodes[torch.rand(batch_size) > 0.5]
+                anchor_mask = train_mask.clone()
+                anchor_mask[backpp_nodes] = False
+                phi[anchor_mask[subgraph_nodes]] = torch.log(F.one_hot(subgraph_y[anchor_mask[subgraph_nodes]], num_classes).float())
+                backpp_mask[anchor_mask[batch_nodes]] = False
+
+            optimizer.zero_grad()
+            subgraph_log_b = model(subgraph_x, subgraph_edge_index, edge_weight=subgraph_edge_weight, edge_rv=subgraph_edge_rv,
+                                   deg=degree(subgraph_edge_index[1], subgraph_size), deg_ori=deg[subgraph_nodes].to(device), phi=phi, K=num_hops)
+            loss = F.nll_loss(subgraph_log_b[:batch_size][backpp_mask], batch_y[backpp_mask], weight=c_weight)
+            loss.backward()
+            optimizer.step()
+            total_loss += float(loss)*batch_size
+            log_b_list.append(subgraph_log_b[:batch_size][backpp_mask].detach().cpu())
+            gth_y_list.append(batch_y[backpp_mask].cpu())
+        mean_loss = total_loss / int(train_mask.sum())
+        if accuracy_fun == optimal_f1_score:
+            accuracy, _ = optimal_f1_score(torch.cat(log_b_list, dim=0), torch.cat(gth_y_list, dim=0))
+        else:
+            accuracy = accuracy_fun(torch.cat(log_b_list, dim=0), torch.cat(gth_y_list, dim=0))
+        if verbose:
+            print('step {:5d}, train loss: {:5.3f}, train accuracy: {:5.3f}'.format(epoch, mean_loss, accuracy), end='    ', flush=True)
+        return accuracy
+
+
     @torch.no_grad()
     def evaluation(num_hops=2):
         model.eval()
@@ -240,7 +256,7 @@ def run(dataset, split, model_name, dim_hidden, num_layers, num_hops, num_sample
         if verbose:
             print('inductive loss / accuracy: ({:5.3f}, {:5.3f}, {:5.3f}) / ({:5.3f}, {:5.3f}, {:5.3f})'.format(train_loss, val_loss, test_loss, train_accuracy, val_accuracy, test_accuracy), end='    ', flush=True)
 
-        if type(model) in [GBPN, GPPN] and eval_C:
+        if type(model) == GBPN and eval_C:
             phi = torch.zeros(num_nodes, num_classes)
             phi[train_mask] = torch.log(F.one_hot(y[train_mask], num_classes).float())
             log_b = model.inference(graph_sampler, max_batch_size, device, phi=phi, K=num_hops)
