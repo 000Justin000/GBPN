@@ -197,7 +197,7 @@ def run(dataset, split, model_name, dim_hidden, num_layers, num_hops, num_sample
 
 
     if model_name == 'LP':
-        log_b = log_normalize(model(y, adj_t, train_mask).log())
+        log_b = log_normalize(model(y, adj_t, train_mask, post_step=lambda y: y.clamp_(1.0e-15,1.0e0)).log())
         train_loss, val_loss, test_loss, train_accuracy, val_accuracy, test_accuracy = loss_and_accuracy(y, log_b)
         deg_avg, nll_avg, crs_avg = accuracy_degree_correlation(log_b[test_mask], y[test_mask], deg[test_mask])
         print('optimal val accuracy: {:7.5f}, optimal test accuracy: {:7.5f}'.format(val_accuracy, test_accuracy))
