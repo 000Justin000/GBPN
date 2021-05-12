@@ -1,5 +1,6 @@
 import numpy as np
 import matplotlib.pyplot as plt
+plt.rcParams.update({"font.size": 14, "text.usetex": True, "font.family": "serif", "font.serif": ["Palatino"]})
 
 # overall test accuracies:  
 acc = np.array([66.512,  67.124,  67.368,  68.048,  68.772,  68.939])
@@ -30,31 +31,36 @@ crs_avg = np.array([[  0.505,  0.557,  0.596,  0.625,  0.660,  0.678,  0.698,  0
                     [  0.531,  0.584,  0.625,  0.658,  0.686,  0.704,  0.720,  0.766,  0.791,  0.830]])
 
 
+def plot_loglikelihood_accuracy(nn, ll, ac, ax1_ylim, ax1_yticks, ax2_ylim, ax2_yticks, fname):
+    fig, ax1 = plt.subplots(figsize=(6.0, 3.5))
+
+    ax1.set_ylabel(r'log-likelihood', color='tab:blue', fontsize=16.5)
+    ax1.set_xlim([0.5, 6.5])
+    ax1.set_xticks([1, 2, 3, 4, 5, 6])
+    ax1.set_xticklabels([r"full", r"$100$", r"$50$", r"$20$", r"$10$", r"$5$"])
+    ax1.set_ylim(ax1_ylim)
+    ax1.set_yticks(ax1_yticks)
+    ax1.tick_params(axis='y', labelcolor='tab:blue')
+    ln1 = ax1.plot(nn, ll, color='tab:blue', linestyle='dashed', label='log-likelihood')
+
+    ax2 = ax1.twinx()
+    ax2.set_xlabel('max degree during training', fontsize=16.5)
+    ax2.set_ylabel(r'accuracy ($\%$)', color='tab:red', fontsize=16.5)
+    ax2.set_ylim(ax2_ylim)
+    ax2.set_yticks(ax2_yticks)
+    ax2.tick_params(axis='y', labelcolor='tab:red')
+    ln2 = ax2.plot(nn, ac, color='tab:red', linestyle='solid', marker='o', markeredgecolor='k', markersize=6, label='accuracy')
+
+    lns = ln1+ln2
+    labs = [l.get_label() for l in lns]
+    ax2.legend(lns, labs, loc='lower right')
+
+    fig.tight_layout()
+    plt.savefig(fname, bbox_inches='tight', pad_inches=0)
+    plt.show()
+
+
 nn = np.array([1, 2, 3, 4, 5, 6])
-ll = np.mean(pll_avg[:,:3], axis=1)
-ac = np.mean(crs_avg[:,:3], axis=1)
-
-fig, ax1 = plt.subplots(figsize=(6.0, 4.5))
-ax1.set_xlabel('max degree during training', fontsize=16.5)
-ax1.set_ylabel(r'accuracy', color='tab:blue', fontsize=16.5)
-ax1.tick_params(axis='y', labelcolor='tab:blue')
-ln1 = ax1.plot(nn, ac, color='tab:blue', linestyle='solid', marker='o', markeredgecolor='k', markersize=6, label='accuracy')
-
-ax2 = ax1.twinx()
-ax2.set_ylabel(r'log-likelihood', color='tab:red', fontsize=16.5)
-ax2.set_xlim([0.5, 6.5])
-# ax2.set_ylim([-1.4, -1.1])
-ax2.set_xticks([1, 2, 3, 4, 5, 6])
-ax2.set_xticklabels([r"full", r"$100$", r"$50$", r"$20$", r"$10$", r"$5$"])
-# ax2.set_yticks([-1.40, -1.35, -1.30, -1.25, -1.20, -1.15, -1.10])
-# ax2.set_yticklabels(["-1.40", "-1.35", "-1.30", "-1.25", "-1.20", "-1.15", "-1.10"])
-ax2.tick_params(axis='y', labelcolor='tab:red')
-ln2 = ax2.plot(nn, ll, color='tab:red', linestyle='solid', marker='o', markeredgecolor='k', markersize=6, label='log-likelihood')
-
-lns = ln1+ln2
-labs = [l.get_label() for l in lns]
-ax2.legend(lns, labs, ncol=2, loc='lower center')
-
-fig.tight_layout()
-plt.savefig('arxiv_subsampling.svg', bbox_inches='tight', pad_inches=0)
-plt.show()
+# plot_loglikelihood_accuracy(nn, np.mean(pll_avg[:,:],  axis=1), np.mean(crs_avg[:,:],  axis=1)*100, [-1.40, -1.10], [-1.40, -1.30, -1.20, -1.10], [66.00, 69.30], [66, 67, 68, 69], "ll_acc_f.svg")
+plot_loglikelihood_accuracy(nn, np.mean(pll_avg[:,:3], axis=1), np.mean(crs_avg[:,:3], axis=1)*100, [-1.56, -1.40], [-1.55, -1.50, -1.45, -1.40], [55.00, 58.25], [55, 56, 57, 58], "ll_acc_3.svg")
+# plot_loglikelihood_accuracy(nn, np.mean(pll_avg[:,3:], axis=1), np.mean(crs_avg[:,3:], axis=1)*100, [-1.40, -0.80], [-1.40, -1.20, -1.00, -0.80], [71.00, 74.00], [71, 72, 73, 74], "ll_acc_7.svg")

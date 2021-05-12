@@ -189,9 +189,9 @@ def run(dataset, split, model_name, dim_hidden, num_layers, num_hops, num_sample
         nll = log_b.gather(-1, y.reshape(-1,1))
         crs = log_b.argmax(dim=-1) == y
         _, perm = deg.sort()
-        deg_avg = [float(batch.float().mean()) for batch in deg[perm].chunk(10)]
-        nll_avg = [float(batch.float().mean()) for batch in nll[perm].chunk(10)]
-        crs_avg = [float(batch.float().mean()) for batch in crs[perm].chunk(10)]
+        deg_avg = [float(batch.float().mean()) for batch in deg[perm].chunk(100)]
+        nll_avg = [float(batch.float().mean()) for batch in nll[perm].chunk(100)]
+        crs_avg = [float(batch.float().mean()) for batch in crs[perm].chunk(100)]
         return deg_avg, nll_avg, crs_avg
 
     if model_name == 'LP':
@@ -209,9 +209,9 @@ def run(dataset, split, model_name, dim_hidden, num_layers, num_hops, num_sample
                 opt_nll_avg = nll_avg
                 opt_crs_avg = crs_avg
         print('optimal val accuracy: {:7.5f}, optimal test accuracy: {:7.5f}'.format(opt_val, opt_test))
-        print('optimal deg average: [' + ' '.join(map(lambda f: '{:7.3f}'.format(f), opt_deg_avg)) + ']')
-        print('optimal nll average: [' + ' '.join(map(lambda f: '{:7.3f}'.format(f), opt_nll_avg)) + ']')
-        print('optimal crs average: [' + ' '.join(map(lambda f: '{:7.3f}'.format(f), opt_crs_avg)) + ']')
+        print('optimal deg average: [' + ', '.join(map(lambda f: '{:7.3f}'.format(f), opt_deg_avg)) + ']')
+        print('optimal nll average: [' + ', '.join(map(lambda f: '{:7.3f}'.format(f), opt_nll_avg)) + ']')
+        print('optimal crs average: [' + ', '.join(map(lambda f: '{:7.3f}'.format(f), opt_crs_avg)) + ']')
         return opt_test, opt_deg_avg, opt_nll_avg, opt_crs_avg
     elif model_name == 'GBPN':
         optimizer = MultiOptimizer(torch.optim.AdamW(model.transform.parameters(), lr=learning_rate, weight_decay=2.5e-4),
