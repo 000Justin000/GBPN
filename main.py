@@ -283,9 +283,9 @@ def run(dataset, split, model_name, dim_hidden, num_layers, num_hops, num_sample
             train_accuracy, val_accuracy, test_accuracy, log_b = evaluation(num_hops=num_hops)
             deg_avg, nll_avg, crs_avg = accuracy_degree_correlation(log_b[test_mask], y[test_mask], deg[test_mask])
             print()
-            print('deg average: [' + ' '.join(map(lambda f: '{:7.3f}'.format(f), deg_avg)) + ']')
-            print('nll average: [' + ' '.join(map(lambda f: '{:7.3f}'.format(f), nll_avg)) + ']')
-            print('crs average: [' + ' '.join(map(lambda f: '{:7.3f}'.format(f), crs_avg)) + ']')
+            print('deg average: [' + ', '.join(map(lambda f: '{:7.3f}'.format(f), deg_avg)) + ']')
+            print('nll average: [' + ', '.join(map(lambda f: '{:7.3f}'.format(f), nll_avg)) + ']')
+            print('crs average: [' + ', '.join(map(lambda f: '{:7.3f}'.format(f), crs_avg)) + ']')
 
             if val_accuracy > opt_val:
                 opt_val = val_accuracy
@@ -299,9 +299,9 @@ def run(dataset, split, model_name, dim_hidden, num_layers, num_hops, num_sample
 
     if verbose:
         print('optimal val accuracy: {:7.5f}, optimal test accuracy: {:7.5f}'.format(opt_val, opt_test))
-        print('optimal deg average: [' + ' '.join(map(lambda f: '{:7.3f}'.format(f), opt_deg_avg)) + ']')
-        print('optimal nll average: [' + ' '.join(map(lambda f: '{:7.3f}'.format(f), opt_nll_avg)) + ']')
-        print('optimal crs average: [' + ' '.join(map(lambda f: '{:7.3f}'.format(f), opt_crs_avg)) + ']')
+        print('optimal deg average: [' + ', '.join(map(lambda f: '{:7.3f}'.format(f), opt_deg_avg)) + ']')
+        print('optimal nll average: [' + ', '.join(map(lambda f: '{:7.3f}'.format(f), opt_nll_avg)) + ']')
+        print('optimal crs average: [' + ', '.join(map(lambda f: '{:7.3f}'.format(f), opt_crs_avg)) + ']')
         print()
 
     return opt_test, opt_deg_avg, opt_nll_avg, opt_crs_avg
@@ -357,6 +357,6 @@ list_avg = lambda ll: list(map(lambda l: sum(l)/len(l), zip(*ll)))
 
 print(args)
 print('overall test accuracies: {:7.3f} ± {:7.3f}'.format(np.mean(test_acc)*100, np.std(test_acc)*100))
-print('optimal deg average: [' + ' '.join(map(lambda f: '{:7.3f}'.format(f), list_avg(test_deg_avg))) + ']')
-print('optimal nll average: [' + ' '.join(map(lambda f: '{:7.3f}'.format(f), list_avg(test_nll_avg))) + ']')
-print('optimal crs average: [' + ' '.join(map(lambda f: '{:7.3f}'.format(f), list_avg(test_crs_avg))) + ']')
+print('optimal deg average: [' + ', '.join(map(lambda f: '{:7.3f}'.format(f), list_avg(test_deg_avg))) + ']')
+print('optimal nll average: [' + ', '.join(map(lambda f: '{:7.3f}'.format(f), list_avg(test_nll_avg))) + ']')
+print('optimal crs average: [' + ', '.join(map(lambda f: '{:7.3f}'.format(f), list_avg(test_crs_avg))) + ']')
