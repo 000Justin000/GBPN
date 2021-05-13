@@ -189,9 +189,9 @@ def run(dataset, split, model_name, dim_hidden, num_layers, num_hops, num_sample
         nll = log_b.gather(-1, y.reshape(-1,1))
         crs = log_b.argmax(dim=-1) == y
         _, perm = deg.sort()
-        deg_avg = [float(batch.float().mean()) for batch in deg[perm].chunk(100)]
-        nll_avg = [float(batch.float().mean()) for batch in nll[perm].chunk(100)]
-        crs_avg = [float(batch.float().mean()) for batch in crs[perm].chunk(100)]
+        deg_avg = [float(batch.float().mean()) for batch in deg[perm].chunk(10)]
+        nll_avg = [float(batch.float().mean()) for batch in nll[perm].chunk(10)]
+        crs_avg = [float(batch.float().mean()) for batch in crs[perm].chunk(10)]
         return deg_avg, nll_avg, crs_avg
 
     if model_name == 'LP':
@@ -276,7 +276,7 @@ def run(dataset, split, model_name, dim_hidden, num_layers, num_hops, num_sample
     opt_val, opt_test = 0.0, 0.0
     opt_deg_avg, opt_nll_avg, opt_crs_avg = None, None, None
     for epoch in range(1, num_epoches+1):
-        num_hops = 0 if (model_name == 'GBPN' and epoch <= num_epoches*0.05) else max_num_hops
+        num_hops = 0 if (model_name == 'GBPN' and epoch <= num_epoches*initskip_BP) else max_num_hops
         train(num_hops=num_hops, num_samples=num_samples)
 
         if epoch % max(int(num_epoches*0.1), 10) == 0:
