@@ -58,7 +58,7 @@ def optimal_f1_score(log_b, y, optimal_threshold=None):
         return f1_score(y, y_preds)
 
 
-def run(dataset, split, model_name, dim_hidden, num_layers, num_hops, num_samples, dropout_p, device, learning_rate, num_epoches, initskip_BP, loss_option, weighted_BP, deg_scaling, learn_H, eval_C, verbose):
+def run(dataset, split, model_name, dim_hidden, num_layers, num_hops, num_samples, dropout_p, device, learning_rate, num_epoches, initskip_BP, lossfunc_BP, weighted_BP, deg_scaling, learn_H, eval_C, verbose):
     if dataset == 'Cora':
         data = load_citation('Cora', split=split)
         c_weight = None
@@ -166,7 +166,7 @@ def run(dataset, split, model_name, dim_hidden, num_layers, num_hops, num_sample
     elif model_name == 'GAT':
         model = GAT(num_features, num_classes, dim_hidden=dim_hidden//4, num_layers=num_layers, num_heads=4, activation=nn.ELU(), dropout_p=dropout_p)
     elif model_name == 'GBPN':
-        model = GBPN(num_features, num_classes, dim_hidden=dim_hidden, num_layers=num_layers, activation=nn.ReLU(), dropout_p=dropout_p, loss_option=loss_option, deg_scaling=deg_scaling, learn_H=learn_H)
+        model = GBPN(num_features, num_classes, dim_hidden=dim_hidden, num_layers=num_layers, activation=nn.ReLU(), dropout_p=dropout_p, lossfunc_BP=lossfunc_BP, deg_scaling=deg_scaling, learn_H=learn_H)
     else:
         raise Exception('unexpected model type')
     model = model.to(device)
@@ -324,9 +324,9 @@ parser.add_argument('--dropout_p', type=float, default=0.0)
 parser.add_argument('--device', type=str, default='cpu')
 parser.add_argument('--learning_rate', type=float, default=0.01)
 parser.add_argument('--num_epoches', type=int, default=20)
-parser.add_argument('--initskip_BP', type=float, default=0.00)
 parser.add_argument('--num_trials', type=int, default=10)
-parser.add_argument('--loss_option', type=int, default=5)
+parser.add_argument('--initskip_BP', type=float, default=0.00)
+parser.add_argument('--lossfunc_BP', type=int, default=0)
 parser.add_argument('--weighted_BP', action='store_true')
 parser.add_argument('--deg_scaling', action='store_true')
 parser.add_argument('--learn_H', action='store_true')
@@ -348,7 +348,7 @@ test_deg_avg = []
 test_nll_avg = []
 test_crs_avg = []
 for _ in range(args.num_trials):
-    opt_test, opt_deg_avg, opt_nll_avg, opt_crs_avg = run(args.dataset, args.split, args.model_name, args.dim_hidden, args.num_layers, args.num_hops, args.num_samples, args.dropout_p, args.device, args.learning_rate, args.num_epoches, args.initskip_BP, args.loss_option, args.weighted_BP, args.deg_scaling, args.learn_H, args.eval_C, args.verbose)
+    opt_test, opt_deg_avg, opt_nll_avg, opt_crs_avg = run(args.dataset, args.split, args.model_name, args.dim_hidden, args.num_layers, args.num_hops, args.num_samples, args.dropout_p, args.device, args.learning_rate, args.num_epoches, args.initskip_BP, args.lossfunc_BP, args.weighted_BP, args.deg_scaling, args.learn_H, args.eval_C, args.verbose)
     test_acc.append(opt_test)
     test_deg_avg.append(opt_deg_avg)
     test_nll_avg.append(opt_nll_avg)
