@@ -16,7 +16,7 @@ from torch_geometric.nn.conv.gcn_conv import gcn_norm
 from torch_geometric.utils import degree, subgraph, remove_self_loops, to_undirected, contains_self_loops, is_undirected, stochastic_blockmodel_graph, k_hop_subgraph
 from torch_geometric.data import Data
 from torch_geometric.data import ClusterData
-from torch_geometric.datasets import Planetoid, SNAPDataset, Coauthor, WikipediaNetwork
+from torch_geometric.datasets import Planetoid, SNAPDataset, Coauthor, WikipediaNetwork, Reddit, Reddit2
 from ogb.nodeproppred import PygNodePropPredDataset
 from datetime import datetime, timedelta
 from collections import defaultdict
@@ -661,6 +661,23 @@ def load_citation(name='Cora', transform=None, split=None):
 
 def load_coauthor(name='CS', transform=None, split=[0.3, 0.2, 0.5]):
     data = Coauthor(root='datasets', name=name)[0]
+    num_nodes = data.x.shape[0]
+
+    assert len(split) == 3
+    train_idx, val_idx, test_idx = rand_split(num_nodes, split)
+    train_idx, val_idx, test_idx = torch.tensor(train_idx), torch.tensor(val_idx), torch.tensor(test_idx)
+
+    data.train_mask = torch.zeros(num_nodes, dtype=bool).scatter_(0, train_idx, True)
+    data.val_mask = torch.zeros(num_nodes, dtype=bool).scatter_(0, val_idx, True)
+    data.test_mask = torch.zeros(num_nodes, dtype=bool).scatter_(0, test_idx, True)
+
+    data.edge_index, data.edge_weight, data.edge_rv = process_edge_index(num_nodes, data.edge_index, data.edge_weight if hasattr(data, 'edge_weight') else None)
+
+    return data if (transform is None) else transform(data)
+
+
+def load_reddit(transform=None, split=[0.3, 0.2, 0.5]):
+    data = Reddit(root='datasets')[0]
     num_nodes = data.x.shape[0]
 
     assert len(split) == 3

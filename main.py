@@ -87,6 +87,10 @@ def run(dataset, split, model_name, dim_hidden, num_layers, num_hops, num_sample
         data = load_sexual_interaction(split=split)
         c_weight = None
         accuracy_fun = classification_accuracy
+    elif dataset == 'Reddit':
+        data = load_reddit(split=split)
+        c_weight = None
+        accuracy_fun = classification_accuracy
     elif dataset == 'Squirrel':
         data = load_wikipedia('Squirrel', split=split)
         c_weight = None
@@ -142,7 +146,7 @@ def run(dataset, split, model_name, dim_hidden, num_layers, num_hops, num_sample
     if dataset in ['Cora', 'CiteSeer', 'PubMed', 'Coauthor_CS', 'Coauthor_Physics', 'County_Facebook', 'Sex', 'Animal2', 'Animal3', 'Squirrel', 'Chameleon', 'Ising+', 'Ising-', 'MRF+', 'MRF-']:
         graph_sampler = FullgraphSampler(num_nodes, x, y, edge_index, edge_weight, edge_rv)
         max_batch_size = -1
-    elif dataset in ['OGBN_arXiv', 'OGBN_Products', 'JPMC_Payment0', 'JPMC_Payment1', 'Elliptic_Bitcoin']:
+    elif dataset in ['OGBN_arXiv', 'OGBN_Products', 'Reddit', 'JPMC_Payment0', 'JPMC_Payment1', 'Elliptic_Bitcoin']:
         graph_sampler = SubtreeSampler(num_nodes, x, y, edge_index, edge_weight, edge_rv)
         # graph_sampler = ClusterSampler(num_nodes, x, y, edge_index, edge_weight, edge_rv, train_mask, val_mask, test_mask)
         max_batch_size = min(math.ceil(train_mask.sum()/10.0), 512)

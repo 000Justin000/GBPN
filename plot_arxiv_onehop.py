@@ -62,5 +62,6 @@ def plot_loglikelihood_accuracy(nn, ll, ac, ax1_ylim, ax1_yticks, ax2_ylim, ax2_
 
 nn = np.array([1, 2, 3, 4, 5, 6])
 # plot_loglikelihood_accuracy(nn, np.mean(pll_avg[:,:],  axis=1), np.mean(crs_avg[:,:],  axis=1)*100, [-1.40, -1.10], [-1.40, -1.30, -1.20, -1.10], [66.00, 69.30], [66, 67, 68, 69], "ll_acc_f.svg")
-plot_loglikelihood_accuracy(nn, np.mean(pll_avg[:,:3], axis=1), np.mean(crs_avg[:,:3], axis=1)*100, [-1.56, -1.40], [-1.55, -1.50, -1.45, -1.40], [55.00, 58.25], [55, 56, 57, 58], "ll_acc_3.svg")
+# plot_loglikelihood_accuracy(nn, np.mean(pll_avg[:,:3], axis=1), np.mean(crs_avg[:,:3], axis=1)*100, [-1.56, -1.40], [-1.55, -1.50, -1.45, -1.40], [55.00, 58.25], [55, 56, 57, 58], "ll_acc_3.svg")
 # plot_loglikelihood_accuracy(nn, np.mean(pll_avg[:,3:], axis=1), np.mean(crs_avg[:,3:], axis=1)*100, [-1.40, -0.80], [-1.40, -1.20, -1.00, -0.80], [71.00, 74.00], [71, 72, 73, 74], "ll_acc_7.svg")
+plot_loglikelihood_accuracy(nn, np.mean(pll_avg[:,9:], axis=1), np.mean(crs_avg[:,9:], axis=1)*100, [-1.40, -0.80], [-1.40, -1.20, -1.00, -0.80], [79.00, 84.00], [71, 72, 73, 74], "ll_acc_6.svg")
