@@ -122,7 +122,6 @@ class SGC(torch.nn.Module):
 
     @torch.no_grad()
     def inference(self, sampler, max_batch_size, device, **kwargs):
-        assert type(sampler) == FullgraphSampler
         assert max_batch_size == -1
         x_all = torch.zeros(sampler.num_nodes, self.convs[-1].out_channels, dtype=torch.float32)
         for batch_size, batch_nodes, _, _, _, \
@@ -158,7 +157,6 @@ class GCN(nn.Module):
 
     @torch.no_grad()
     def inference(self, sampler, max_batch_size, device, **kwargs):
-        assert type(sampler) == FullgraphSampler
         assert max_batch_size == -1
         x_all = torch.zeros(sampler.num_nodes, self.convs[-1].out_channels, dtype=torch.float32)
         for batch_size, batch_nodes, _, _, _, \
