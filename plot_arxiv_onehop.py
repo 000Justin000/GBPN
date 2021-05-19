@@ -1,10 +1,6 @@
 import numpy as np
 import matplotlib.pyplot as plt
-plt.rcParams.update({"font.size": 14, "text.usetex": True, "font.family": "serif", "font.serif": ["Palatino"]})
-
-# overall test accuracies:  
-acc = np.array([66.512,  67.124,  67.368,  68.048,  68.772,  68.939])
-std = np.array([ 0.306,   0.657,   0.893,   0.147,   0.402,   0.301])
+plt.rcParams.update({"font.size": 12, "text.usetex": True, "font.family": "serif", "font.serif": ["Palatino"]})
 
 # optimal deg average
 deg_avg = np.array([[  1.173,  2.355,  3.619,  5.388,  7.393,  9.936, 13.103, 17.176, 23.258, 40.507],
@@ -15,7 +11,7 @@ deg_avg = np.array([[  1.173,  2.355,  3.619,  5.388,  7.393,  9.936, 13.103, 17
                     [  1.173,  2.355,  3.619,  5.388,  7.393,  9.936, 13.103, 17.176, 23.258, 40.507]])
 
 # optimal pll average
-pll_avg = np.array([[ -1.751, -1.524, -1.368, -1.230, -1.103, -1.049, -1.017, -0.864, -0.807, -0.764],
+LO0_avg = np.array([[ -1.751, -1.524, -1.368, -1.230, -1.103, -1.049, -1.017, -0.864, -0.807, -0.764],
                     [ -1.737, -1.498, -1.335, -1.195, -1.061, -1.007, -0.979, -0.832, -0.789, -0.775],
                     [ -1.730, -1.482, -1.311, -1.175, -1.055, -1.003, -0.986, -0.841, -0.812, -0.819],
                     [ -1.720, -1.462, -1.283, -1.152, -1.035, -0.998, -0.995, -0.868, -0.862, -0.913],
@@ -23,29 +19,45 @@ pll_avg = np.array([[ -1.751, -1.524, -1.368, -1.230, -1.103, -1.049, -1.017, -0
                     [ -1.641, -1.376, -1.221, -1.177, -1.158, -1.236, -1.355, -1.287, -1.402, -1.702]])
 
 # optimal crs average
-crs_avg = np.array([[  0.505,  0.557,  0.596,  0.625,  0.660,  0.678,  0.698,  0.744,  0.772,  0.817],
+AO0_avg = np.array([[  0.505,  0.557,  0.596,  0.625,  0.660,  0.678,  0.698,  0.744,  0.772,  0.817],
                     [  0.511,  0.561,  0.600,  0.633,  0.668,  0.684,  0.707,  0.752,  0.777,  0.821],
                     [  0.512,  0.565,  0.604,  0.636,  0.670,  0.690,  0.709,  0.753,  0.777,  0.822],
                     [  0.514,  0.568,  0.610,  0.644,  0.676,  0.697,  0.714,  0.762,  0.788,  0.831],
                     [  0.520,  0.579,  0.618,  0.653,  0.687,  0.704,  0.721,  0.768,  0.794,  0.833],
                     [  0.531,  0.584,  0.625,  0.658,  0.686,  0.704,  0.720,  0.766,  0.791,  0.830]])
 
+# optimal pll average
+LO5_avg = np.array([[ -1.610, -1.380, -1.227, -1.124, -1.011, -0.939, -0.889, -0.741, -0.667, -0.538],
+                    [ -1.617, -1.381, -1.230, -1.129, -1.015, -0.947, -0.897, -0.750, -0.673, -0.549],
+                    [ -1.610, -1.375, -1.221, -1.121, -1.009, -0.940, -0.892, -0.746, -0.673, -0.551],
+                    [ -1.628, -1.380, -1.222, -1.118, -1.008, -0.939, -0.891, -0.747, -0.675, -0.562],
+                    [ -1.615, -1.370, -1.219, -1.115, -1.012, -0.953, -0.911, -0.774, -0.707, -0.604],
+                    [ -1.603, -1.368, -1.209, -1.118, -1.025, -0.983, -0.951, -0.823, -0.752, -0.665]])
+
+# optimal crs average
+AO5_avg = np.array([[  0.524,  0.585,  0.621,  0.652,  0.673,  0.700,  0.714,  0.760,  0.787,  0.828],
+                    [  0.526,  0.581,  0.620,  0.654,  0.675,  0.696,  0.710,  0.755,  0.788,  0.827],
+                    [  0.526,  0.581,  0.623,  0.655,  0.676,  0.700,  0.714,  0.758,  0.789,  0.828],
+                    [  0.523,  0.579,  0.623,  0.654,  0.679,  0.702,  0.714,  0.762,  0.791,  0.829],
+                    [  0.525,  0.585,  0.622,  0.658,  0.680,  0.703,  0.718,  0.762,  0.792,  0.831],
+                    [  0.534,  0.587,  0.627,  0.659,  0.681,  0.702,  0.714,  0.762,  0.792,  0.828]])
+
 
 def plot_loglikelihood_accuracy(nn, ll, ac, ax1_ylim, ax1_yticks, ax2_ylim, ax2_yticks, fname):
-    fig, ax1 = plt.subplots(figsize=(6.0, 3.5))
+    fig, ax1 = plt.subplots(figsize=(3.5, 3.5))
 
-    ax1.set_ylabel(r'log-likelihood', color='tab:blue', fontsize=16.5)
+    ax1.set_ylabel(r'log-likelihood', color='tab:blue', fontsize=15)
+    ax1.set_xlabel('max degree (training)', fontsize=15)
     ax1.set_xlim([0.5, 6.5])
     ax1.set_xticks([1, 2, 3, 4, 5, 6])
-    ax1.set_xticklabels([r"full", r"$100$", r"$50$", r"$20$", r"$10$", r"$5$"])
+    ax1.set_xticklabels([r"all", r"$100$", r"$50$", r"$20$", r"$10$", r"$5$"])
     ax1.set_ylim(ax1_ylim)
     ax1.set_yticks(ax1_yticks)
     ax1.tick_params(axis='y', labelcolor='tab:blue')
     ln1 = ax1.plot(nn, ll, color='tab:blue', linestyle='dashed', label='log-likelihood')
 
     ax2 = ax1.twinx()
-    ax2.set_xlabel('max degree during training', fontsize=16.5)
-    ax2.set_ylabel(r'accuracy ($\%$)', color='tab:red', fontsize=16.5)
+    ax2.set_ylabel(r'accuracy ($\%$)', color='tab:red', fontsize=15)
     ax2.set_ylim(ax2_ylim)
     ax2.set_yticks(ax2_yticks)
     ax2.tick_params(axis='y', labelcolor='tab:red')
@@ -53,7 +65,7 @@ def plot_loglikelihood_accuracy(nn, ll, ac, ax1_ylim, ax1_yticks, ax2_ylim, ax2_
 
     lns = ln1+ln2
     labs = [l.get_label() for l in lns]
-    ax2.legend(lns, labs, loc='lower right')
+    ax2.legend(lns, labs, loc='upper left', fontsize=11)
 
     fig.tight_layout()
     plt.savefig(fname, bbox_inches='tight', pad_inches=0)
@@ -61,7 +73,9 @@ def plot_loglikelihood_accuracy(nn, ll, ac, ax1_ylim, ax1_yticks, ax2_ylim, ax2_
 
 
 nn = np.array([1, 2, 3, 4, 5, 6])
-# plot_loglikelihood_accuracy(nn, np.mean(pll_avg[:,:],  axis=1), np.mean(crs_avg[:,:],  axis=1)*100, [-1.40, -1.10], [-1.40, -1.30, -1.20, -1.10], [66.00, 69.30], [66, 67, 68, 69], "ll_acc_f.svg")
-# plot_loglikelihood_accuracy(nn, np.mean(pll_avg[:,:3], axis=1), np.mean(crs_avg[:,:3], axis=1)*100, [-1.56, -1.40], [-1.55, -1.50, -1.45, -1.40], [55.00, 58.25], [55, 56, 57, 58], "ll_acc_3.svg")
-# plot_loglikelihood_accuracy(nn, np.mean(pll_avg[:,3:], axis=1), np.mean(crs_avg[:,3:], axis=1)*100, [-1.40, -0.80], [-1.40, -1.20, -1.00, -0.80], [71.00, 74.00], [71, 72, 73, 74], "ll_acc_7.svg")
-plot_loglikelihood_accuracy(nn, np.mean(pll_avg[:,9:], axis=1), np.mean(crs_avg[:,9:], axis=1)*100, [-1.40, -0.80], [-1.40, -1.20, -1.00, -0.80], [79.00, 84.00], [71, 72, 73, 74], "ll_acc_6.svg")
+# plot_loglikelihood_accuracy(nn, np.mean(LO0_avg[:,:],  axis=1), np.mean(AO0_avg[:,:],  axis=1)*100, [-1.40, -1.10], [-1.40, -1.30, -1.20, -1.10], [66.00, 69.30], [66, 67, 68, 69], "LO0_f.svg")
+# plot_loglikelihood_accuracy(nn, np.mean(LO0_avg[:,:3], axis=1), np.mean(AO0_avg[:,:3], axis=1)*100, [-1.56, -1.40], [-1.55, -1.50, -1.45, -1.40], [55.00, 58.25], [55, 56, 57, 58], "LO0_3.svg")
+plot_loglikelihood_accuracy(nn, np.mean(LO0_avg[:,3:], axis=1), np.mean(AO0_avg[:,3:], axis=1)*100, [-1.40, -0.80], [-1.40, -1.20, -1.00, -0.80], [71.00, 74.00], [71, 72, 73, 74], "LO0_7.svg")
+# plot_loglikelihood_accuracy(nn, np.mean(LO5_avg[:,:],  axis=1), np.mean(AO5_avg[:,:],  axis=1)*100, [-1.20, -0.90], [-1.20, -1.10, -1.00, -0.90], [66.00, 69.30], [66, 67, 68, 69], "LO5_f.svg")
+# plot_loglikelihood_accuracy(nn, np.mean(LO5_avg[:,:3], axis=1), np.mean(AO5_avg[:,:3], axis=1)*100, [-1.56, -1.40], [-1.55, -1.50, -1.45, -1.40], [55.00, 58.25], [55, 56, 57, 58], "LO0_3.svg")
+# plot_loglikelihood_accuracy(nn, np.mean(LO5_avg[:,3:], axis=1), np.mean(AO5_avg[:,3:], axis=1)*100, [-1.40, -0.80], [-1.40, -1.20, -1.00, -0.80], [71.00, 74.00], [71, 72, 73, 74], "LO0_7.svg")

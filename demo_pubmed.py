@@ -52,8 +52,8 @@ x, y = data.x, data.y
 num_nodes, num_features = x.shape
 num_classes = len(torch.unique(y[y >= 0]))
 train_mask, val_mask, test_mask = data.train_mask, data.val_mask, data.test_mask
-if edge_weight is None:
-    edge_weight = torch.ones(edge_index.shape[1], dtype=torch.float32)
+deg = degree(edge_index[1], num_nodes)
+edge_weight = torch.ones(edge_index.shape[1], dtype=torch.float32) if (edge_weight is None) else edge_weight
 c_weight = None
 accuracy_fun = classification_accuracy
 
@@ -72,7 +72,7 @@ if type(model) == GBPN and eval_C:
 def train(epoch, num_hops=2):
     model.train()
     optimizer.zero_grad()
-    log_b = model(x, edge_index, edge_weight=edge_weight, edge_rv=edge_rv, K=num_hops)
+    log_b = model(x, edge_index, deg=deg, deg_ori=deg, edge_weight=edge_weight, edge_rv=edge_rv, K=num_hops)
     loss = F.nll_loss(log_b[train_mask], y[train_mask])
     loss.backward()
     optimizer.step()

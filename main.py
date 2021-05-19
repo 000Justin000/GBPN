@@ -193,35 +193,51 @@ def run(dataset, split, model_name, dim_hidden, num_layers, num_hops, num_sample
 
     def accuracy_degree_correlation(log_b, y, deg):
         nll = log_b.gather(-1, y.reshape(-1,1))
+        cfd = log_b.max(dim=-1)[0].exp()
         crs = log_b.argmax(dim=-1) == y
         _, perm = deg.sort()
         deg_avg = [float(batch.float().mean()) for batch in deg[perm].chunk(10)]
         nll_avg = [float(batch.float().mean()) for batch in nll[perm].chunk(10)]
+        cfd_avg = [float(batch.float().mean()) for batch in cfd[perm].chunk(10)]
         crs_avg = [float(batch.float().mean()) for batch in crs[perm].chunk(10)]
-        return deg_avg, nll_avg, crs_avg
+        return deg_avg, nll_avg, cfd_avg, crs_avg
+
+    def accuracy_confidence_correlation(log_b, y):
+        cfd = log_b.max(dim=-1)[0].exp()
+        crs = log_b.argmax(dim=-1) == y
+        _, perm = cfd.sort()
+        cfd_avg = [float(batch.float().mean()) for batch in cfd[perm].chunk(10)]
+        crs_avg = [float(batch.float().mean()) for batch in crs[perm].chunk(10)]
+        return cfd_avg, crs_avg
 
     if model_name == 'LP':
         opt_val, opt_test = 0.0, 0.0
-        opt_deg_avg, opt_nll_avg, opt_crs_avg = None, None, None
-        for alpha in [0.0, 0.3, 0.5, 0.7, 0.9, 0.95, 0.99]:
+        opt_deg_avg, opt_nll_avg, opt_cfd_avg, opt_crs_avg, opt_cdf_ord, opt_crs_ord = None, None, None, None, None, None
+        for alpha in [0.00, 0.30, 0.50, 0.70, 0.90, 0.95, 0.99]:
             model.alpha = alpha
             log_b = log_normalize(model(y.to(device), adj_t.to(device), train_mask.to(device), post_step=lambda y: y.clamp_(1.0e-15,1.0e0)).log()).cpu()
             train_loss, val_loss, test_loss, train_accuracy, val_accuracy, test_accuracy = loss_and_accuracy(y.to(device), log_b.to(device))
-            deg_avg, nll_avg, crs_avg = accuracy_degree_correlation(log_b[test_mask], y[test_mask], deg[test_mask])
+            deg_avg, nll_avg, cfd_avg, crs_avg = accuracy_degree_correlation(log_b[test_mask], y[test_mask], deg[test_mask])
+            cfd_ord, crs_ord = accuracy_confidence_correlation(log_b[test_mask], y[test_mask])
             if val_accuracy > opt_val:
                 opt_val = val_accuracy
                 opt_test = test_accuracy
                 opt_deg_avg = deg_avg
                 opt_nll_avg = nll_avg
+                opt_cfd_avg = cfd_avg
                 opt_crs_avg = crs_avg
+                opt_cfd_ord = cfd_ord
+                opt_crs_ord = crs_ord
         print('optimal val accuracy: {:7.5f}, optimal test accuracy: {:7.5f}'.format(opt_val, opt_test))
         print('optimal deg average: [' + ', '.join(map(lambda f: '{:7.3f}'.format(f), opt_deg_avg)) + ']')
         print('optimal nll average: [' + ', '.join(map(lambda f: '{:7.3f}'.format(f), opt_nll_avg)) + ']')
+        print('optimal cfd average: [' + ', '.join(map(lambda f: '{:7.3f}'.format(f), opt_cfd_avg)) + ']')
         print('optimal crs average: [' + ', '.join(map(lambda f: '{:7.3f}'.format(f), opt_crs_avg)) + ']')
-        return opt_test, opt_deg_avg, opt_nll_avg, opt_crs_avg
+        print('optimal cfd ordered: [' + ', '.join(map(lambda f: '{:7.3f}'.format(f), opt_cfd_ord)) + ']')
+        print('optimal crs ordered: [' + ', '.join(map(lambda f: '{:7.3f}'.format(f), opt_crs_ord)) + ']')
+        return opt_test, opt_deg_avg, opt_nll_avg, opt_cfd_avg, opt_crs_avg, opt_cfd_ord, opt_crs_ord
     elif model_name == 'GBPN':
-        optimizer = MultiOptimizer(torch.optim.AdamW(model.transform.parameters(), lr=learning_rate, weight_decay=2.5e-4),
-                                   torch.optim.AdamW(model.bp_conv.parameters(), lr=learning_rate*10, weight_decay=2.5e-4))
+        optimizer = MultiOptimizer(torch.optim.AdamW(model.transform.parameters(), lr=learning_rate, weight_decay=2.5e-4), torch.optim.AdamW(model.bp_conv.parameters(), lr=learning_rate*10, weight_decay=2.5e-4))
     else:
         optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate, weight_decay=2.5e-4)
 
@@ -280,37 +296,52 @@ def run(dataset, split, model_name, dim_hidden, num_layers, num_hops, num_sample
 
     max_num_hops = num_hops
     opt_val, opt_test = 0.0, 0.0
-    opt_deg_avg, opt_nll_avg, opt_crs_avg = None, None, None
+    opt_deg_avg, opt_nll_avg, opt_cfd_avg, opt_crs_avg, opt_cdf_ord, opt_crs_ord, opt_H = None, None, None, None, None, None, None
     for epoch in range(1, num_epoches+1):
         num_hops = 0 if (model_name == 'GBPN' and epoch <= num_epoches*initskip_BP) else max_num_hops
         train(num_hops=num_hops, num_samples=num_samples)
 
-        if epoch % max(int(num_epoches*0.1), 10) == 0:
+        if epoch % max(int(num_epoches*0.05), 10) == 0:
             train_accuracy, val_accuracy, test_accuracy, log_b = evaluation(num_hops=num_hops)
-            deg_avg, nll_avg, crs_avg = accuracy_degree_correlation(log_b[test_mask], y[test_mask], deg[test_mask])
+            deg_avg, nll_avg, cfd_avg, crs_avg = accuracy_degree_correlation(log_b[test_mask], y[test_mask], deg[test_mask])
+            cfd_ord, crs_ord = accuracy_confidence_correlation(log_b[test_mask], y[test_mask])
             print()
             print('deg average: [' + ', '.join(map(lambda f: '{:7.3f}'.format(f), deg_avg)) + ']')
             print('nll average: [' + ', '.join(map(lambda f: '{:7.3f}'.format(f), nll_avg)) + ']')
+            print('cfd average: [' + ', '.join(map(lambda f: '{:7.3f}'.format(f), cfd_avg)) + ']')
             print('crs average: [' + ', '.join(map(lambda f: '{:7.3f}'.format(f), crs_avg)) + ']')
+            print('cfd ordered: [' + ', '.join(map(lambda f: '{:7.3f}'.format(f), cfd_ord)) + ']')
+            print('crs ordered: [' + ', '.join(map(lambda f: '{:7.3f}'.format(f), crs_ord)) + ']')
+            print()
+            if model_name == 'GBPN':
+                print(model.bp_conv.get_logH().exp())
 
             if val_accuracy > opt_val:
                 opt_val = val_accuracy
                 opt_test = test_accuracy
                 opt_deg_avg = deg_avg
                 opt_nll_avg = nll_avg
+                opt_cfd_avg = cfd_avg
                 opt_crs_avg = crs_avg
-            if type(model) == GBPN and verbose:
-                print(model.bp_conv.get_logH().exp(), flush=True)
+                opt_cfd_ord = cfd_ord
+                opt_crs_ord = crs_ord
+                if model_name == 'GBPN':
+                    opt_H = model.bp_conv.get_logH().exp()
+
         print(flush=True)
 
-    if verbose:
-        print('optimal val accuracy: {:7.5f}, optimal test accuracy: {:7.5f}'.format(opt_val, opt_test))
-        print('optimal deg average: [' + ', '.join(map(lambda f: '{:7.3f}'.format(f), opt_deg_avg)) + ']')
-        print('optimal nll average: [' + ', '.join(map(lambda f: '{:7.3f}'.format(f), opt_nll_avg)) + ']')
-        print('optimal crs average: [' + ', '.join(map(lambda f: '{:7.3f}'.format(f), opt_crs_avg)) + ']')
-        print()
+    print('optimal val accuracy: {:7.5f}, optimal test accuracy: {:7.5f}'.format(opt_val, opt_test))
+    print('optimal deg average: [' + ', '.join(map(lambda f: '{:7.3f}'.format(f), opt_deg_avg)) + ']')
+    print('optimal nll average: [' + ', '.join(map(lambda f: '{:7.3f}'.format(f), opt_nll_avg)) + ']')
+    print('optimal cfd average: [' + ', '.join(map(lambda f: '{:7.3f}'.format(f), opt_cfd_avg)) + ']')
+    print('optimal crs average: [' + ', '.join(map(lambda f: '{:7.3f}'.format(f), opt_crs_avg)) + ']')
+    print('optimal cfd ordered: [' + ', '.join(map(lambda f: '{:7.3f}'.format(f), opt_cfd_ord)) + ']')
+    print('optimal crs ordered: [' + ', '.join(map(lambda f: '{:7.3f}'.format(f), opt_crs_ord)) + ']')
+    if model_name == 'GBPN':
+        print(opt_H)
+    print()
 
-    return opt_test, opt_deg_avg, opt_nll_avg, opt_crs_avg
+    return opt_test, opt_deg_avg, opt_nll_avg, opt_cfd_avg, opt_crs_avg, opt_cfd_ord, opt_crs_ord, opt_H
 
 
 random.seed(0)
@@ -352,18 +383,32 @@ if not args.develop:
 test_acc = []
 test_deg_avg = []
 test_nll_avg = []
+test_cfd_avg = []
 test_crs_avg = []
+test_cfd_ord = []
+test_crs_ord = []
+optimal_H = []
 for _ in range(args.num_trials):
-    opt_test, opt_deg_avg, opt_nll_avg, opt_crs_avg = run(args.dataset, args.split, args.model_name, args.dim_hidden, args.num_layers, args.num_hops, args.num_samples, args.dropout_p, args.device, args.learning_rate, args.num_epoches, args.initskip_BP, args.lossfunc_BP, args.weighted_BP, args.deg_scaling, args.learn_H, args.eval_C, args.verbose)
+    opt_test, opt_deg_avg, opt_nll_avg, opt_cfd_avg, opt_crs_avg, opt_cfd_ord, opt_crs_ord, opt_H = run(args.dataset, args.split, args.model_name, args.dim_hidden, args.num_layers, args.num_hops, args.num_samples, args.dropout_p, args.device, args.learning_rate, args.num_epoches, args.initskip_BP, args.lossfunc_BP, args.weighted_BP, args.deg_scaling, args.learn_H, args.eval_C, args.verbose)
     test_acc.append(opt_test)
     test_deg_avg.append(opt_deg_avg)
     test_nll_avg.append(opt_nll_avg)
+    test_cfd_avg.append(opt_cfd_avg)
     test_crs_avg.append(opt_crs_avg)
+    test_cfd_ord.append(opt_cfd_ord)
+    test_crs_ord.append(opt_crs_ord)
+    if args.model_name == 'GBPN':
+        optimal_H.append(opt_H)
 
 list_avg = lambda ll: list(map(lambda l: sum(l)/len(l), zip(*ll)))
 
 print(args)
-print('overall test accuracies: {:7.3f} ± {:7.3f}'.format(np.mean(test_acc)*100, np.std(test_acc)*100))
 print('optimal deg average: [' + ', '.join(map(lambda f: '{:7.3f}'.format(f), list_avg(test_deg_avg))) + ']')
 print('optimal nll average: [' + ', '.join(map(lambda f: '{:7.3f}'.format(f), list_avg(test_nll_avg))) + ']')
+print('optimal cfd average: [' + ', '.join(map(lambda f: '{:7.3f}'.format(f), list_avg(test_cfd_avg))) + ']')
 print('optimal crs average: [' + ', '.join(map(lambda f: '{:7.3f}'.format(f), list_avg(test_crs_avg))) + ']')
+print('optimal cfd ordered: [' + ', '.join(map(lambda f: '{:7.3f}'.format(f), list_avg(test_cfd_ord))) + ']')
+print('optimal crs ordered: [' + ', '.join(map(lambda f: '{:7.3f}'.format(f), list_avg(test_crs_ord))) + ']')
+if args.model_name == 'GBPN':
+    print(sum(optimal_H)/len(optimal_H))
+print('overall test accuracies: {:7.3f} ± {:7.3f}'.format(np.mean(test_acc)*100, np.std(test_acc)*100))
