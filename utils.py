@@ -1115,3 +1115,8 @@ def create_outpath(dataset, model_name):
     os.mkdir(outpath)
 
     return outpath
+
+def set_random_seed(i):
+    random.seed(i)
+    np.random.seed(i)
+    torch.manual_seed(i)

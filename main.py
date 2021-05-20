@@ -23,8 +23,11 @@ def get_cts(edge_index, y):
     idx, cts = torch.stack((y[edge_index[0]], y[edge_index[1]]), dim=0).unique(dim=1, return_counts=True)
     ctsm = torch.zeros(y.max() + 1, y.max() + 1, device=y.device)
     ctsm[idx[0], idx[1]] = cts.float()
-    sqrt_deg_inv = ctsm.sum(dim=1) ** -0.5
-    return ctsm, sqrt_deg_inv.view(-1, 1) * ctsm * sqrt_deg_inv.view(1, -1)
+    ctsm = ctsm - torch.diag(ctsm.diag())*0.5
+    # _, cct = y.unique(return_counts=True)
+    # return ctsm, (cct**-1.0).view(-1, 1) * ctsm * (cct**-1.0).view(1, -1)
+    cct = ctsm.sum(dim=1)
+    return ctsm, ctsm * (cct**-1.0).view(1, -1)
 
 
 def classification_accuracy(log_b, y):
@@ -313,7 +316,6 @@ def run(dataset, split, model_name, dim_hidden, num_layers, num_hops, num_sample
             print('crs average: [' + ', '.join(map(lambda f: '{:7.3f}'.format(f), crs_avg)) + ']')
             print('cfd ordered: [' + ', '.join(map(lambda f: '{:7.3f}'.format(f), cfd_ord)) + ']')
             print('crs ordered: [' + ', '.join(map(lambda f: '{:7.3f}'.format(f), crs_ord)) + ']')
-            print()
             if model_name == 'GBPN':
                 print(model.bp_conv.get_logH().exp())
 
@@ -345,9 +347,6 @@ def run(dataset, split, model_name, dim_hidden, num_layers, num_hops, num_sample
     return opt_test, opt_deg_avg, opt_nll_avg, opt_cfd_avg, opt_crs_avg, opt_cfd_ord, opt_crs_ord, opt_H
 
 
-random.seed(0)
-np.random.seed(0)
-torch.manual_seed(0)
 
 torch.set_printoptions(precision=4, threshold=None, edgeitems=10, linewidth=300, profile=None, sci_mode=False)
 parser = argparse.ArgumentParser('model')
@@ -389,7 +388,8 @@ test_crs_avg = []
 test_cfd_ord = []
 test_crs_ord = []
 optimal_H = []
-for _ in range(args.num_trials):
+for i in range(args.num_trials):
+    set_random_seed(i)
     opt_test, opt_deg_avg, opt_nll_avg, opt_cfd_avg, opt_crs_avg, opt_cfd_ord, opt_crs_ord, opt_H = run(args.dataset, args.split, args.model_name, args.dim_hidden, args.num_layers, args.num_hops, args.num_samples, args.dropout_p, args.device, args.learning_rate, args.num_epoches, args.initskip_BP, args.lossfunc_BP, args.weighted_BP, args.deg_scaling, args.learn_H, args.eval_C, args.verbose)
     test_acc.append(opt_test)
     test_deg_avg.append(opt_deg_avg)
