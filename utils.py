@@ -122,12 +122,19 @@ class SGC(torch.nn.Module):
 
     @torch.no_grad()
     def inference(self, sampler, max_batch_size, device, **kwargs):
-        assert max_batch_size == -1
-        x_all = torch.zeros(sampler.num_nodes, self.convs[-1].out_channels, dtype=torch.float32)
-        for batch_size, batch_nodes, _, _, _, \
-            _, _, subgraph_x, _, _, \
-            subgraph_edge_index, _, _, _ in sampler.get_generator(max_batch_size=max_batch_size, num_hops=self.num_layers):
-            x_all[batch_nodes] = self.forward(subgraph_x.to(device), subgraph_edge_index.to(device))[:batch_size].cpu()
+        x_all_ = sampler.x
+        for i, conv in enumerate(self.convs):
+            x_all = torch.zeros(sampler.num_nodes, conv.out_channels, dtype=torch.float32)
+            for _, batch_nodes, _, _, _, \
+                _, subgraph_nodes, _, _, _, \
+                subgraph_edge_index, _, _, _ in sampler.get_generator(max_batch_size=max_batch_size, num_hops=1):
+                x, subgraph_edge_index = x_all_[subgraph_nodes].to(device), subgraph_edge_index.to(device)
+                x = self.dropout(x)
+                x = conv(x, subgraph_edge_index)
+                if i == self.num_layers-1:
+                    x = F.log_softmax(x, dim=-1)
+                x_all[batch_nodes] = x[:batch_nodes.shape[0]].cpu()
+            x_all_ = x_all
         return x_all
 
 
@@ -157,12 +164,21 @@ class GCN(nn.Module):
 
     @torch.no_grad()
     def inference(self, sampler, max_batch_size, device, **kwargs):
-        assert max_batch_size == -1
-        x_all = torch.zeros(sampler.num_nodes, self.convs[-1].out_channels, dtype=torch.float32)
-        for batch_size, batch_nodes, _, _, _, \
-            _, _, subgraph_x, _, _, \
-            subgraph_edge_index, _, _, _ in sampler.get_generator(max_batch_size=max_batch_size, num_hops=self.num_layers):
-            x_all[batch_nodes] = self.forward(subgraph_x.to(device), subgraph_edge_index.to(device))[:batch_size].cpu()
+        x_all_ = sampler.x
+        for i, conv in enumerate(self.convs):
+            x_all = torch.zeros(sampler.num_nodes, conv.out_channels, dtype=torch.float32)
+            for _, batch_nodes, _, _, _, \
+                _, subgraph_nodes, _, _, _, \
+                subgraph_edge_index, _, _, _ in sampler.get_generator(max_batch_size=max_batch_size, num_hops=1):
+                x, subgraph_edge_index = x_all_[subgraph_nodes].to(device), subgraph_edge_index.to(device)
+                x = self.dropout(x)
+                x = conv(x, subgraph_edge_index)
+                if i < self.num_layers-1:
+                    x = self.activation(x)
+                else:
+                    x = F.log_softmax(x, dim=-1)
+                x_all[batch_nodes] = x[:batch_nodes.shape[0]].cpu()
+            x_all_ = x_all
         return x_all
 
 
@@ -475,7 +491,7 @@ class ClusterSampler:
         data.test_mask = test_mask
         data.edge_weight = edge_weight
         data.deg = degree(edge_index[1], num_nodes)
-        self.cluster_data = ClusterData(data, num_parts=max(num_nodes//512, 10), recursive=False)
+        self.cluster_data = ClusterData(data, num_parts=math.ceil(num_nodes / 256), recursive=False)
 
 
     def get_generator(self, mask=None, shuffle=False, max_batch_size=-1, num_hops=0, num_samples=-1, device='cpu'):
@@ -511,7 +527,7 @@ class ClusterSampler:
             partitions = torch.arange(self.cluster_data.num_parts, dtype=torch.int64)
             if shuffle:
                 partitions = partitions[torch.randperm(partitions.shape[0])]
-            n_batch = math.ceil(partitions.shape[0] / 10)
+            n_batch = math.ceil(partitions.shape[0] / 3)
 
             for batch_partitions in partitions.chunk(n_batch):
                 start = self.cluster_data.partptr[batch_partitions].tolist()
@@ -522,6 +538,9 @@ class ClusterSampler:
                 subgraph_nodes = torch.cat((batch_nodes, node_idx[torch.logical_not(self.cluster_data.data.train_mask[node_idx])]), dim=0)
                 batch_size = batch_nodes.shape[0]
                 subgraph_size = subgraph_nodes.shape[0]
+
+                if batch_size == 0:
+                    continue
 
                 adj = self.cluster_data.data.adj
                 adj = adj.index_select(0, subgraph_nodes)
