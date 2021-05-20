@@ -298,7 +298,7 @@ class BPConv(MessagePassing):
 
     def get_logH(self):
         logH = F.logsigmoid(self.param + self.param.t())
-        return (logH if self.learn_H else F.logsigmoid(torch.zeros(self.n_channels, self.n_channels)).fill_diagonal_(0.0).to(logH.device))
+        return (logH if self.learn_H else F.logsigmoid(torch.eye(self.n_channels)*2.0 - torch.ones(self.n_channels, self.n_channels)).to(logH.device))
 
     def forward(self, x, edge_index, edge_weight, info):
         # x has shape [N, n_channels]
