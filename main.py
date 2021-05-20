@@ -237,7 +237,8 @@ def run(dataset, split, model_name, dim_hidden, num_layers, num_hops, num_sample
         print('optimal crs ordered: [' + ', '.join(map(lambda f: '{:7.3f}'.format(f), opt_crs_ord)) + ']')
         return opt_test, opt_deg_avg, opt_nll_avg, opt_cfd_avg, opt_crs_avg, opt_cfd_ord, opt_crs_ord, None
     elif model_name == 'GBPN':
-        optimizer = MultiOptimizer(torch.optim.AdamW(model.transform.parameters(), lr=learning_rate, weight_decay=2.5e-4), torch.optim.AdamW(model.bp_conv.parameters(), lr=learning_rate*10, weight_decay=2.5e-4))
+        optimizer = MultiOptimizer(torch.optim.AdamW(model.transform.parameters(), lr=learning_rate, weight_decay=2.5e-4), 
+                                   torch.optim.AdamW(model.bp_conv.parameters(), lr=learning_rate*10, weight_decay=2.5e-4))
     else:
         optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate, weight_decay=2.5e-4)
 
@@ -301,7 +302,7 @@ def run(dataset, split, model_name, dim_hidden, num_layers, num_hops, num_sample
         num_hops = 0 if (model_name == 'GBPN' and epoch <= num_epoches*initskip_BP) else max_num_hops
         train(num_hops=num_hops, num_samples=num_samples)
 
-        if epoch % max(int(num_epoches*0.05), 10) == 0:
+        if epoch % max(int(num_epoches*0.10), 10) == 0:
             train_accuracy, val_accuracy, test_accuracy, log_b = evaluation(num_hops=num_hops)
             deg_avg, nll_avg, cfd_avg, crs_avg = accuracy_degree_correlation(log_b[test_mask], y[test_mask], deg[test_mask])
             cfd_ord, crs_ord = accuracy_confidence_correlation(log_b[test_mask], y[test_mask])
