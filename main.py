@@ -247,7 +247,7 @@ def run(dataset, split, model_name, dim_hidden, num_layers, num_hops, num_sample
         log_b_list, gth_y_list = [], []
         for batch_size, batch_nodes, _, batch_y, _, \
             subgraph_size, subgraph_nodes, subgraph_x, subgraph_y, subgraph_deg, \
-            subgraph_edge_index, subgraph_edge_weight, subgraph_edge_rv, _ in graph_sampler.get_generator(mask=train_mask, shuffle=True, max_batch_size=max_batch_size, num_hops=num_hops, num_samples=num_samples, device=device):
+            subgraph_edge_index, subgraph_edge_weight, subgraph_edge_rv, subgraph_edge_oid in graph_sampler.get_generator(mask=train_mask, shuffle=True, max_batch_size=max_batch_size, num_hops=num_hops, num_samples=num_samples, device=device):
 
             phi = torch.zeros(subgraph_size, num_classes).to(device)
             backpp_mask = torch.ones(batch_size, dtype=torch.bool).to(device)

@@ -363,11 +363,14 @@ class GBPN(nn.Module):
     def forward(self, x, edge_index, edge_weight, edge_rv, deg, deg_ori, phi=None, K=5):
         log_b0 = self.transform(x) if (phi is None) else log_normalize(self.transform(x) + phi)
         msg_scaling = get_scaling(deg_ori[edge_index[1]], deg[edge_index[1]]) if (self.deg_scaling and (deg is not None) and (deg_ori is not None)) else None
+
         info = {'log_b0': log_b0, 'log_msg_': None, 'edge_rv': edge_rv, 'msg_scaling': msg_scaling}
         log_b_ = log_b0
         for _ in range(K):
             log_b = self.bp_conv(log_b_, edge_index, edge_weight, info)
             log_b_ = log_b
+
+        # info.log_msg_
         return self.compute_log_probabilities(log_b0, log_b_, deg_ori if self.deg_scaling else deg)
 
     @torch.no_grad()
@@ -392,6 +395,11 @@ class GBPN(nn.Module):
                 log_msg[subgraph_edge_oid[subgraph_edge_mask]] = info['log_msg_'][subgraph_edge_mask].cpu()
             log_b_ = log_b
             log_msg_ = log_msg
+
+            print('Updating exps...')
+            sampler.G.update_exps(log_msg_.numpy());
+            
+
         return self.compute_log_probabilities(log_b0, log_b_, sampler.deg)
 
 
@@ -435,8 +443,11 @@ class SubtreeSampler:
         self.edge_index = edge_index
         self.edge_weight = edge_weight
         self.edge_rv = edge_rv
+        print("Before graph")
         self.G = nx.Graph(num_nodes)
+        print("Initialized graph")
         self.G.add_edges_from(torch.cat((edge_index, torch.arange(edge_index.shape[1]).reshape(1,-1)), dim=0).transpose(0,1).numpy())
+        print("Done adding edges")
         self.deg = degree(edge_index[1], num_nodes)
 
     def get_generator(self, mask=None, shuffle=False, max_batch_size=-1, num_hops=0, num_samples=-1, device='cpu'):
@@ -462,7 +473,7 @@ class SubtreeSampler:
             subgraph_edge_oid = T_edges[:,2] if T_edges.shape[0] > 0 else torch.zeros(0, dtype=torch.int64)
 
             assert torch.all(subgraph_nodes[subgraph_edge_index.reshape(-1)] == self.edge_index[:,subgraph_edge_oid].reshape(-1))
-
+            # oid = original edge id
             subgraph_edge_index, subgraph_edge_oid, subgraph_edge_rv = process_edge_index(subgraph_nodes.shape[0], subgraph_edge_index, subgraph_edge_oid)
             subgraph_edge_weight = self.edge_weight[subgraph_edge_oid]
 
@@ -508,7 +519,7 @@ class ClusterSampler:
                 if num_hops == 1 and num_samples == -1:
                     T = nx.onehop_subgraph(self.G, batch_nodes.tolist())
                 else:
-                    T = nx.sample_subtree(self.G, batch_nodes.tolist(), num_hops, num_samples)
+                    T = nx.sample_subtree(self.G, batch_nodes.tolist(), num_hops, num_samples, p)
                 subgraph_nodes = torch.tensor(T.get_nodes(), dtype=torch.int64)
                 subgraph_size = subgraph_nodes.shape[0]
                 T_edges = torch.tensor(T.get_edges(), dtype=torch.int64)
