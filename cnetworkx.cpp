@@ -43,12 +43,11 @@ struct Exp3 {
 
     void update(vector<double> &loss) {
 
-        const double R = 10000;
         double max_sq_loss = 0.0;
         // Update state based on loss
         for (int i = 0; i < n_; ++i) {
-            sum_losses_[i] += loss[i] / R;
-            max_sq_loss = max(max_sq_loss, pow(loss[i] / R, 2.0));
+            sum_losses_[i] += loss[i];
+            max_sq_loss = max(max_sq_loss, pow(loss[i], 2.0));
             //cout << sum_losses_[i] << endl;
         }
         sum_max_loss_sq_ += max_sq_loss;
@@ -87,11 +86,12 @@ struct Exp3 {
 
         for (int i = 0; i < n_; ++i) 
             probability[i] /= sum_w;
+            // probability[i] = 1.0 / static_cast<double>(n_);
 
-        cout << "(";
-        for (auto prob: probability)
-            cout << prob << ", ";
-        cout << ")" << endl;
+        // cout << "(";
+        // for (auto prob: probability)
+        //     cout << prob << ", ";
+        // cout << ")" << endl;
         return probability;
     }
 
@@ -167,24 +167,8 @@ struct Graph {
     }
 
     vector<double> update_exps(vector<double> &log_msg) {
-        // log_msg: dimensions num_edges x num_classes
-        // auto log_msg_new = log_msg.max(dim=-1) // maximum contribution/message across all labels of each edge
-        // // log_msg_new has dimension num_edges
 
-        // vector<vector<pair<int,vector<double>>> transformed_messages;
-        // Compute loss and call update
-        // std::cout << "Log msg size " << log_msg.size() << endl;
-        // std::cout << "Exp3s size " << exp3s.size() << endl;
-
-        // for i, (u, v) in enumerate(indices):
-
-        //     transformed_messages[(u,v)] = log_msg[i]
-
-        // // Sort; modify comp_first
-        // srt_nbrs(transformed_messages)
-
-
-        vector<double> scaling = log_msg;
+        
         int z = 0;
         // Iterate over all nodes.
         for (int i = 0; i < nbrs.size(); ++i) {
@@ -197,15 +181,17 @@ struct Graph {
             // for (int j = 0; j < sampled_neighbors[i].size(); ++j) {
                 z++;
                 auto eid = get<1>(nbrs[i][j]);
+
+                // loss = log_msg^2 / p^2 = E_{i ~ p} [ (log_msg_i/p_i)^2 ]
                 double this_loss = (1.0 / pow(exp3s[i].probability_[j], 2.0)) * pow(log_msg[eid], 2.0);
-                // cout << "los_msg " << log_msg[eid] << endl;
+                // cout << "log_msg " << log_msg[eid] << endl;
                 // cout << "this loss " << this_loss << endl;
                 loss.push_back(this_loss);
-                scaling[eid] = 1.0 / (exp3s[i].probability_[j]);
                 // cout << "prob[i][j] " << (exp3s[i].probability_[j]) << endl;
                 // cout << "Scaling[eid] " << scaling[eid] << endl;
                 // cout << "actual[eid] " << 1.0 / (exp3s[i].probability_[j]) << endl;
             }
+            //cout << "Done with neighbor " << i << endl << endl;
 
             // Update the exp3 for node i
             exp3s[i].update(loss);
@@ -213,8 +199,20 @@ struct Graph {
             // if ((i + 1) % 100000 == 0)
             //     cout << "Updated Exp3 for node " << (i+1) << "/" << nbrs.size() << endl;
         }
-        cout << "z: " << z << endl;
-        cout << "log msg size: " << log_msg.size() << endl;
+
+        // All exp3s are updated
+
+        vector<double> scaling = log_msg;
+        // Now compute the scaling
+        for (int i = 0; i < nbrs.size(); ++i) {
+            for (int j = 0; j < nbrs[i].size(); ++j) {
+                auto eid = get<1>(nbrs[i][j]);
+                scaling[eid] = 1.0 / (exp3s[i].probability_[j]); // 1.0 / p_{ij}
+            }
+        }
+
+        // cout << "z: " << z << endl;
+        // cout << "log msg size: " << log_msg.size() << endl;
 
         return scaling;
     }
@@ -260,7 +258,7 @@ void subtree_dfs(Graph& G, Graph& T, int r, int rid, int max_d, int num_samples)
 
             bool UNIFORM = false;
             if (UNIFORM)
-                // TODO: This is not without replacement so the reweighting is actually wrong
+                // TODO: This is not without replacement so the reweighting is actually wrong. Double check this, maybe correct.
                 sample(nbr.begin(), nbr.end(), back_inserter(selected_nbr), num_samples, mt19937{random_device{}()});
             else {
                 // Get the sampling distribution for the neighbors of node u.
@@ -271,14 +269,19 @@ void subtree_dfs(Graph& G, Graph& T, int r, int rid, int max_d, int num_samples)
                 mt19937 gen(rd());
                 discrete_distribution<> dist(prob.begin(), prob.end());
 
+                vector<bool> is_sampled(prob.size(), false);
                 // Pick num_samples weighted samples
-                for (int i = 0; i < num_samples; i++) 
+                //for (int i = 0; i < num_samples; i++) 
+                while (selected_nbr.size() < num_samples)
                 {
                     auto index = dist(gen);
-                    selected_nbr.push_back(nbr[index]);
+                    if (is_sampled[index] != true)
+                        selected_nbr.push_back(nbr[index]);
+
+                    is_sampled[index] = true;
+
                 }    
             }
-
             
 
             // Update the weights of each sampled edge.
@@ -317,7 +320,10 @@ Graph sample_subtree(Graph& G, vector<int> batch_nodes, int max_d, int num_sampl
         TList.push_back(T);
     }
 
-    // #pragma omp parallel for
+    // TODO: UNCOMMENT THIS FOR EXPERIMENTS
+    // TODO: UNCOMMENT THIS FOR EXPERIMENTS
+    // TODO: UNCOMMENT THIS FOR EXPERIMENTS
+    #pragma omp parallel for
     for (unsigned rid=0; rid<batch_size; rid++)
     {
 

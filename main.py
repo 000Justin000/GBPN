@@ -259,7 +259,7 @@ def run(dataset, split, model_name, dim_hidden, num_layers, num_hops, num_sample
                 backpp_mask[anchor_mask[batch_nodes]] = False
 
             optimizer.zero_grad()
-            subgraph_log_b = model(subgraph_x, subgraph_edge_index, edge_weight=subgraph_edge_weight, edge_rv=subgraph_edge_rv,
+            subgraph_log_b = model(subgraph_x, subgraph_edge_index, subgraph_edge_oid, edge_weight=subgraph_edge_weight, edge_rv=subgraph_edge_rv,
                                    deg=degree(subgraph_edge_index[1], subgraph_size), deg_ori=deg[subgraph_nodes].to(device), phi=phi, K=num_hops)
             loss = F.nll_loss(subgraph_log_b[:batch_size][backpp_mask], batch_y[backpp_mask], weight=c_weight)
             loss.backward()
