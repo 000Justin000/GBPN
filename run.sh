@@ -27,4 +27,4 @@
 
 #python main.py --dataset OGBN_arXiv  --model_name GBPN --dim_hidden 256 --num_layers 2 --num_hops 1 --num_samples  5 --dropout_p 0.1 --device cuda --learning_rate 1.0e-3 --num_epoches 30 --num_trials  3 --initskip_BP 0.00 --lossfunc_BP 5 --deg_scaling --learn_H --verbose --develop
 
-python main.py --dataset OGBN_arXiv --model_name GBPN --dim_hidden 256 --num_layers 2 --num_hops 1 --num_samples   5 --dropout_p 0.1 --device cuda --learning_rate 1.0e-3 --num_epoches 100 —-num_trials  10 --initskip_BP 0.00 --lossfunc_BP 5 --deg_scaling --learn_H --verbose --develop
+python main.py --dataset OGBN_arXiv --model_name GBPN --dim_hidden 256 --num_layers 2 --num_hops 1 --num_samples   5 --dropout_p 0.1 --device cuda --learning_rate 1.0e-3 --num_epoches 100 --num_trials  10 --initskip_BP 0.00 --lossfunc_BP 5 --deg_scaling --learn_H --verbose --develop
