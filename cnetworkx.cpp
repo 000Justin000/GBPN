@@ -17,48 +17,68 @@ namespace py = pybind11;
 //     return x.first < y.first;
 // }
 
-bool comp_first(const tuple<int,int,double> &x, const tuple<int,int,float> &y) {
+bool comp_first(const tuple<int,int,double> &x, const tuple<int,int,double> &y) {
     return get<0>(x) < get<0>(y);
 }
 
 struct Exp3 {
-    vector<float> probability;
-    vector<float> eta_;
-    vector<float> sum_losses_;
-    vector<float> sum_losses_sq_;
+    vector<double> probability_;
+    vector<double> eta_;
+    vector<double> sum_losses_;
+    double sum_max_loss_sq_;
     int n_;
     double alpha_;
 
     void init(int n) {
         n_ = n;
         alpha_ = sqrt(log(n)*1.19);
+        sum_max_loss_sq_ = 0;
+
         for (int i = 0; i < n; ++i) {
-            probability.push_back(1.0 / static_cast<float>(n));
+            probability_.push_back(1.0 / static_cast<double>(n));
             sum_losses_.push_back(0.0);
-            sum_losses_sq_.push_back(0.0);
+            eta_.push_back(1.0);
         }
     }
 
-    void update(vector<float> &loss) {
+    void update(vector<double> &loss) {
+
+        const double R = 10000;
+        double max_sq_loss = 0.0;
         // Update state based on loss
         for (int i = 0; i < n_; ++i) {
-            sum_losses_[i] += loss[i];
-            sum_losses_sq_[i] += pow(loss[i], 2);
+            sum_losses_[i] += loss[i] / R;
+            max_sq_loss = max(max_sq_loss, pow(loss[i] / R, 2.0));
+            //cout << sum_losses_[i] << endl;
         }
+        sum_max_loss_sq_ += max_sq_loss;
+
 
         // Compute etas
         for (int i = 0; i < n_; ++i) {
-            eta_[i] = alpha_ / sqrt(sum_losses_sq_[i]);
+            eta_[i] = alpha_ / sqrt(sum_max_loss_sq_);
         }
+
+        probability_ = get_prob();
     }
 
-    vector<float> get_prob() 
+    vector<double> get_prob() 
     {
-        vector<float> weights;
-        float sum_w = 0;
+        vector<double> weights;
+        double sum_w = 0.0;
+
+        double max_loss = 0.0;
 
         for (int i = 0; i < n_; ++i) {
-            float v = exp(sum_losses_[i] * eta_[i]);
+            auto v = sum_losses_[i] * eta_[i];
+            if (v >= max_loss) {
+                max_loss = v;
+            }
+        }
+
+        for (int i = 0; i < n_; ++i) {
+            double v = exp(sum_losses_[i] * eta_[i] - max_loss);
+            //cout << "v[" << i << "]: " << v << endl;
             weights.push_back(v);
             sum_w += v;
         }
@@ -68,6 +88,10 @@ struct Exp3 {
         for (int i = 0; i < n_; ++i) 
             probability[i] /= sum_w;
 
+        // cout << "(";
+        // for (auto prob: probability)
+        //     cout << prob << ", ";
+        // cout << ")" << endl;
         return probability;
     }
 
@@ -79,7 +103,8 @@ struct Graph {
     // (nodeIdx, edgeIdx) tuple
     // vector<vector<tuple<int,int>>> nbrs;
     // TODO: Tuple
-    vector<vector<tuple<int,int,float>>> nbrs;
+    vector<vector<tuple<int,int,double>>> nbrs;
+    // One Exp3 instance per node.
     vector<Exp3> exp3s;
 
 
@@ -89,7 +114,6 @@ struct Graph {
 
     }
 
-
     Graph(vector<int> input_nodes) {
         for (auto u: input_nodes)
             add_node(u);
@@ -97,7 +121,7 @@ struct Graph {
 
     void add_node(int u) {
         nodes.push_back(u);
-        nbrs.push_back(vector<tuple<int,int,float>>());
+        nbrs.push_back(vector<tuple<int,int,double>>());
     }
 
     void add_edge(int uid, int vid, int eid) {
@@ -142,20 +166,53 @@ struct Graph {
             sort(nbr.begin(), nbr.end(), comp_first);
     }
 
-    void update_exps(vector<vector<double>> &log_msg) {
-        // Compute loss and call update
-        std::cout << "Log msg size " << log_msg.size() << endl;
-        std::cout << "Exp3s size " << exp3s.size() << endl;
-        for (int i = 0; i < log_msg.size(); ++i) {
-            std::vector<float> loss;
+    vector<double> update_exps(vector<double> &log_msg) {
+        // log_msg: dimensions num_edges x num_classes
+        // auto log_msg_new = log_msg.max(dim=-1) // maximum contribution/message across all labels of each edge
+        // // log_msg_new has dimension num_edges
 
-            for (int j = 0; j < log_msg[i].size(); ++j) {
-                float this_loss = 1.0 / exp3s[i].probability[j] * pow(log_msg[i][j], 2);
+        // vector<vector<pair<int,vector<double>>> transformed_messages;
+        // Compute loss and call update
+        // std::cout << "Log msg size " << log_msg.size() << endl;
+        // std::cout << "Exp3s size " << exp3s.size() << endl;
+
+        // for i, (u, v) in enumerate(indices):
+
+        //     transformed_messages[(u,v)] = log_msg[i]
+
+        // // Sort; modify comp_first
+        // srt_nbrs(transformed_messages)
+
+
+        vector<double> scaling = log_msg;
+        // Iterate over all nodes.
+        for (int i = 0; i < nbrs.size(); ++i) {
+            // Dimension: num_neighbors
+            std::vector<double> loss;
+            // cout << exp3s[i].probability_ << endl;
+            
+            // Construct loss vector by iterating over all neighbors of node i
+            for (int j = 0; j < nbrs[i].size(); ++j) {
+            // for (int j = 0; j < sampled_neighbors[i].size(); ++j) {
+                auto eid = get<1>(nbrs[i][j]);
+                double this_loss = (1.0 / pow(exp3s[i].probability_[j], 2.0)) * pow(log_msg[eid], 2.0);
+                // cout << "los_msg " << log_msg[eid] << endl;
+                // cout << "this loss " << this_loss << endl;
                 loss.push_back(this_loss);
+                scaling[eid] = 1.0 / (exp3s[i].probability_[j]);
+                // cout << "prob[i][j] " << (exp3s[i].probability_[j]) << endl;
+                // cout << "Scaling[eid] " << scaling[eid] << endl;
+                // cout << "actual[eid] " << 1.0 / (exp3s[i].probability_[j]) << endl;
             }
 
+            // Update the exp3 for node i
             exp3s[i].update(loss);
+
+            // if ((i + 1) % 100000 == 0)
+            //     cout << "Updated Exp3 for node " << (i+1) << "/" << nbrs.size() << endl;
         }
+
+        return scaling;
     }
 };
 
@@ -183,7 +240,7 @@ void subtree_dfs(Graph& G, Graph& T, int r, int rid, int max_d, int num_samples)
 //      cout << u << " " << uid << " " << d << " " << p << endl;
 //      cout << G.nbrs[u].size() << " ";
 
-        vector<tuple<int,int,float>> nbr;
+        vector<tuple<int,int,double>> nbr;
         for (auto arc: G.nbrs[u])
             if (get<0>(arc) != p) {
                 nbr.push_back(arc);
@@ -191,28 +248,40 @@ void subtree_dfs(Graph& G, Graph& T, int r, int rid, int max_d, int num_samples)
             }
       // cout << "Num neighbors " << nbr.size() << endl;
 
-        vector<tuple<int,int,float>> selected_nbr;
+        vector<tuple<int,int,double>> selected_nbr;
         if ((num_samples < 0) || (nbr.size() <= num_samples))
             selected_nbr = nbr;
         else 
         {
-            // sample(nbr.begin(), nbr.end(), back_inserter(selected_nbr), num_samples, mt19937{random_device{}()});
 
-            auto prob = G.exp3s[u].probability;
-            // Importance sampling of neighbors according to distribution p
-            std::random_device rd;
-            mt19937 gen(rd());
-            discrete_distribution<> dist(prob.begin(), prob.end());
+            bool UNIFORM = false;
+            if (UNIFORM)
+                // TODO: This is not without replacement so the reweighting is actually wrong
+                sample(nbr.begin(), nbr.end(), back_inserter(selected_nbr), num_samples, mt19937{random_device{}()});
+            else {
+                // Get the sampling distribution for the neighbors of node u.
+                auto prob = G.exp3s[u].probability_;
 
-            for (int i = 0; i < num_samples; i++) 
-            {
-                auto index = dist(gen);
-                selected_nbr.push_back(nbr[index]);
+                // Importance sampling of neighbors according to distribution p
+                std::random_device rd;
+                mt19937 gen(rd());
+                discrete_distribution<> dist(prob.begin(), prob.end());
+
+                // Pick num_samples weighted samples
+                for (int i = 0; i < num_samples; i++) 
+                {
+                    auto index = dist(gen);
+                    selected_nbr.push_back(nbr[index]);
+                }    
             }
+
+            
+
+            // Update the weights of each sampled edge.
             
         }
 
-        int j = 0;
+
         for (auto arc: selected_nbr)
         {   
             int v = get<0>(arc);

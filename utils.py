@@ -333,6 +333,7 @@ class GBPN(nn.Module):
         self.deg_scaling = deg_scaling
         self.bp_conv = BPConv(dim_out, learn_H)
         self.lossfunc_BP = lossfunc_BP
+        self.edge_scaling = None
 
     def compute_log_probabilities(self, log_b0, log_b, deg, option=None):
         option = option if (option is not None) else self.lossfunc_BP
@@ -363,6 +364,14 @@ class GBPN(nn.Module):
     def forward(self, x, edge_index, edge_weight, edge_rv, deg, deg_ori, phi=None, K=5):
         log_b0 = self.transform(x) if (phi is None) else log_normalize(self.transform(x) + phi)
         msg_scaling = get_scaling(deg_ori[edge_index[1]], deg[edge_index[1]]) if (self.deg_scaling and (deg is not None) and (deg_ori is not None)) else None
+        #weight_uv = 1.0 / (G.exp3s[u].probability[v] * num_samples)
+        
+        if msg_scaling is not None:
+             print('Msg scaling: {}'.format(msg_scaling))
+        # if self.edge_scaling is not None and msg_scaling is not None:
+        #     msg_scaling = self.edge_scaling[edge_index[1]] / deg[edge_index[1]]
+        #     print('Msg scaling: {}'.format(msg_scaling))
+
 
         info = {'log_b0': log_b0, 'log_msg_': None, 'edge_rv': edge_rv, 'msg_scaling': msg_scaling}
         log_b_ = log_b0
@@ -382,6 +391,8 @@ class GBPN(nn.Module):
             log_b0_list.append(self.transform(subgraph_x.to(device))[:batch_size].cpu())
         log_b0 = torch.cat(log_b0_list, dim=0) if (phi is None) else log_normalize(torch.cat(log_b0_list, dim=0) + phi)
         log_b_ = log_b0
+
+        # Dimensionality: num_edges x num_classes
         log_msg_ = torch.zeros(sampler.edge_index.shape[1], log_b0.shape[1], dtype=torch.float32)
         for _ in range(K):
             log_b = torch.zeros_like(log_b_)
@@ -397,7 +408,12 @@ class GBPN(nn.Module):
             log_msg_ = log_msg
 
             print('Updating exps...')
-            sampler.G.update_exps(log_msg_.numpy());
+
+        print("log_msg__ {}".format(log_msg_))
+        print("(log_msg_).max(dim=-1)[0]: {}".format(log_msg_.max(dim=-1)[0].shape))
+        self.edge_scaling = torch.tensor(sampler.G.update_exps((log_msg_).max(dim=-1)[0].numpy())).to(device)
+        print(self.edge_scaling.mean())
+        print(self.edge_scaling)
             
 
         return self.compute_log_probabilities(log_b0, log_b_, sampler.deg)
@@ -634,8 +650,8 @@ def simplex_coordinates(m):
 def simplex_coordinates_test(m):
     x = simplex_coordinates(m)
 
-    print("x^{intercal} x")
-    print(torch.mm(x, x.transpose(0,1)))
+    # print("x^{intercal} x")
+    # print(torch.mm(x, x.transpose(0,1)))
 
 
 def process_edge_index(num_nodes, edge_index, edge_attr=None):

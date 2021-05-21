@@ -301,7 +301,8 @@ def run(dataset, split, model_name, dim_hidden, num_layers, num_hops, num_sample
         num_hops = 0 if (model_name == 'GBPN' and epoch <= num_epoches*initskip_BP) else max_num_hops
         train(num_hops=num_hops, num_samples=num_samples)
 
-        if epoch % max(int(num_epoches*0.05), 10) == 0:
+        #if epoch % max(int(num_epoches*0.05), 10) == 0:
+        if True:
             train_accuracy, val_accuracy, test_accuracy, log_b = evaluation(num_hops=num_hops)
             deg_avg, nll_avg, cfd_avg, crs_avg = accuracy_degree_correlation(log_b[test_mask], y[test_mask], deg[test_mask])
             cfd_ord, crs_ord = accuracy_confidence_correlation(log_b[test_mask], y[test_mask])
@@ -313,8 +314,8 @@ def run(dataset, split, model_name, dim_hidden, num_layers, num_hops, num_sample
             print('cfd ordered: [' + ', '.join(map(lambda f: '{:7.3f}'.format(f), cfd_ord)) + ']')
             print('crs ordered: [' + ', '.join(map(lambda f: '{:7.3f}'.format(f), crs_ord)) + ']')
             print()
-            if model_name == 'GBPN':
-                print(model.bp_conv.get_logH().exp())
+            # if model_name == 'GBPN':
+            #     print(model.bp_conv.get_logH().exp())
 
             if val_accuracy > opt_val:
                 opt_val = val_accuracy
