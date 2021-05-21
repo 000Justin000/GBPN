@@ -88,10 +88,10 @@ struct Exp3 {
         for (int i = 0; i < n_; ++i) 
             probability[i] /= sum_w;
 
-        // cout << "(";
-        // for (auto prob: probability)
-        //     cout << prob << ", ";
-        // cout << ")" << endl;
+        cout << "(";
+        for (auto prob: probability)
+            cout << prob << ", ";
+        cout << ")" << endl;
         return probability;
     }
 
@@ -185,6 +185,7 @@ struct Graph {
 
 
         vector<double> scaling = log_msg;
+        int z = 0;
         // Iterate over all nodes.
         for (int i = 0; i < nbrs.size(); ++i) {
             // Dimension: num_neighbors
@@ -194,6 +195,7 @@ struct Graph {
             // Construct loss vector by iterating over all neighbors of node i
             for (int j = 0; j < nbrs[i].size(); ++j) {
             // for (int j = 0; j < sampled_neighbors[i].size(); ++j) {
+                z++;
                 auto eid = get<1>(nbrs[i][j]);
                 double this_loss = (1.0 / pow(exp3s[i].probability_[j], 2.0)) * pow(log_msg[eid], 2.0);
                 // cout << "los_msg " << log_msg[eid] << endl;
@@ -211,6 +213,8 @@ struct Graph {
             // if ((i + 1) % 100000 == 0)
             //     cout << "Updated Exp3 for node " << (i+1) << "/" << nbrs.size() << endl;
         }
+        cout << "z: " << z << endl;
+        cout << "log msg size: " << log_msg.size() << endl;
 
         return scaling;
     }

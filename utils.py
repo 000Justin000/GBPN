@@ -364,13 +364,12 @@ class GBPN(nn.Module):
     def forward(self, x, edge_index, edge_weight, edge_rv, deg, deg_ori, phi=None, K=5):
         log_b0 = self.transform(x) if (phi is None) else log_normalize(self.transform(x) + phi)
         msg_scaling = get_scaling(deg_ori[edge_index[1]], deg[edge_index[1]]) if (self.deg_scaling and (deg is not None) and (deg_ori is not None)) else None
-        #weight_uv = 1.0 / (G.exp3s[u].probability[v] * num_samples)
         
-        if msg_scaling is not None:
-             print('Msg scaling: {}'.format(msg_scaling))
-        # if self.edge_scaling is not None and msg_scaling is not None:
-        #     msg_scaling = self.edge_scaling[edge_index[1]] / deg[edge_index[1]]
-        #     print('Msg scaling: {}'.format(msg_scaling))
+        if self.edge_scaling is not None and msg_scaling is not None:
+            # Worked better with subscript 0 for some reason
+            msg_scaling = self.edge_scaling[edge_index[1]] / deg[edge_index[1]]
+            print('Msg scaling: {}'.format(msg_scaling))
+            print('deg[edge_index[1]]]: {}'.format(deg[edge_index[1]]))
 
 
         info = {'log_b0': log_b0, 'log_msg_': None, 'edge_rv': edge_rv, 'msg_scaling': msg_scaling}
