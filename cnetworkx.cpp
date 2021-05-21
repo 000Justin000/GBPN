@@ -76,7 +76,7 @@ struct Exp3 {
         }
 
         for (int i = 0; i < n_; ++i) {
-            double v = exp(sum_losses_[i] * eta_[i] - max_loss);
+            double v = exp(sum_losses_[i] * eta_[i]);
             //cout << "v[" << i << "]: " << v << endl;
             weights.push_back(v);
             sum_w += v;
@@ -84,9 +84,13 @@ struct Exp3 {
 
         auto probability = weights;
 
-        for (int i = 0; i < n_; ++i) 
-            probability[i] /= sum_w;
-            // probability[i] = 1.0 / static_cast<double>(n_);
+        for (int i = 0; i < n_; ++i) {
+            //probability[i] /= sum_w;
+            probability[i] /= (sum_w);
+        }
+
+        // gamma = 1.0 / n_;
+
 
         // cout << "(";
         // for (auto prob: probability)
@@ -166,6 +170,7 @@ struct Graph {
             sort(nbr.begin(), nbr.end(), comp_first);
     }
 
+
     vector<double> update_exps(vector<double> &log_msg) {
 
         
@@ -203,7 +208,9 @@ struct Graph {
         // All exp3s are updated
 
         vector<double> scaling = log_msg;
+
         // Now compute the scaling
+        #pragma omp parallel for
         for (int i = 0; i < nbrs.size(); ++i) {
             for (int j = 0; j < nbrs[i].size(); ++j) {
                 auto eid = get<1>(nbrs[i][j]);
@@ -271,16 +278,21 @@ void subtree_dfs(Graph& G, Graph& T, int r, int rid, int max_d, int num_samples)
 
                 vector<bool> is_sampled(prob.size(), false);
                 // Pick num_samples weighted samples
-                //for (int i = 0; i < num_samples; i++) 
-                while (selected_nbr.size() < num_samples)
-                {
+
+                for (int i = 0; i < num_samples; i++) {
                     auto index = dist(gen);
-                    if (is_sampled[index] != true)
-                        selected_nbr.push_back(nbr[index]);
-
-                    is_sampled[index] = true;
-
+                    selected_nbr.push_back(nbr[index]);
                 }    
+                
+                // while (selected_nbr.size() < num_samples)
+                // {
+                //     auto index = dist(gen);
+                //     if (is_sampled[index] != true)
+                //         selected_nbr.push_back(nbr[index]);
+
+                //     is_sampled[index] = true;
+
+                // }    
             }
             
 

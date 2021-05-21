@@ -429,8 +429,12 @@ class GBPN(nn.Module):
         # print("log_msg__ {}".format(log_msg_))
         # print("(log_msg_).max(dim=-1)[0]: {}".format(log_msg_.max(dim=-1)[0].shape))
         print('Updating exps...')
-        self.edge_scaling = torch.tensor(sampler.G.update_exps(log_msg_[sampler.edge_rv,:].abs().max(dim=-1)[0].numpy())).to(device)
+        # self.edge_scaling = torch.tensor(sampler.G.update_exps(log_msg_[sampler.edge_rv,:].abs().max(dim=-1)[0].numpy())).to(device)
 
+        # self.edge_scaling = self.edge_scaling[sampler.edge_rv]
+
+        msgs = (torch.norm(log_msg_[sampler.edge_rv,:], dim=-1)**2)
+        self.edge_scaling = torch.tensor(sampler.G.update_exps(msgs.numpy())).to(device)
         self.edge_scaling = self.edge_scaling[sampler.edge_rv]
             
 
