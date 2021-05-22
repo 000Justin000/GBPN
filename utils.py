@@ -412,9 +412,11 @@ class GBPN(nn.Module):
 
         # Dimensionality: num_edges x num_classes
         log_msg_ = torch.zeros(sampler.edge_index.shape[1], log_b0.shape[1], dtype=torch.float32)
+        msgs = torch.zeros(sampler.edge_index.shape[1], dtype=torch.float32)
         for _ in range(K):
             log_b = torch.zeros_like(log_b_)
             log_msg = torch.zeros_like(log_msg_)
+            # TO ASK: New subtree neighbors sampled for each computation here?
             for batch_size, batch_nodes, _, _, _, \
                 subgraph_size, subgraph_nodes, _, _, _, \
                 subgraph_edge_index, subgraph_edge_weight, subgraph_edge_rv, subgraph_edge_oid in sampler.get_generator(max_batch_size=max_batch_size, num_hops=1):
@@ -425,16 +427,11 @@ class GBPN(nn.Module):
             log_b_ = log_b
             log_msg_ = log_msg
 
-
-        # print("log_msg__ {}".format(log_msg_))
-        # print("(log_msg_).max(dim=-1)[0]: {}".format(log_msg_.max(dim=-1)[0].shape))
-        print('Updating exps...')
-        # self.edge_scaling = torch.tensor(sampler.G.update_exps(log_msg_[sampler.edge_rv,:].abs().max(dim=-1)[0].numpy())).to(device)
-
-        # self.edge_scaling = self.edge_scaling[sampler.edge_rv]
-
-        msgs = torch.norm(log_msg_[sampler.edge_rv,:], dim=-1)
-        self.edge_scaling = torch.tensor(sampler.G.update_exps(msgs.numpy())).to(device)
+            # Should we aggregate messages?
+            # msgs += log_msg?
+        
+        msgs = torch.norm(log_msg_[sampler.edge_rv,:], dim=-1)**2
+        self.edge_scaling = torch.tensor(sampler.G.update_exps(msgs.sqrt().numpy())).to(device)
         self.edge_scaling = self.edge_scaling[sampler.edge_rv]
             
 
@@ -481,7 +478,6 @@ class SubtreeSampler:
         self.edge_index = edge_index
         self.edge_weight = edge_weight
         self.edge_rv = edge_rv
-        print("Before graph")
         self.G = nx.Graph(num_nodes)
         print("Initialized graph")
         self.G.add_edges_from(torch.cat((edge_index, torch.arange(edge_index.shape[1]).reshape(1,-1)), dim=0).transpose(0,1).numpy())

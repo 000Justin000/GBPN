@@ -77,7 +77,6 @@ struct Exp3 {
 
         for (int i = 0; i < n_; ++i) {
             double v = exp(sum_losses_[i] * eta_[i]);
-            //cout << "v[" << i << "]: " << v << endl;
             weights.push_back(v);
             sum_w += v;
         }
@@ -85,11 +84,8 @@ struct Exp3 {
         auto probability = weights;
 
         for (int i = 0; i < n_; ++i) {
-            //probability[i] /= sum_w;
             probability[i] /= (sum_w);
         }
-
-        // gamma = 1.0 / n_;
 
 
         // cout << "(";
@@ -100,6 +96,7 @@ struct Exp3 {
     }
 
 };
+
 
 struct Graph {
     vector<int> nodes;
@@ -145,8 +142,6 @@ struct Graph {
             this_exp3.init(num_neighbors);
             exp3s.push_back(this_exp3);
         }
-
-        std::cout << "Done adding edges!" << endl;
     }
 
     int number_of_nodes(void) {
@@ -171,43 +166,75 @@ struct Graph {
     }
 
 
-    vector<double> update_exps(vector<double> &log_msg) {
+    double compute_variance(vector<double> &log_msg_c) {
 
-        
-        int z = 0;
+    }
+
+    vector<double> update_exps(vector<double> &log_msg) {
+    //vector<double> update_exps(vector<vector<double>> &log_msg) {
+
+        // TODO: try loss as max_{c in classes} Var_c
+        // and use subgradient.
+
+        // vector<int> index(nbrs.size(), 0);
+        // vector<double> mu_c_star(nbrs.size(), 0);
+        // #pragma omp parallel for
+        // for (int i = 0; i < nbrs.size(); ++i) {
+
+        //     std::vector<double> var_per_c(log_msg[0].size(), 0.0);
+        //     std::vector<double> mu_per_c(log_msg[0].size(), 0.0);
+        //     for (int j = 0; j < nbrs[i].size(); ++j) {
+        //         auto eid = get<1>(nbrs[i][j]);
+
+        //         for (int k = 0; k < log_msg[eid].size(); ++k) {
+        //             var_per_c[k] += pow(log_msg[eid][k], 2.0) / exp3s[i].probability_[j];
+        //             mu_per_c[k] += log_msg[eid][k];
+        //         }
+        //     }
+
+        //     int max_var_index = 0;
+        //     double max_var = 0.0;
+        //     for (int z = 0; z < var_per_c.size(); ++z) {
+        //         auto v = var_per_c[z] / pow(mu_per_c[z], 2.0);
+        //         if (v > max_var) {
+        //             max_var = v;
+        //             max_var_index = z;
+        //         }
+        //     }
+            
+
+        //     index[i] = max_var_index;
+        //     mu_c_star[i] = mu_per_c[max_var_index];
+        // }
+
+
         // Iterate over all nodes.
+        #pragma omp parallel for
         for (int i = 0; i < nbrs.size(); ++i) {
             // Dimension: num_neighbors
-            std::vector<double> loss;
+            std::vector<double> loss(nbrs[i].size(), 0.0);
             // cout << exp3s[i].probability_ << endl;
             
             // Construct loss vector by iterating over all neighbors of node i
             for (int j = 0; j < nbrs[i].size(); ++j) {
             // for (int j = 0; j < sampled_neighbors[i].size(); ++j) {
-                z++;
                 auto eid = get<1>(nbrs[i][j]);
 
                 // loss = log_msg^2 / p^2 = E_{i ~ p} [ (log_msg_i/p_i)^2 ]
                 double this_loss = (1.0 / pow(exp3s[i].probability_[j], 2.0)) * pow(log_msg[eid], 2.0);
-                // cout << "log_msg " << log_msg[eid] << endl;
-                // cout << "this loss " << this_loss << endl;
-                loss.push_back(this_loss);
-                // cout << "prob[i][j] " << (exp3s[i].probability_[j]) << endl;
-                // cout << "Scaling[eid] " << scaling[eid] << endl;
-                // cout << "actual[eid] " << 1.0 / (exp3s[i].probability_[j]) << endl;
+                //double this_loss = (1.0 / pow(exp3s[i].probability_[j], 2.0)) * pow(log_msg[eid][index[i]], 2.0);
+                //loss[j] = this_loss / pow(mu_c_star[i], 2);
+                loss[j] = this_loss;
             }
             //cout << "Done with neighbor " << i << endl << endl;
 
             // Update the exp3 for node i
             exp3s[i].update(loss);
 
-            // if ((i + 1) % 100000 == 0)
-            //     cout << "Updated Exp3 for node " << (i+1) << "/" << nbrs.size() << endl;
         }
 
-        // All exp3s are updated
-
-        vector<double> scaling = log_msg;
+        // All exp3s are updated.
+        vector<double> scaling(log_msg.size(), 0.0);
 
         // Now compute the scaling
         #pragma omp parallel for
@@ -283,7 +310,7 @@ void subtree_dfs(Graph& G, Graph& T, int r, int rid, int max_d, int num_samples)
                     auto index = dist(gen);
                     selected_nbr.push_back(nbr[index]);
                 }    
-                
+
                 // while (selected_nbr.size() < num_samples)
                 // {
                 //     auto index = dist(gen);

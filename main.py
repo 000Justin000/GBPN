@@ -292,6 +292,7 @@ def run(dataset, split, model_name, dim_hidden, num_layers, num_hops, num_sample
             if verbose:
                 print('transductive loss / accuracy: ({:5.3f}, {:5.3f}, {:5.3f}) / ({:5.3f}, {:5.3f}, {:5.3f})'.format(train_loss, val_loss, test_loss, train_accuracy, val_accuracy, test_accuracy), end='', flush=True)
 
+
         return train_accuracy, val_accuracy, test_accuracy, log_b
 
     max_num_hops = num_hops
@@ -302,18 +303,19 @@ def run(dataset, split, model_name, dim_hidden, num_layers, num_hops, num_sample
         train(num_hops=num_hops, num_samples=num_samples)
 
         #if epoch % max(int(num_epoches*0.05), 10) == 0:
+        #if epoch % max(int(num_epoches*0.05), 100) == 0:
         if True:
             train_accuracy, val_accuracy, test_accuracy, log_b = evaluation(num_hops=num_hops)
             deg_avg, nll_avg, cfd_avg, crs_avg = accuracy_degree_correlation(log_b[test_mask], y[test_mask], deg[test_mask])
             cfd_ord, crs_ord = accuracy_confidence_correlation(log_b[test_mask], y[test_mask])
-            print()
-            print('deg average: [' + ', '.join(map(lambda f: '{:7.3f}'.format(f), deg_avg)) + ']')
-            print('nll average: [' + ', '.join(map(lambda f: '{:7.3f}'.format(f), nll_avg)) + ']')
-            print('cfd average: [' + ', '.join(map(lambda f: '{:7.3f}'.format(f), cfd_avg)) + ']')
-            print('crs average: [' + ', '.join(map(lambda f: '{:7.3f}'.format(f), crs_avg)) + ']')
-            print('cfd ordered: [' + ', '.join(map(lambda f: '{:7.3f}'.format(f), cfd_ord)) + ']')
-            print('crs ordered: [' + ', '.join(map(lambda f: '{:7.3f}'.format(f), crs_ord)) + ']')
-            print()
+            # print()
+            # print('deg average: [' + ', '.join(map(lambda f: '{:7.3f}'.format(f), deg_avg)) + ']')
+            # print('nll average: [' + ', '.join(map(lambda f: '{:7.3f}'.format(f), nll_avg)) + ']')
+            # print('cfd average: [' + ', '.join(map(lambda f: '{:7.3f}'.format(f), cfd_avg)) + ']')
+            # print('crs average: [' + ', '.join(map(lambda f: '{:7.3f}'.format(f), crs_avg)) + ']')
+            # print('cfd ordered: [' + ', '.join(map(lambda f: '{:7.3f}'.format(f), cfd_ord)) + ']')
+            # print('crs ordered: [' + ', '.join(map(lambda f: '{:7.3f}'.format(f), crs_ord)) + ']')
+            # print()
             # if model_name == 'GBPN':
             #     print(model.bp_conv.get_logH().exp())
 
