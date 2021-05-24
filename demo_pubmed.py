@@ -37,7 +37,7 @@ torch.manual_seed(0)
 
 split = [0.3, 0.2, 0.5]
 num_layers = 2
-max_num_hops = 5
+max_num_hops = 20
 learning_rate = 1.0e-3
 num_epoches = 300
 learn_H = True
@@ -57,8 +57,11 @@ edge_weight = torch.ones(edge_index.shape[1], dtype=torch.float32) if (edge_weig
 c_weight = None
 accuracy_fun = classification_accuracy
 
-model = GBPN(num_features, num_classes, dim_hidden=256, num_layers=num_layers, activation=nn.LeakyReLU(), dropout_p=0.6, learn_H=learn_H)
-optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate, weight_decay=2.5e-4)
+# model = GBPN(num_features, num_classes, dim_hidden=256, num_layers=num_layers, activation=nn.LeakyReLU(), dropout_p=0.6, learn_H=learn_H)
+model = GBPN(num_features, num_classes, dim_hidden=256, num_layers=num_layers, activation=nn.ReLU(), dropout_p=0.3,
+                                        lossfunc_BP=5, deg_scaling=False, learn_H=learn_H)
+optimizer = MultiOptimizer(torch.optim.AdamW(model.transform.parameters(), lr=learning_rate, weight_decay=2.5e-4),
+                           torch.optim.AdamW(model.bp_conv.parameters(), lr=learning_rate * 10, weight_decay=2.5e-4))
 
 graph_sampler = FullgraphSampler(num_nodes, x, y, edge_index, edge_weight, edge_rv)
 if type(model) == GBPN and eval_C:
@@ -146,7 +149,7 @@ b_delta = [float((((log_b_.exp() - log_b.exp())**2).mean())**0.5) for log_b_ in 
 
 fig, ax1 = plt.subplots(figsize=(6.0, 4.5))
 ax1.set_xlabel('number of BP steps ($k$)', fontsize=16.5)
-ax1.set_ylabel(r'$\|p^{(k)} - p^{(\infty)}\|$', color='tab:blue', fontsize=16.5)
+ax1.set_ylabel(r'$\|p^{(k)} - p^{(20)}\|$', color='tab:blue', fontsize=16.5)
 ax1.semilogy(all_hops, b_delta, color='tab:blue', linestyle='dashed', label='residual')
 ax1.tick_params(axis='y', labelcolor='tab:blue')
 
