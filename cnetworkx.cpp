@@ -40,7 +40,7 @@ struct Exp3 {
     bool adahedge_;
 
     Exp3() : sum_max_loss_sq_{0}, lambda_{0},
-        C_{0}, optimistic_{false}, adahedge_{false},
+        C_{0}, optimistic_{true}, adahedge_{false},
         t_{1}, delta_{0}, max_theta_{0} { }
 
 

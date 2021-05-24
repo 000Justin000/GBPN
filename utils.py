@@ -378,13 +378,15 @@ class GBPN(nn.Module):
 
         info = {'log_b0': log_b0, 'log_msg_': None, 'edge_rv': edge_rv, 'msg_scaling': msg_scaling}
         log_b_ = log_b0
+
         for _ in range(K):
             log_b = self.bp_conv(log_b_, edge_index, edge_weight, info)
             log_b_ = log_b
+            #msgs += torch.norm(log_msg_[sampler.edge_rv,:], dim=-1)**2
 
 
         # info.log_msg_
-        return self.compute_log_probabilities(log_b0, log_b_, deg_ori if self.deg_scaling else deg)
+        return self.compute_log_probabilities(log_b0, log_b_, deg_ori if self.deg_scaling else deg), info['log_msg_']
 
     @torch.no_grad()
     def inference(self, sampler, max_batch_size, device, phi=None, K=5):
@@ -415,13 +417,14 @@ class GBPN(nn.Module):
             log_b_ = log_b
             log_msg_ = log_msg
 
-            #     # Should we aggregate messages?
-            #msgs += torch.norm(log_msg_[sampler.edge_rv,:], dim=-1)**2
+            # Should we aggregate messages?
+            msgs += torch.norm(log_msg_[sampler.edge_rv,:], dim=-1)**2
         
         # self.edge_scaling = torch.tensor(sampler.G.update_exps(msgs.sqrt().numpy())).to(device)
         # self.edge_scaling = self.edge_scaling[sampler.edge_rv]
 
-        msgs = torch.norm(log_msg_[sampler.edge_rv,:], dim=-1)**2
+        # final hop msgs
+        #msgs = torch.norm(log_msg_[sampler.edge_rv,:], dim=-1)**2
         sampler.G.update_exps(msgs.sqrt().numpy())
             
 
@@ -488,6 +491,7 @@ class SubtreeSampler:
         for batch_nodes in nodes.chunk(n_batch):
             batch_size = batch_nodes.shape[0]
             if num_hops == 1 and num_samples == -1:
+                # evaluation
                 T = nx.onehop_subgraph(self.G, batch_nodes.tolist())
             else:
                 T = nx.sample_subtree(self.G, batch_nodes.tolist(), num_hops, num_samples)

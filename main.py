@@ -264,8 +264,11 @@ def run(dataset, split, model_name, dim_hidden, num_layers, num_hops, num_sample
             optimizer.zero_grad()
 
             # TODO: Faster get_scaling
-            subgraph_log_b = model(subgraph_x, scaling, subgraph_edge_index, subgraph_edge_oid, edge_weight=subgraph_edge_weight, edge_rv=subgraph_edge_rv,
+            # Have model return log_msg
+            subgraph_log_b, log_msg = model(subgraph_x, scaling, subgraph_edge_index, subgraph_edge_oid, edge_weight=subgraph_edge_weight, edge_rv=subgraph_edge_rv,
                                    deg=degree(subgraph_edge_index[1], subgraph_size), deg_ori=deg[subgraph_nodes].to(device), phi=phi, K=num_hops)
+
+
             loss = F.nll_loss(subgraph_log_b[:batch_size][backpp_mask], batch_y[backpp_mask], weight=c_weight)
             loss.backward()
             optimizer.step()
@@ -309,9 +312,9 @@ def run(dataset, split, model_name, dim_hidden, num_layers, num_hops, num_sample
         train(num_hops=num_hops, num_samples=num_samples)
 
         #if epoch % max(int(num_epoches*0.05), 5) == 0:
-        if epoch % 3 == 0:
+        #if epoch % 3 == 0:
         #if epoch % max(int(num_epoches*0.05), 100) == 0:
-        #if True:
+        if True:
             train_accuracy, val_accuracy, test_accuracy, log_b = evaluation(num_hops=num_hops)
 
             # if epoch % max(int(num_epoches*0.05), 5) == 0:
