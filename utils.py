@@ -415,14 +415,13 @@ class GBPN(nn.Module):
             log_b_ = log_b
             log_msg_ = log_msg
 
-            # if msgs is None:
             #     # Should we aggregate messages?
-        #msgs += torch.norm(log_msg_[sampler.edge_rv,:], dim=-1)**2
+            #msgs += torch.norm(log_msg_[sampler.edge_rv,:], dim=-1)**2
         
-        #msgs = torch.norm(log_msg_[sampler.edge_rv,:], dim=-1)**2
-        # msgs = torch.norm(log_msg_[sampler.edge_rv,:], dim=-1)**2
         # self.edge_scaling = torch.tensor(sampler.G.update_exps(msgs.sqrt().numpy())).to(device)
         # self.edge_scaling = self.edge_scaling[sampler.edge_rv]
+
+        msgs = torch.norm(log_msg_[sampler.edge_rv,:], dim=-1)**2
         sampler.G.update_exps(msgs.sqrt().numpy())
             
 

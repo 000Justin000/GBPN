@@ -7,6 +7,7 @@
 #include <assert.h>
 #include <tuple>
 #include <cmath>
+#include <limits>
 using namespace std;
 
 #include <pybind11/pybind11.h>
@@ -26,36 +27,59 @@ struct Exp3 {
     vector<double> eta_;
     vector<double> sum_losses_;
     vector<double> last_loss_;
+    vector<double> theta_;
+    double lambda_;
+    double delta_;
     double sum_max_loss_sq_;
     double C_;
     int n_;
+    unsigned int t_;
+    bool optimistic_;
     double alpha_;
+    double max_theta_;
+    bool adahedge_;
+
+    Exp3() : sum_max_loss_sq_{0}, lambda_{0},
+        C_{0}, optimistic_{false}, adahedge_{false},
+        t_{1}, delta_{0}, max_theta_{0} { }
+
 
     void init(int n) {
         n_ = n;
-        alpha_ = sqrt(log(n)*1.19);
-        sum_max_loss_sq_ = 0;
-        C_ = 0.0;
+        alpha_ = log(n_ * 1.19);
 
         for (int i = 0; i < n; ++i) {
             probability_.push_back(1.0 / static_cast<double>(n));
             sum_losses_.push_back(0.0);
             last_loss_.push_back(0.0);
             eta_.push_back(1.0);
+            theta_.push_back(0.0);
         }
     }
+
 
     void update(vector<double> &loss) {
 
         double max_sq_loss = 0.0;
-        double max_loss = 0.0;
-        bool optimistic = false;
+        double max_exp_term = 0.0;
+        
+
+        vector<double> g_t = loss;
+        double g_t_prob_sum = 0;
+        double min_g = 0;
+        double inside_log = 0;
+
+        max_theta_ = 0;
+
+        for (int i = 0; i < n_; ++i) {
+            max_exp_term = max(max_exp_term, loss[i] / lambda_ + log(probability_[i] + 1.0e-9));
+        }
 
         // Update state based on loss
         for (int i = 0; i < n_; ++i) {
             sum_losses_[i] += loss[i];
 
-            if (optimistic) {
+            if (optimistic_) {
                 max_sq_loss = max(max_sq_loss, pow(loss[i] - last_loss_[i], 2));
             } else {
                 max_sq_loss = max(max_sq_loss, pow(loss[i], 2.0));
@@ -63,13 +87,37 @@ struct Exp3 {
 
             //cout << sum_losses_[i] << endl;
             C_ = max(C_, loss[i]);
+            // gradient = -loss
+            g_t[i] = (-loss[i]);
+            g_t_prob_sum += g_t[i]*probability_[i];
+            theta_[i] -= g_t[i];
+            max_theta_ = max(theta_[i], max_theta_);
+            min_g = min(min_g, g_t[i]);
+            inside_log += exp(-g_t[i] / lambda_ + log(probability_[i] + 1.0e-9) - max_exp_term);
+            // if (t_ > 1) {
+            //     cout << "Inside log " << inside_log << endl;
+            //     cout << "g_t[i] " << -g_t[i] << endl;
+            //     cout << "lambda_ " << lambda_ << endl;
+            // }
         }
 
+        if (t_ == 1) {
+            delta_ = g_t_prob_sum - min_g;
+        } else{
+            delta_ = lambda_ * (max_exp_term + log(inside_log)) + g_t_prob_sum;
+        }
+        // Account for error in Jensen's ineq.
+        delta_ = max(delta_, 1e-9);
+        // cout << "g_t_prob_sum " << g_t_prob_sum << endl;
+        // cout << "min_g " << min_g << endl;
+        // cout << "Delta " << delta_ << endl;
+
+        lambda_ += 1.0 / (log(n_)) *delta_;
         sum_max_loss_sq_ += max_sq_loss;
 
         // Compute etas
         for (int i = 0; i < n_; ++i) {
-            if (optimistic) {
+            if (optimistic_) {
                 eta_[i] = alpha_ / sqrt(C_ + sum_max_loss_sq_); // optimistic version 
            } else {
                 eta_[i] = alpha_ / sqrt(sum_max_loss_sq_); // non-optimistic version
@@ -80,20 +128,78 @@ struct Exp3 {
         probability_ = get_prob();
 
 
-        // Save last loss in case optimistic == true.
+        // Save last loss in case optimistic_ == true.
         for (int i = 0; i < n_; ++i) {
             last_loss_[i] = loss[i];
         }
 
+
+        t_++;
+
     }
+    // void update(vector<double> &loss) {
+
+    //     double max_sq_loss = 0.0;
+    //     double max_loss = 0.0;
+    //     bool optimistic = false;
+
+    //     // Update state based on loss
+    //     for (int i = 0; i < n_; ++i) {
+    //         sum_losses_[i] += loss[i];
+
+    //         if (optimistic) {
+    //             max_sq_loss = max(max_sq_loss, pow(loss[i] - last_loss_[i], 2));
+    //         } else {
+    //             max_sq_loss = max(max_sq_loss, pow(loss[i], 2.0));
+    //         }
+
+    //         //cout << sum_losses_[i] << endl;
+    //         C_ = max(C_, loss[i]);
+    //     }
+
+    //     sum_max_loss_sq_ += max_sq_loss;
+
+    //     // Compute etas
+    //     for (int i = 0; i < n_; ++i) {
+    //         if (optimistic) {
+    //             eta_[i] = alpha_ / sqrt(C_ + sum_max_loss_sq_); // optimistic version 
+    //        } else {
+    //             eta_[i] = alpha_ / sqrt(sum_max_loss_sq_); // non-optimistic version
+    //        }
+    //     }
+
+    //     // Update the probability
+    //     probability_ = get_prob();
+
+
+    //     // Save last loss in case optimistic == true.
+    //     for (int i = 0; i < n_; ++i) {
+    //         last_loss_[i] = loss[i];
+    //     }
+
+    // }
 
     vector<double> get_prob() 
-    {
+    {  
+        if (n_ == 1)
+            return probability_;
+
         vector<double> weights(n_, 0);
         double sum_w = 0.0;
 
         for (int i = 0; i < n_; ++i) {
-            double v = exp((sum_losses_[i] + last_loss_[i])* eta_[i]);
+            double v = 0;
+            if (adahedge_) {
+                v = exp(theta_[i] / lambda_ - max_theta_/lambda_);
+
+            } else {
+                if (optimistic_) {
+                    v = exp((sum_losses_[i] + last_loss_[i])* eta_[i]);
+                } else {
+                    v = exp(sum_losses_[i]* eta_[i]);
+                }
+            }
+            
             weights[i] = v;
             sum_w += v;
         }
@@ -250,7 +356,9 @@ struct Graph {
         //     mu_c_star[i] = mu_per_c[max_var_index];
         // }
 
-
+        // Divide the losses by a large number to avoid numerical imprecision and overflows
+        // (Doesn't affect guarantees since we're using scale-invariant algorithms)
+        const double loss_scaling = 1.0;
         // Iterate over all nodes.
         #pragma omp parallel for
         for (int i = 0; i < nbrs.size(); ++i) {
@@ -267,7 +375,7 @@ struct Graph {
                 double this_loss = (1.0 / pow(exp3s[i].probability_[j], 2.0)) * pow(log_msg[eid], 2.0);
                 //double this_loss = (1.0 / pow(exp3s[i].probability_[j], 2.0)) * pow(log_msg[eid][index[i]], 2.0);
                 //loss[j] = this_loss / pow(mu_c_star[i], 2);
-                loss[j] = this_loss;
+                loss[j] = this_loss / loss_scaling;
             }
             //cout << "Done with neighbor " << i << endl << endl;
 
