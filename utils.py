@@ -361,34 +361,19 @@ class GBPN(nn.Module):
             log_p = log_b * alpha.unsqueeze(-1)
         return log_normalize(log_p)
 
-    def forward(self, x, edge_index, subgraph_edge_oid, edge_weight, edge_rv, deg, deg_ori, phi=None, K=5):
+    def forward(self, x, edge_scaling, edge_index, subgraph_edge_oid, edge_weight, edge_rv, deg, deg_ori, phi=None, K=5):
     #def forward(self, x, edge_index, edge_weight, edge_rv, deg, deg_ori, phi=None, K=5):
         log_b0 = self.transform(x) if (phi is None) else log_normalize(self.transform(x) + phi)
         msg_scaling = get_scaling(deg_ori[edge_index[1]], deg[edge_index[1]]) if (self.deg_scaling and (deg is not None) and (deg_ori is not None)) else None
         
+        self.edge_scaling = edge_scaling
+
         if self.edge_scaling is not None and msg_scaling is not None:
-            # print("edge {}".format(self.edge_scaling.shape))
-            # print("deg {} ".format(deg.shape))
-            # print("edge idx shape {} ".format(edge_index.shape))
-            # Worked better with subscript 0 for some reason
-            #msg_scaling = msg_scaling[sampler.edge_rv]
 
-            # self.edge_scaling = (1.0 / p) / (num_samples)
-
-            msg_scaling = self.edge_scaling[subgraph_edge_oid] / deg[edge_index[1]]
-
-            # self.edge_scaling[edge_index[1]] == deg_ori[edge_index[1]]
-
-            #msg_scaling = deg_ori[edge_index[1]] / deg[edge_index[1]]
-
-            #print('Avg Msg scaling: {}'.format(msg_scaling.mean()))
-            # print('deg[edge_index[1]]]: {}'.format(deg[edge_index[1]]))
-
-            # print("max edge: {}".format(deg_ori.max()))
-            # print("max ours: {}".format(self.edge_scaling.max()))
-
-            # print("deg: {}".format(deg_ori[edge_index[1]]))
-            # print("ours: {}".format(self.edge_scaling[subgraph_edge_oid]))
+            denom = deg[edge_index[1]]
+            denom[denom < 1] = 1.0
+            #msg_scaling = edge_scaling[subgraph_edge_oid] / denom
+            msg_scaling = edge_scaling[subgraph_edge_oid] / denom
 
 
         info = {'log_b0': log_b0, 'log_msg_': None, 'edge_rv': edge_rv, 'msg_scaling': msg_scaling}
@@ -396,6 +381,7 @@ class GBPN(nn.Module):
         for _ in range(K):
             log_b = self.bp_conv(log_b_, edge_index, edge_weight, info)
             log_b_ = log_b
+
 
         # info.log_msg_
         return self.compute_log_probabilities(log_b0, log_b_, deg_ori if self.deg_scaling else deg)
@@ -413,10 +399,12 @@ class GBPN(nn.Module):
         # Dimensionality: num_edges x num_classes
         log_msg_ = torch.zeros(sampler.edge_index.shape[1], log_b0.shape[1], dtype=torch.float32)
         msgs = torch.zeros(sampler.edge_index.shape[1], dtype=torch.float32)
+        #msgs = None
         for _ in range(K):
             log_b = torch.zeros_like(log_b_)
             log_msg = torch.zeros_like(log_msg_)
             # TO ASK: New subtree neighbors sampled for each computation here?
+            # Is this a different tree in the evaluation?
             for batch_size, batch_nodes, _, _, _, \
                 subgraph_size, subgraph_nodes, _, _, _, \
                 subgraph_edge_index, subgraph_edge_weight, subgraph_edge_rv, subgraph_edge_oid in sampler.get_generator(max_batch_size=max_batch_size, num_hops=1):
@@ -427,12 +415,15 @@ class GBPN(nn.Module):
             log_b_ = log_b
             log_msg_ = log_msg
 
-            # Should we aggregate messages?
-            # msgs += log_msg?
+            # if msgs is None:
+            #     # Should we aggregate messages?
+        #msgs += torch.norm(log_msg_[sampler.edge_rv,:], dim=-1)**2
         
-        msgs = torch.norm(log_msg_[sampler.edge_rv,:], dim=-1)**2
-        self.edge_scaling = torch.tensor(sampler.G.update_exps(msgs.sqrt().numpy())).to(device)
-        self.edge_scaling = self.edge_scaling[sampler.edge_rv]
+        #msgs = torch.norm(log_msg_[sampler.edge_rv,:], dim=-1)**2
+        # msgs = torch.norm(log_msg_[sampler.edge_rv,:], dim=-1)**2
+        # self.edge_scaling = torch.tensor(sampler.G.update_exps(msgs.sqrt().numpy())).to(device)
+        # self.edge_scaling = self.edge_scaling[sampler.edge_rv]
+        sampler.G.update_exps(msgs.sqrt().numpy())
             
 
         return self.compute_log_probabilities(log_b0, log_b_, sampler.deg)
@@ -483,6 +474,7 @@ class SubtreeSampler:
         self.G.add_edges_from(torch.cat((edge_index, torch.arange(edge_index.shape[1]).reshape(1,-1)), dim=0).transpose(0,1).numpy())
         print("Done adding edges")
         self.deg = degree(edge_index[1], num_nodes)
+        self.scaling = np.ones(edge_rv.shape[0])
 
     def get_generator(self, mask=None, shuffle=False, max_batch_size=-1, num_hops=0, num_samples=-1, device='cpu'):
 
@@ -493,6 +485,7 @@ class SubtreeSampler:
             max_batch_size = self.num_nodes
         n_batch = math.ceil(nodes.shape[0] / max_batch_size)
 
+
         for batch_nodes in nodes.chunk(n_batch):
             batch_size = batch_nodes.shape[0]
             if num_hops == 1 and num_samples == -1:
@@ -500,6 +493,8 @@ class SubtreeSampler:
             else:
                 T = nx.sample_subtree(self.G, batch_nodes.tolist(), num_hops, num_samples)
                 assert len(T.get_nodes()) == len(T.get_edges())//2 + batch_size
+
+
             subgraph_nodes = torch.tensor(T.get_nodes(), dtype=torch.int64)
             subgraph_size = subgraph_nodes.shape[0]
             T_edges = torch.tensor(T.get_edges(), dtype=torch.int64)

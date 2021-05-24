@@ -25,7 +25,9 @@ struct Exp3 {
     vector<double> probability_;
     vector<double> eta_;
     vector<double> sum_losses_;
+    vector<double> last_loss_;
     double sum_max_loss_sq_;
+    double C_;
     int n_;
     double alpha_;
 
@@ -33,10 +35,12 @@ struct Exp3 {
         n_ = n;
         alpha_ = sqrt(log(n)*1.19);
         sum_max_loss_sq_ = 0;
+        C_ = 0.0;
 
         for (int i = 0; i < n; ++i) {
             probability_.push_back(1.0 / static_cast<double>(n));
             sum_losses_.push_back(0.0);
+            last_loss_.push_back(0.0);
             eta_.push_back(1.0);
         }
     }
@@ -44,47 +48,60 @@ struct Exp3 {
     void update(vector<double> &loss) {
 
         double max_sq_loss = 0.0;
+        double max_loss = 0.0;
+        bool optimistic = false;
+
         // Update state based on loss
         for (int i = 0; i < n_; ++i) {
             sum_losses_[i] += loss[i];
-            max_sq_loss = max(max_sq_loss, pow(loss[i], 2.0));
-            //cout << sum_losses_[i] << endl;
-        }
-        sum_max_loss_sq_ += max_sq_loss;
 
+            if (optimistic) {
+                max_sq_loss = max(max_sq_loss, pow(loss[i] - last_loss_[i], 2));
+            } else {
+                max_sq_loss = max(max_sq_loss, pow(loss[i], 2.0));
+            }
+
+            //cout << sum_losses_[i] << endl;
+            C_ = max(C_, loss[i]);
+        }
+
+        sum_max_loss_sq_ += max_sq_loss;
 
         // Compute etas
         for (int i = 0; i < n_; ++i) {
-            eta_[i] = alpha_ / sqrt(sum_max_loss_sq_);
+            if (optimistic) {
+                eta_[i] = alpha_ / sqrt(C_ + sum_max_loss_sq_); // optimistic version 
+           } else {
+                eta_[i] = alpha_ / sqrt(sum_max_loss_sq_); // non-optimistic version
+           }
         }
 
+        // Update the probability
         probability_ = get_prob();
+
+
+        // Save last loss in case optimistic == true.
+        for (int i = 0; i < n_; ++i) {
+            last_loss_[i] = loss[i];
+        }
+
     }
 
     vector<double> get_prob() 
     {
-        vector<double> weights;
+        vector<double> weights(n_, 0);
         double sum_w = 0.0;
 
-        double max_loss = 0.0;
-
         for (int i = 0; i < n_; ++i) {
-            auto v = sum_losses_[i] * eta_[i];
-            if (v >= max_loss) {
-                max_loss = v;
-            }
-        }
-
-        for (int i = 0; i < n_; ++i) {
-            double v = exp(sum_losses_[i] * eta_[i]);
-            weights.push_back(v);
+            double v = exp((sum_losses_[i] + last_loss_[i])* eta_[i]);
+            weights[i] = v;
             sum_w += v;
         }
 
         auto probability = weights;
 
         for (int i = 0; i < n_; ++i) {
-            probability[i] /= (sum_w);
+            probability[i] /= sum_w;
         }
 
 
@@ -100,6 +117,7 @@ struct Exp3 {
 
 struct Graph {
     vector<int> nodes;
+    vector<double> scaling_;
     // nbrs[i]: neighbors of ith node
     // (nodeIdx, edgeIdx) tuple
     // vector<vector<tuple<int,int>>> nbrs;
@@ -107,6 +125,7 @@ struct Graph {
     vector<vector<tuple<int,int,double>>> nbrs;
     // One Exp3 instance per node.
     vector<Exp3> exp3s;
+    vector<double> need_scaling_update_;
 
 
     Graph(int num_nodes=0) {
@@ -120,6 +139,10 @@ struct Graph {
             add_node(u);
     }
 
+    const vector<double> get_scaling() {
+        return scaling_;
+    }
+
     void add_node(int u) {
         nodes.push_back(u);
         nbrs.push_back(vector<tuple<int,int,double>>());
@@ -130,8 +153,11 @@ struct Graph {
     }
 
     void add_edges_from(const vector<tuple<int,int,int>> &edges) {
-        for (auto edge: edges)
+        for (auto edge: edges) {
             add_edge(get<0>(edge), get<1>(edge), get<2>(edge));
+            scaling_.push_back(1);
+            need_scaling_update_.push_back(true);
+        }
         sort_nbrs();
 
         // Initialize EXP3 instances (one for each node)
@@ -142,6 +168,27 @@ struct Graph {
             this_exp3.init(num_neighbors);
             exp3s.push_back(this_exp3);
         }
+
+        update_scaling();
+    }
+
+
+    void update_scaling() {
+        vector<double> scaling(scaling_.size(), 0.0);
+
+        // Now compute the scaling
+        #pragma omp parallel for
+        for (int i = 0; i < nbrs.size(); ++i) {
+            for (int j = 0; j < nbrs[i].size(); ++j) {
+                auto eid = get<1>(nbrs[i][j]);
+                scaling[eid] = 1.0 / (exp3s[i].probability_[j]); // 1.0 / p_{ij}
+            }
+        }
+
+        // cout << "z: " << z << endl;
+        // cout << "log msg size: " << log_msg.size() << endl;
+
+        scaling_ = scaling;
     }
 
     int number_of_nodes(void) {
@@ -166,12 +213,8 @@ struct Graph {
     }
 
 
-    double compute_variance(vector<double> &log_msg_c) {
-
-    }
-
-    vector<double> update_exps(vector<double> &log_msg) {
-    //vector<double> update_exps(vector<vector<double>> &log_msg) {
+    //vector<double> update_exps(vector<double> &log_msg) {
+    void update_exps(vector<double> &log_msg) {
 
         // TODO: try loss as max_{c in classes} Var_c
         // and use subgradient.
@@ -230,25 +273,12 @@ struct Graph {
 
             // Update the exp3 for node i
             exp3s[i].update(loss);
+            need_scaling_update_[i] = true;
 
         }
 
-        // All exp3s are updated.
-        vector<double> scaling(log_msg.size(), 0.0);
-
-        // Now compute the scaling
-        #pragma omp parallel for
-        for (int i = 0; i < nbrs.size(); ++i) {
-            for (int j = 0; j < nbrs[i].size(); ++j) {
-                auto eid = get<1>(nbrs[i][j]);
-                scaling[eid] = 1.0 / (exp3s[i].probability_[j]); // 1.0 / p_{ij}
-            }
-        }
-
-        // cout << "z: " << z << endl;
-        // cout << "log msg size: " << log_msg.size() << endl;
-
-        return scaling;
+        // All exp3s are updated, so update the scaling. (1 / p_i)
+        update_scaling();
     }
 };
 
@@ -306,20 +336,27 @@ void subtree_dfs(Graph& G, Graph& T, int r, int rid, int max_d, int num_samples)
                 vector<bool> is_sampled(prob.size(), false);
                 // Pick num_samples weighted samples
 
-                for (int i = 0; i < num_samples; i++) {
-                    auto index = dist(gen);
-                    selected_nbr.push_back(nbr[index]);
-                }    
-
-                // while (selected_nbr.size() < num_samples)
-                // {
+                // for (int i = 0; i < num_samples; i++) {
                 //     auto index = dist(gen);
-                //     if (is_sampled[index] != true)
-                //         selected_nbr.push_back(nbr[index]);
-
-                //     is_sampled[index] = true;
-
+                //     selected_nbr.push_back(nbr[index]);
                 // }    
+
+                while (selected_nbr.size() < num_samples)
+                {
+                    auto index = dist(gen);
+                    if (is_sampled[index] != true)
+                        selected_nbr.push_back(nbr[index]);
+
+                    is_sampled[index] = true;
+                }
+
+                // if (G.need_scaling_update_[u] == true) {
+                //     for (int k = 0; k < G.nbrs[u].size(); ++k) {
+                //         auto eid = get<1>(G.nbrs[u][k]);
+                //         G.scaling_[eid] = 1.0 / (prob[k]); // 1.0 / p_{ij}
+                //     }    
+                //     G.need_scaling_update_[u] = false;
+                // }
             }
             
 
@@ -449,6 +486,7 @@ PYBIND11_MODULE(cnetworkx, m) {
         .def("number_of_nodes", &Graph::number_of_nodes)
         .def("get_nodes", &Graph::get_nodes)
         .def("get_edges", &Graph::get_edges)
+        .def("get_scaling", &Graph::get_scaling, py::return_value_policy::reference)
         .def("update_exps", &Graph::update_exps);
     
     m.def("sample_subtree",  &sample_subtree);
