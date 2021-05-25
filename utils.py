@@ -425,7 +425,10 @@ class GBPN(nn.Module):
 
         # final hop msgs
         #msgs = torch.norm(log_msg_[sampler.edge_rv,:], dim=-1)**2
-        sampler.G.update_exps(msgs.sqrt().numpy())
+
+        if hasattr(sampler, 'imp_sampling') and sampler.imp_sampling:
+            print('Importance sampling!')
+            sampler.G.update_exps(msgs.sqrt().numpy())
             
 
         return self.compute_log_probabilities(log_b0, log_b_, sampler.deg)
@@ -433,7 +436,7 @@ class GBPN(nn.Module):
 
 class FullgraphSampler:
 
-    def __init__(self, num_nodes, x, y, edge_index, edge_weight, edge_rv):
+    def __init__(self, num_nodes, x, y, edge_index, edge_weight, edge_rv, imp_sampling=False):
         self.device = edge_index.device
         self.num_nodes = num_nodes
         self.x = x
@@ -442,6 +445,7 @@ class FullgraphSampler:
         self.edge_weight = edge_weight
         self.edge_rv = edge_rv
         self.deg = degree(edge_index[1], num_nodes)
+        self.imp_sampling = imp_sampling # where to use importance sampling (true) or uniform (false)
 
     def get_generator(self, mask=None, device='cpu', **kwargs):
 
@@ -463,7 +467,7 @@ class FullgraphSampler:
 
 class SubtreeSampler:
 
-    def __init__(self, num_nodes, x, y, edge_index, edge_weight, edge_rv):
+    def __init__(self, num_nodes, x, y, edge_index, edge_weight, edge_rv, imp_sampling=False):
         self.device = edge_index.device
         self.num_nodes = num_nodes
         self.x = x
@@ -477,6 +481,7 @@ class SubtreeSampler:
         print("Done adding edges")
         self.deg = degree(edge_index[1], num_nodes)
         self.scaling = np.ones(edge_rv.shape[0])
+        self.imp_sampling = imp_sampling # where to use importance sampling (true) or uniform (false)
 
     def get_generator(self, mask=None, shuffle=False, max_batch_size=-1, num_hops=0, num_samples=-1, device='cpu'):
 
@@ -494,7 +499,7 @@ class SubtreeSampler:
                 # evaluation
                 T = nx.onehop_subgraph(self.G, batch_nodes.tolist())
             else:
-                T = nx.sample_subtree(self.G, batch_nodes.tolist(), num_hops, num_samples)
+                T = nx.sample_subtree(self.G, batch_nodes.tolist(), num_hops, num_samples, self.imp_sampling)
                 assert len(T.get_nodes()) == len(T.get_edges())//2 + batch_size
 
 

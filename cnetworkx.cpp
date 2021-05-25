@@ -40,7 +40,7 @@ struct Exp3 {
     bool adahedge_;
 
     Exp3() : sum_max_loss_sq_{0}, lambda_{0},
-        C_{0}, optimistic_{true}, adahedge_{false},
+        C_{0}, optimistic_{false}, adahedge_{false},
         t_{1}, delta_{0}, max_theta_{0} { }
 
 
@@ -137,47 +137,6 @@ struct Exp3 {
         t_++;
 
     }
-    // void update(vector<double> &loss) {
-
-    //     double max_sq_loss = 0.0;
-    //     double max_loss = 0.0;
-    //     bool optimistic = false;
-
-    //     // Update state based on loss
-    //     for (int i = 0; i < n_; ++i) {
-    //         sum_losses_[i] += loss[i];
-
-    //         if (optimistic) {
-    //             max_sq_loss = max(max_sq_loss, pow(loss[i] - last_loss_[i], 2));
-    //         } else {
-    //             max_sq_loss = max(max_sq_loss, pow(loss[i], 2.0));
-    //         }
-
-    //         //cout << sum_losses_[i] << endl;
-    //         C_ = max(C_, loss[i]);
-    //     }
-
-    //     sum_max_loss_sq_ += max_sq_loss;
-
-    //     // Compute etas
-    //     for (int i = 0; i < n_; ++i) {
-    //         if (optimistic) {
-    //             eta_[i] = alpha_ / sqrt(C_ + sum_max_loss_sq_); // optimistic version 
-    //        } else {
-    //             eta_[i] = alpha_ / sqrt(sum_max_loss_sq_); // non-optimistic version
-    //        }
-    //     }
-
-    //     // Update the probability
-    //     probability_ = get_prob();
-
-
-    //     // Save last loss in case optimistic == true.
-    //     for (int i = 0; i < n_; ++i) {
-    //         last_loss_[i] = loss[i];
-    //     }
-
-    // }
 
     vector<double> get_prob() 
     {  
@@ -389,8 +348,9 @@ struct Graph {
         update_scaling();
     }
 };
-
-void subtree_dfs(Graph& G, Graph& T, int r, int rid, int max_d, int num_samples) {
+    
+// imp_sampling denotes whether to use importance sampling (true) or uniform (false)
+void subtree_dfs(Graph& G, Graph& T, int r, int rid, int max_d, int num_samples, bool imp_sampling) {
     /* G: the original graph
        T: the sampled subtree
        r: root node id in the original graph G
@@ -420,7 +380,6 @@ void subtree_dfs(Graph& G, Graph& T, int r, int rid, int max_d, int num_samples)
                 nbr.push_back(arc);
 //              cout << get<0>(arc); << " ";
             }
-      // cout << "Num neighbors " << nbr.size() << endl;
 
         vector<tuple<int,int,double>> selected_nbr;
         if ((num_samples < 0) || (nbr.size() <= num_samples))
@@ -428,8 +387,7 @@ void subtree_dfs(Graph& G, Graph& T, int r, int rid, int max_d, int num_samples)
         else 
         {
 
-            bool UNIFORM = false;
-            if (UNIFORM)
+            if (!imp_sampling)
                 // TODO: This is not without replacement so the reweighting is actually wrong. Double check this, maybe correct.
                 sample(nbr.begin(), nbr.end(), back_inserter(selected_nbr), num_samples, mt19937{random_device{}()});
             else {
@@ -457,19 +415,7 @@ void subtree_dfs(Graph& G, Graph& T, int r, int rid, int max_d, int num_samples)
 
                     is_sampled[index] = true;
                 }
-
-                // if (G.need_scaling_update_[u] == true) {
-                //     for (int k = 0; k < G.nbrs[u].size(); ++k) {
-                //         auto eid = get<1>(G.nbrs[u][k]);
-                //         G.scaling_[eid] = 1.0 / (prob[k]); // 1.0 / p_{ij}
-                //     }    
-                //     G.need_scaling_update_[u] = false;
-                // }
             }
-            
-
-            // Update the weights of each sampled edge.
-            
         }
 
 
@@ -486,14 +432,12 @@ void subtree_dfs(Graph& G, Graph& T, int r, int rid, int max_d, int num_samples)
             T.add_edge(vid, uid, vuid);
             if (max_d > d+1)
                 stack.push_back(make_tuple(v, vid, d+1, u));
-//          cout << "(" << u << ", " << v << ", " << uid << ", " << vid << ")  ";
+
         }
-//      cout << endl;
-        // cout << "Done with function" << endl;
     }
 }
 
-Graph sample_subtree(Graph& G, vector<int> batch_nodes, int max_d, int num_samples) {
+Graph sample_subtree(Graph& G, vector<int> batch_nodes, int max_d, int num_samples, bool imp_sampling) {
     unsigned batch_size = batch_nodes.size();
 
     vector<Graph> TList;
@@ -504,17 +448,11 @@ Graph sample_subtree(Graph& G, vector<int> batch_nodes, int max_d, int num_sampl
         TList.push_back(T);
     }
 
-    // TODO: UNCOMMENT THIS FOR EXPERIMENTS
-    // TODO: UNCOMMENT THIS FOR EXPERIMENTS
-    // TODO: UNCOMMENT THIS FOR EXPERIMENTS
+
     #pragma omp parallel for
     for (unsigned rid=0; rid<batch_size; rid++)
     {
-
-        subtree_dfs(G, TList[rid], batch_nodes[rid], 0, max_d, num_samples);
-        // if (((rid + 1) % 100) == 0) {
-        //     cout << "Done with " << (rid + 1) << "/" << batch_size << endl;
-        // }
+        subtree_dfs(G, TList[rid], batch_nodes[rid], 0, max_d, num_samples, imp_sampling);
     }
 
     vector<vector<int>> l2g;

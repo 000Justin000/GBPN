@@ -58,7 +58,7 @@ def optimal_f1_score(log_b, y, optimal_threshold=None):
         return f1_score(y, y_preds)
 
 
-def run(dataset, split, model_name, dim_hidden, num_layers, num_hops, num_samples, dropout_p, device, learning_rate, num_epoches, initskip_BP, lossfunc_BP, weighted_BP, deg_scaling, learn_H, eval_C, verbose):
+def run(dataset, split, model_name, dim_hidden, num_layers, num_hops, num_samples, dropout_p, device, learning_rate, num_epoches, initskip_BP, lossfunc_BP, weighted_BP, deg_scaling, learn_H, eval_C, verbose, imp_sampling):
     if dataset == 'Cora':
         data = load_citation('Cora', split=split)
         c_weight = None
@@ -143,12 +143,14 @@ def run(dataset, split, model_name, dim_hidden, num_layers, num_hops, num_sample
     if (model_name == 'GBPN') and weighted_BP:
         edge_weight = ((deg[edge_index[0]] * deg[edge_index[1]])**-0.5 * deg.mean())
 
+
+    # TODO: Imp sampling for all of them
     if dataset in ['Cora', 'CiteSeer', 'PubMed', 'Coauthor_CS', 'Coauthor_Physics', 'County_Facebook', 'Sex', 'Animal2', 'Animal3', 'Squirrel', 'Chameleon', 'Ising+', 'Ising-', 'MRF+', 'MRF-']:
         graph_sampler = FullgraphSampler(num_nodes, x, y, edge_index, edge_weight, edge_rv)
         max_batch_size = -1
     elif dataset in ['OGBN_arXiv', 'OGBN_Products', 'JPMC_Payment0', 'JPMC_Payment1', 'Elliptic_Bitcoin']:
         if model_name in ['LP', 'MLP', 'SAGE', 'GAT', 'GBPN']:
-            graph_sampler = SubtreeSampler(num_nodes, x, y, edge_index, edge_weight, edge_rv)
+            graph_sampler = SubtreeSampler(num_nodes, x, y, edge_index, edge_weight, edge_rv, imp_sampling)
         else:
             graph_sampler = ClusterSampler(num_nodes, x, y, edge_index, edge_weight, edge_rv, train_mask, val_mask, test_mask)
         max_batch_size = min(math.ceil(train_mask.sum()/10.0), 512)
@@ -312,9 +314,9 @@ def run(dataset, split, model_name, dim_hidden, num_layers, num_hops, num_sample
         train(num_hops=num_hops, num_samples=num_samples)
 
         #if epoch % max(int(num_epoches*0.05), 5) == 0:
-        #if epoch % 3 == 0:
+        if epoch % 3 == 0:
         #if epoch % max(int(num_epoches*0.05), 100) == 0:
-        if True:
+        # if True:
             train_accuracy, val_accuracy, test_accuracy, log_b = evaluation(num_hops=num_hops)
 
             # if epoch % max(int(num_epoches*0.05), 5) == 0:
@@ -385,8 +387,8 @@ parser.add_argument('--learn_H', action='store_true')
 parser.add_argument('--eval_C', action='store_true')
 parser.add_argument('--verbose', action='store_true')
 parser.add_argument('--develop', action='store_true')
-parser.add_argument('--sampling', action='store_true')
-parser.set_defaults(weighted_BP=False, deg_scaling=False, learn_H=False, eval_C=False, verbose=False, develop=False)
+parser.add_argument('--imp_sampling', action='store_true')
+parser.set_defaults(weighted_BP=False, deg_scaling=False, learn_H=False, eval_C=False, verbose=False, develop=False, imp_sampling=False)
 args = parser.parse_args()
 
 outpath = create_outpath(args.dataset, args.model_name)
@@ -405,7 +407,8 @@ test_cfd_ord = []
 test_crs_ord = []
 optimal_H = []
 for _ in range(args.num_trials):
-    opt_test, opt_deg_avg, opt_nll_avg, opt_cfd_avg, opt_crs_avg, opt_cfd_ord, opt_crs_ord, opt_H = run(args.dataset, args.split, args.model_name, args.dim_hidden, args.num_layers, args.num_hops, args.num_samples, args.dropout_p, args.device, args.learning_rate, args.num_epoches, args.initskip_BP, args.lossfunc_BP, args.weighted_BP, args.deg_scaling, args.learn_H, args.eval_C, args.verbose)
+    opt_test, opt_deg_avg, opt_nll_avg, opt_cfd_avg, opt_crs_avg, opt_cfd_ord, opt_crs_ord, opt_H = \
+            run(args.dataset, args.split, args.model_name, args.dim_hidden, args.num_layers, args.num_hops, args.num_samples, args.dropout_p, args.device, args.learning_rate, args.num_epoches, args.initskip_BP, args.lossfunc_BP, args.weighted_BP, args.deg_scaling, args.learn_H, args.eval_C, args.verbose, args.imp_sampling)
     test_acc.append(opt_test)
     test_deg_avg.append(opt_deg_avg)
     test_nll_avg.append(opt_nll_avg)
