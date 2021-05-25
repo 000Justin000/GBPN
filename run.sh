@@ -28,7 +28,7 @@
 # *************************************************************
 num_trials=10
 num_epochs=50
-uniform=false
+uniform=true
 ours=true
 
 if [ "$uniform" = true ] ; then
