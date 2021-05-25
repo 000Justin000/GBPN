@@ -4,6 +4,7 @@ import subprocess
 import argparse
 import random
 import numpy as np
+import pickle
 import scipy
 import torch
 import torch.nn as nn
@@ -215,6 +216,9 @@ for i in range(6):
     fig.tight_layout()
     plt.savefig('gbpn_predictions{:d}.svg'.format(i), bbox_inches='tight', pad_inches=0)
 plt.show()
+
+plot_data = { "graph": G, "correct_step": correct_step, "X": x, "y": y }
+pickle.dump( plot_data, open( "plot_data.pkl", "wb" ) )
 
 print('finished')
 
