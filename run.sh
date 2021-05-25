@@ -22,31 +22,31 @@
 
 #python main.py --dataset OGBN_arXiv    --model_name GBPN --dim_hidden 256 --num_layers 2 --num_hops 1 --num_samples  5 --dropout_p 0.1 --learning_rate 1.0e-3 --num_epoches 100 --num_trials  1 --device cuda:0 --learn_H --verbose --develop 
 
-#python main.py --dataset OGBN_arXiv  --model_name GBPN --dim_hidden 256 --num_layers 2 --num_hops 1 --num_samples  5 --dropout_p 0.1 --device cuda --learning_rate 1.0e-3 --num_epoches 30 --num_trials  3 --initskip_BP 0.00 --lossfunc_BP 5 --deg_scaling --learn_H --verbose --develop
+
+# *************************************************************
+# Configuration for uniform vs importance sampling experiments.
+# *************************************************************
+num_trials=10
+num_epochs=50
+uniform=false
+ours=true
+
+if [ "$uniform" = true ] ; then
+	# Uniform sampling
+	python main.py --dataset OGBN_arXiv --model_name GBPN --dim_hidden 256 --num_layers 2 --num_hops 1 --num_samples   1 --dropout_p 0.1 --device cuda --learning_rate 1.0e-3 --num_epoches $num_epochs --num_trials  $num_trials --initskip_BP 0.00 --lossfunc_BP 0 --learn_H --verbose
+	python main.py --dataset OGBN_arXiv --model_name GBPN --dim_hidden 256 --num_layers 2 --num_hops 1 --num_samples   3 --dropout_p 0.1 --device cuda --learning_rate 1.0e-3 --num_epoches $num_epochs --num_trials  $num_trials --initskip_BP 0.00 --lossfunc_BP 0 --learn_H --verbose 
+	python main.py --dataset OGBN_arXiv --model_name GBPN --dim_hidden 256 --num_layers 2 --num_hops 1 --num_samples   5 --dropout_p 0.1 --device cuda --learning_rate 1.0e-3 --num_epoches $num_epochs --num_trials  $num_trials --initskip_BP 0.00 --lossfunc_BP 0 --learn_H --verbose
+	python main.py --dataset OGBN_arXiv --model_name GBPN --dim_hidden 256 --num_layers 2 --num_hops 1 --num_samples  10 --dropout_p 0.1 --device cuda --learning_rate 1.0e-3 --num_epoches $num_epochs --num_trials  $num_trials --initskip_BP 0.00 --lossfunc_BP 0 --learn_H --verbose
+fi
 
 
-#python main.py --dataset OGBN_arXiv  --model_name GBPN --dim_hidden 256 --num_layers 2 --num_hops 1 --num_samples  5 --dropout_p 0.1 --device cuda --learning_rate 1.0e-3 --num_epoches 30 --num_trials  3 --initskip_BP 0.00 --lossfunc_BP 5 --deg_scaling --learn_H --verbose --develop
-
-
-# # Inductive
-#python main.py --dataset OGBN_arXiv --model_name GBPN --dim_hidden 256 --num_layers 2 --num_hops 1 --num_samples   5 --dropout_p 0.1 --device cuda --learning_rate 1.0e-3 --num_epoches 100 --num_trials  10 --initskip_BP 0.00 --lossfunc_BP 5 --deg_scaling --learn_H --verbose --develop
-
-
-# # Transductive
-# python main.py --dataset OGBN_arXiv --model_name GBPN --dim_hidden 256 --num_layers 2 --num_hops 1 --num_samples   5 --dropout_p 0.1 --device cuda --learning_rate 1.0e-3 --num_epoches 100 --num_trials  10 --initskip_BP 0.00 --lossfunc_BP 5 --deg_scaling --learn_H --eval_C --verbose #--develop
-
-
-# Uniform sampling
-python main.py --dataset OGBN_arXiv --model_name GBPN --dim_hidden 256 --num_layers 2 --num_hops 1 --num_samples   1 --dropout_p 0.1 --device cuda --learning_rate 1.0e-3 --num_epoches 100 --num_trials  5 --initskip_BP 0.00 --lossfunc_BP 0 --learn_H --verbose
-python main.py --dataset OGBN_arXiv --model_name GBPN --dim_hidden 256 --num_layers 2 --num_hops 1 --num_samples   3 --dropout_p 0.1 --device cuda --learning_rate 1.0e-3 --num_epoches 100 --num_trials  5 --initskip_BP 0.00 --lossfunc_BP 0 --learn_H --verbose 
-python main.py --dataset OGBN_arXiv --model_name GBPN --dim_hidden 256 --num_layers 2 --num_hops 1 --num_samples   5 --dropout_p 0.1 --device cuda --learning_rate 1.0e-3 --num_epoches 100 --num_trials  5 --initskip_BP 0.00 --lossfunc_BP 0 --learn_H --verbose
-python main.py --dataset OGBN_arXiv --model_name GBPN --dim_hidden 256 --num_layers 2 --num_hops 1 --num_samples  10 --dropout_p 0.1 --device cuda --learning_rate 1.0e-3 --num_epoches 100 --num_trials  5 --initskip_BP 0.00 --lossfunc_BP 0 --learn_H --verbose
-
-# Importance sampling
-python main.py --dataset OGBN_arXiv --model_name GBPN --dim_hidden 256 --num_layers 2 --num_hops 1 --num_samples   1 --dropout_p 0.1 --device cuda --learning_rate 1.0e-3 --num_epoches 100 --num_trials  5 --initskip_BP 0.00 --lossfunc_BP 0 --learn_H --verbose --imp_sampling
-python main.py --dataset OGBN_arXiv --model_name GBPN --dim_hidden 256 --num_layers 2 --num_hops 1 --num_samples   3 --dropout_p 0.1 --device cuda --learning_rate 1.0e-3 --num_epoches 100 --num_trials  5 --initskip_BP 0.00 --lossfunc_BP 0 --learn_H --verbose --imp_sampling
-python main.py --dataset OGBN_arXiv --model_name GBPN --dim_hidden 256 --num_layers 2 --num_hops 1 --num_samples   5 --dropout_p 0.1 --device cuda --learning_rate 1.0e-3 --num_epoches 100 --num_trials  5 --initskip_BP 0.00 --lossfunc_BP 0 --learn_H --verbose --imp_sampling
-python main.py --dataset OGBN_arXiv --model_name GBPN --dim_hidden 256 --num_layers 2 --num_hops 1 --num_samples  10 --dropout_p 0.1 --device cuda --learning_rate 1.0e-3 --num_epoches 100 --num_trials  5 --initskip_BP 0.00 --lossfunc_BP 0 --learn_H --verbose --imp_sampling
+if [ "$ours" = true ] ; then
+	# Importance sampling
+	python main.py --dataset OGBN_arXiv --model_name GBPN --dim_hidden 256 --num_layers 2 --num_hops 1 --num_samples   1 --dropout_p 0.1 --device cuda --learning_rate 1.0e-3 --num_epoches $num_epochs --num_trials  $num_trials --initskip_BP 0.00 --lossfunc_BP 0 --learn_H --verbose --imp_sampling
+	python main.py --dataset OGBN_arXiv --model_name GBPN --dim_hidden 256 --num_layers 2 --num_hops 1 --num_samples   3 --dropout_p 0.1 --device cuda --learning_rate 1.0e-3 --num_epoches $num_epochs --num_trials  $num_trials --initskip_BP 0.00 --lossfunc_BP 0 --learn_H --verbose --imp_sampling
+	python main.py --dataset OGBN_arXiv --model_name GBPN --dim_hidden 256 --num_layers 2 --num_hops 1 --num_samples   5 --dropout_p 0.1 --device cuda --learning_rate 1.0e-3 --num_epoches $num_epochs --num_trials  $num_trials --initskip_BP 0.00 --lossfunc_BP 0 --learn_H --verbose --imp_sampling
+	python main.py --dataset OGBN_arXiv --model_name GBPN --dim_hidden 256 --num_layers 2 --num_hops 1 --num_samples  10 --dropout_p 0.1 --device cuda --learning_rate 1.0e-3 --num_epoches $num_epochs --num_trials  $num_trials --initskip_BP 0.00 --lossfunc_BP 0 --learn_H --verbose --imp_sampling
+fi
 
 
 

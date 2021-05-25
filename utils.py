@@ -427,7 +427,6 @@ class GBPN(nn.Module):
         #msgs = torch.norm(log_msg_[sampler.edge_rv,:], dim=-1)**2
 
         if hasattr(sampler, 'imp_sampling') and sampler.imp_sampling:
-            print('Importance sampling!')
             sampler.G.update_exps(msgs.sqrt().numpy())
             
 

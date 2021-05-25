@@ -314,9 +314,9 @@ def run(dataset, split, model_name, dim_hidden, num_layers, num_hops, num_sample
         train(num_hops=num_hops, num_samples=num_samples)
 
         #if epoch % max(int(num_epoches*0.05), 5) == 0:
-        if epoch % 3 == 0:
+        #if epoch % 3 == 0:
         #if epoch % max(int(num_epoches*0.05), 100) == 0:
-        # if True:
+        if True:
             train_accuracy, val_accuracy, test_accuracy, log_b = evaluation(num_hops=num_hops)
 
             # if epoch % max(int(num_epoches*0.05), 5) == 0:
