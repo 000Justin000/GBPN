@@ -431,3 +431,4 @@ list_avg = lambda ll: list(map(lambda l: sum(l)/len(l), zip(*ll)))
 # if args.model_name == 'GBPN':
 #     print(sum(optimal_H)/len(optimal_H))
 print('overall test accuracies: {:7.3f} ± {:7.3f}'.format(np.mean(test_acc)*100, np.std(test_acc)*100))
+print(sys.argv)
