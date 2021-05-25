@@ -428,7 +428,12 @@ class GBPN(nn.Module):
 
         if hasattr(sampler, 'imp_sampling') and sampler.imp_sampling:
             sampler.G.update_exps(msgs.sqrt().numpy())
-            
+        
+        var_ratios = np.array(sampler.G.get_var_ratios())
+
+        print("Var ratios: mean {:.3f} ± {:.3f}, median: {:.3f}, range: [{:.3f}, {:.3f}]".format(var_ratios.mean(), var_ratios.std(), np.median(var_ratios), var_ratios.min(),
+            var_ratios.max()))
+
 
         return self.compute_log_probabilities(log_b0, log_b_, sampler.deg)
 

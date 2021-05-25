@@ -406,6 +406,7 @@ test_crs_avg = []
 test_cfd_ord = []
 test_crs_ord = []
 optimal_H = []
+print(sys.argv)
 for _ in range(args.num_trials):
     opt_test, opt_deg_avg, opt_nll_avg, opt_cfd_avg, opt_crs_avg, opt_cfd_ord, opt_crs_ord, opt_H = \
             run(args.dataset, args.split, args.model_name, args.dim_hidden, args.num_layers, args.num_hops, args.num_samples, args.dropout_p, args.device, args.learning_rate, args.num_epoches, args.initskip_BP, args.lossfunc_BP, args.weighted_BP, args.deg_scaling, args.learn_H, args.eval_C, args.verbose, args.imp_sampling)

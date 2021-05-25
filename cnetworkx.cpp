@@ -28,6 +28,7 @@ struct Exp3 {
     vector<double> sum_losses_;
     vector<double> last_loss_;
     vector<double> theta_;
+    double var_ratio_;
     double lambda_;
     double delta_;
     double sum_max_loss_sq_;
@@ -38,6 +39,7 @@ struct Exp3 {
     double alpha_;
     double max_theta_;
     bool adahedge_;
+    double gamma_;
 
     Exp3() : sum_max_loss_sq_{0}, lambda_{0},
         C_{0}, optimistic_{false}, adahedge_{false},
@@ -57,9 +59,41 @@ struct Exp3 {
         }
     }
 
+    // loss is n x 1 (n = number of neighbors) (l_t)
+    double get_variance_ratio(vector<double> &loss) {
+        double variance_unif = 0;
+        double variance_ours = 0;
+
+        // E_{i ~ p} [ l_i^2 / p_i^2] - (E_{i ~p} [l_i])^2
+
+
+        // E[X^2] = min_p sum_i x_i^2/p_i  = (sum_j x_j)^2 = (E[X])^2
+        // Var = E[X^2] - (E[X])^2 = 0
+
+        // p_i* = x_i / sum_j x_j
+
+        double variance_optimal = 0;
+
+        for (int i = 0; i < loss.size(); ++i) {
+            variance_unif += pow(loss[i], 2) * float(loss.size());
+            variance_ours += pow(loss[i], 2) / probability_[i];
+
+            variance_optimal += loss[i];
+        }
+
+        variance_optimal = pow(variance_optimal, 2.0);
+
+        //double ratio =  variance_unif / variance_ours;
+
+        double ratio = variance_unif / variance_optimal;
+
+        //cout << "Variance reduction (var_unif / var_ours) = " << ratio << endl;
+        return ratio;
+    }
 
     void update(vector<double> &loss) {
 
+        var_ratio_ = get_variance_ratio(loss);
         double max_sq_loss = 0.0;
         double max_exp_term = 0.0;
         
@@ -118,20 +152,19 @@ struct Exp3 {
         // Compute etas
         for (int i = 0; i < n_; ++i) {
             if (optimistic_) {
-                eta_[i] = alpha_ / sqrt(C_ + sum_max_loss_sq_); // optimistic version 
+                eta_[i] = alpha_ / sqrt(2*(C_ + sum_max_loss_sq_)); // optimistic version 
            } else {
                 eta_[i] = alpha_ / sqrt(sum_max_loss_sq_); // non-optimistic version
            }
         }
 
-        // Update the probability
-        probability_ = get_prob();
-
-
-        // Save last loss in case optimistic_ == true.
+                // Save last loss in case optimistic_ == true.
         for (int i = 0; i < n_; ++i) {
             last_loss_[i] = loss[i];
         }
+
+        // Update the probability
+        probability_ = get_prob();
 
 
         t_++;
@@ -169,6 +202,12 @@ struct Exp3 {
             probability[i] /= sum_w;
         }
 
+        gamma_ = 1.0 / (t_ + 1);
+
+        for (int i = 0; i < n_; ++i) {
+            probability[i] = probability[i] * (1 - gamma_) + gamma_ / n_;
+        }
+
 
         // cout << "(";
         // for (auto prob: probability)
@@ -183,6 +222,7 @@ struct Exp3 {
 struct Graph {
     vector<int> nodes;
     vector<double> scaling_;
+    vector<double> var_ratios;
     // nbrs[i]: neighbors of ith node
     // (nodeIdx, edgeIdx) tuple
     // vector<vector<tuple<int,int>>> nbrs;
@@ -221,7 +261,6 @@ struct Graph {
         for (auto edge: edges) {
             add_edge(get<0>(edge), get<1>(edge), get<2>(edge));
             scaling_.push_back(1);
-            need_scaling_update_.push_back(true);
         }
         sort_nbrs();
 
@@ -232,6 +271,7 @@ struct Graph {
             Exp3 this_exp3 = Exp3();
             this_exp3.init(num_neighbors);
             exp3s.push_back(this_exp3);
+            var_ratios.push_back(1.0);
         }
 
         update_scaling();
@@ -262,6 +302,10 @@ struct Graph {
 
     vector<int> get_nodes(void) {
         return nodes;
+    }
+
+    vector<double> &get_var_ratios() {
+        return var_ratios;
     }
 
     vector<tuple<int,int,int>> get_edges(void) {
@@ -340,7 +384,7 @@ struct Graph {
 
             // Update the exp3 for node i
             exp3s[i].update(loss);
-            need_scaling_update_[i] = true;
+            var_ratios[i] = exp3s[i].var_ratio_;
 
         }
 
@@ -533,6 +577,7 @@ PYBIND11_MODULE(cnetworkx, m) {
         .def("get_nodes", &Graph::get_nodes)
         .def("get_edges", &Graph::get_edges)
         .def("get_scaling", &Graph::get_scaling, py::return_value_policy::reference)
+        .def("get_var_ratios", &Graph::get_var_ratios, py::return_value_policy::reference)
         .def("update_exps", &Graph::update_exps);
     
     m.def("sample_subtree",  &sample_subtree);
