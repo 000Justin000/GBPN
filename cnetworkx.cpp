@@ -60,40 +60,35 @@ struct Exp3 {
     }
 
     // loss is n x 1 (n = number of neighbors) (l_t)
-    double get_variance_ratio(vector<double> &loss) {
+    void update_var_ratio_(vector<double> &log_msgs) {
         double variance_unif = 0;
         double variance_ours = 0;
-
-        // E_{i ~ p} [ l_i^2 / p_i^2] - (E_{i ~p} [l_i])^2
-
-
-        // E[X^2] = min_p sum_i x_i^2/p_i  = (sum_j x_j)^2 = (E[X])^2
-        // Var = E[X^2] - (E[X])^2 = 0
-
-        // p_i* = x_i / sum_j x_j
-
         double variance_optimal = 0;
 
-        for (int i = 0; i < loss.size(); ++i) {
-            variance_unif += pow(loss[i], 2) * float(loss.size());
-            variance_ours += pow(loss[i], 2) / probability_[i];
+        //cout << "log messages (of neighbors): [";
+        for (int i = 0; i < log_msgs.size(); ++i) {
+            variance_unif += pow(log_msgs[i], 2) * float(log_msgs.size());
+            variance_ours += pow(log_msgs[i], 2) / probability_[i];
 
-            variance_optimal += loss[i];
+            variance_optimal += log_msgs[i];
+            //cout << log_msgs[i];
+            // if (i < log_msgs.size() - 1)
+            //     cout << ", ";
         }
+        //cout << "]" << endl << endl;
 
         variance_optimal = pow(variance_optimal, 2.0);
 
-        //double ratio =  variance_unif / variance_ours;
+        double ratio =  variance_unif / variance_ours;
 
-        double ratio = variance_unif / variance_optimal;
+        //double ratio = variance_unif / variance_optimal;
 
         //cout << "Variance reduction (var_unif / var_ours) = " << ratio << endl;
-        return ratio;
+        var_ratio_ = ratio;
     }
 
     void update(vector<double> &loss) {
 
-        var_ratio_ = get_variance_ratio(loss);
         double max_sq_loss = 0.0;
         double max_exp_term = 0.0;
         
@@ -361,12 +356,15 @@ struct Graph {
 
         // Divide the losses by a large number to avoid numerical imprecision and overflows
         // (Doesn't affect guarantees since we're using scale-invariant algorithms)
-        const double loss_scaling = 1.0;
+
+
+        const double loss_scaling = 1.0e6;
         // Iterate over all nodes.
         #pragma omp parallel for
         for (int i = 0; i < nbrs.size(); ++i) {
             // Dimension: num_neighbors
             std::vector<double> loss(nbrs[i].size(), 0.0);
+            std::vector<double> this_log_msg(nbrs[i].size(), 0.0);
             // cout << exp3s[i].probability_ << endl;
             
             // Construct loss vector by iterating over all neighbors of node i
@@ -374,6 +372,7 @@ struct Graph {
             // for (int j = 0; j < sampled_neighbors[i].size(); ++j) {
                 auto eid = get<1>(nbrs[i][j]);
 
+                this_log_msg[j] = log_msg[eid];
                 // loss = log_msg^2 / p^2 = E_{i ~ p} [ (log_msg_i/p_i)^2 ]
                 double this_loss = (1.0 / pow(exp3s[i].probability_[j], 2.0)) * pow(log_msg[eid], 2.0);
                 //double this_loss = (1.0 / pow(exp3s[i].probability_[j], 2.0)) * pow(log_msg[eid][index[i]], 2.0);
@@ -383,6 +382,7 @@ struct Graph {
             //cout << "Done with neighbor " << i << endl << endl;
 
             // Update the exp3 for node i
+            exp3s[i].update_var_ratio_(this_log_msg);
             exp3s[i].update(loss);
             var_ratios[i] = exp3s[i].var_ratio_;
 
@@ -493,7 +493,7 @@ Graph sample_subtree(Graph& G, vector<int> batch_nodes, int max_d, int num_sampl
     }
 
 
-    #pragma omp parallel for
+    // #pragma omp parallel for
     for (unsigned rid=0; rid<batch_size; rid++)
     {
         subtree_dfs(G, TList[rid], batch_nodes[rid], 0, max_d, num_samples, imp_sampling);

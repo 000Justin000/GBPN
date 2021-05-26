@@ -401,7 +401,6 @@ class GBPN(nn.Module):
         # Dimensionality: num_edges x num_classes
         log_msg_ = torch.zeros(sampler.edge_index.shape[1], log_b0.shape[1], dtype=torch.float32)
         msgs = torch.zeros(sampler.edge_index.shape[1], dtype=torch.float32)
-        #msgs = None
         for _ in range(K):
             log_b = torch.zeros_like(log_b_)
             log_msg = torch.zeros_like(log_msg_)
@@ -423,15 +422,13 @@ class GBPN(nn.Module):
         # self.edge_scaling = torch.tensor(sampler.G.update_exps(msgs.sqrt().numpy())).to(device)
         # self.edge_scaling = self.edge_scaling[sampler.edge_rv]
 
-        # final hop msgs
-        #msgs = torch.norm(log_msg_[sampler.edge_rv,:], dim=-1)**2
 
         if hasattr(sampler, 'imp_sampling') and sampler.imp_sampling:
             sampler.G.update_exps(msgs.sqrt().numpy())
         
         var_ratios = np.array(sampler.G.get_var_ratios())
 
-        print("Var ratios: mean {:.3f} ± {:.3f}, median: {:.3f}, range: [{:.3f}, {:.3f}]".format(var_ratios.mean(), var_ratios.std(), np.median(var_ratios), var_ratios.min(),
+        print("Var ratios: mean {:.3f} ± {:.3f}, median: {:.3f}, range: [{:.3f}, {:.3f}]\n".format(var_ratios.mean(), var_ratios.std(), np.median(var_ratios), var_ratios.min(),
             var_ratios.max()))
 
 

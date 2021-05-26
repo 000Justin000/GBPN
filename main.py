@@ -146,8 +146,11 @@ def run(dataset, split, model_name, dim_hidden, num_layers, num_hops, num_sample
 
     # TODO: Imp sampling for all of them
     if dataset in ['Cora', 'CiteSeer', 'PubMed', 'Coauthor_CS', 'Coauthor_Physics', 'County_Facebook', 'Sex', 'Animal2', 'Animal3', 'Squirrel', 'Chameleon', 'Ising+', 'Ising-', 'MRF+', 'MRF-']:
-        graph_sampler = FullgraphSampler(num_nodes, x, y, edge_index, edge_weight, edge_rv)
-        max_batch_size = -1
+        #graph_sampler = FullgraphSampler(num_nodes, x, y, edge_index, edge_weight, edge_rv)
+        #max_batch_size = -1
+        graph_sampler = SubtreeSampler(num_nodes, x, y, edge_index, edge_weight, edge_rv, imp_sampling)
+        max_batch_size = min(math.ceil(train_mask.sum()/10.0), 512)
+        
     elif dataset in ['OGBN_arXiv', 'OGBN_Products', 'JPMC_Payment0', 'JPMC_Payment1', 'Elliptic_Bitcoin']:
         if model_name in ['LP', 'MLP', 'SAGE', 'GAT', 'GBPN']:
             graph_sampler = SubtreeSampler(num_nodes, x, y, edge_index, edge_weight, edge_rv, imp_sampling)
