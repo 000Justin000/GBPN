@@ -29,6 +29,7 @@ struct Exp3 {
     vector<double> last_loss_;
     vector<double> theta_;
     double var_ratio_;
+    double var_ratio_uniform_;
     double lambda_;
     double delta_;
     double sum_max_loss_sq_;
@@ -79,11 +80,12 @@ struct Exp3 {
 
         variance_optimal = pow(variance_optimal, 2.0);
 
-        //double ratio =  variance_unif / variance_ours;
+        double ratio_uniform =  variance_ours / variance_unif;
         double ratio = variance_ours / variance_optimal;
 
         //cout << "Variance reduction (var_unif / var_ours) = " << ratio << endl;
         var_ratio_ = ratio;
+        var_ratio_uniform_ = ratio_uniform;
     }
 
     void update(vector<double> &loss) {
@@ -218,6 +220,7 @@ struct Graph {
     vector<int> nodes;
     vector<double> scaling_;
     vector<double> var_ratios;
+    vector<double> var_ratios_uniform;
     // nbrs[i]: neighbors of ith node
     // (nodeIdx, edgeIdx) tuple
     // vector<vector<tuple<int,int>>> nbrs;
@@ -267,6 +270,7 @@ struct Graph {
             this_exp3.init(num_neighbors);
             exp3s.push_back(this_exp3);
             var_ratios.push_back(1.0);
+            var_ratios_uniform.push_back(1.0);
         }
 
         update_scaling();
@@ -301,6 +305,10 @@ struct Graph {
 
     vector<double> &get_var_ratios() {
         return var_ratios;
+    }
+
+    vector<double> &get_var_ratios_unif() {
+        return var_ratios_uniform;
     }
 
     vector<tuple<int,int,int>> get_edges(void) {
@@ -385,6 +393,7 @@ struct Graph {
             exp3s[i].update_var_ratio_(this_log_msg);
             exp3s[i].update(loss);
             var_ratios[i] = exp3s[i].var_ratio_;
+            var_ratios_uniform[i] = exp3s[i].var_ratio_uniform_;
 
         }
 
@@ -578,6 +587,7 @@ PYBIND11_MODULE(cnetworkx, m) {
         .def("get_edges", &Graph::get_edges)
         .def("get_scaling", &Graph::get_scaling, py::return_value_policy::reference)
         .def("get_var_ratios", &Graph::get_var_ratios, py::return_value_policy::reference)
+        .def("get_var_ratios_unif", &Graph::get_var_ratios_unif, py::return_value_policy::reference)
         .def("update_exps", &Graph::update_exps);
     
     m.def("sample_subtree",  &sample_subtree);

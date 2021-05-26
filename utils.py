@@ -427,14 +427,12 @@ class GBPN(nn.Module):
         
         var_ratios = np.array(sampler.G.get_var_ratios())
         
-
-        print("Var ratio (our_var / opt_var): mean {:.2f} ± {:.2f}, median: {:.2f}, range: [{:.2f}, {:.2f}]\n".format(var_ratios.mean(), var_ratios.std(), np.median(var_ratios), var_ratios.min(),
+        print("\n\t\t\t\t\t\t\t\t(our_var / opt_var): mean {:.2f} ± {:.2f}, median: {:.2f}, range: [{:.2f}, {:.2f}]".format(var_ratios.mean(), var_ratios.std(), np.median(var_ratios), var_ratios.min(),
             var_ratios.max()))
 
-        #var_ratios_uniform = np.array(sampler.G.get_var_ratios())
-        # print("Var ratio (our_var / unif_var): mean {:.2f} ± {:.2f}, median: {:.2f}, range: [{:.2f}, {:.2f}]\n".format(var_ratios.mean(), var_ratios.std(), np.median(var_ratios), var_ratios.min(),
-        #     var_ratios.max()))
-
+        var_ratios = np.array(sampler.G.get_var_ratios_unif())
+        print("\t\t\t\t\t\t\t\t(our_var / uni_var): mean {:.2f} ± {:.2f}, median: {:.2f}, range: [{:.2f}, {:.2f}]\n".format(var_ratios.mean(), var_ratios.std(), np.median(var_ratios), var_ratios.min(),
+            var_ratios.max()))
 
         return self.compute_log_probabilities(log_b0, log_b_, sampler.deg)
 

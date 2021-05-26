@@ -27,7 +27,7 @@
 # Configuration for uniform vs importance sampling experiments.
 # *************************************************************
 num_trials=10
-num_epochs=150
+num_epochs=30
 uniform=false
 ours=true
 
@@ -37,7 +37,8 @@ if [ "$uniform" = true ] ; then
 fi
 if [ "$ours" = true ] ; then
 	# Importance sampling
-	python main.py --dataset OGBN_arXiv --model_name GBPN --dim_hidden 256 --num_layers 2 --num_hops 1 --num_samples   1 --dropout_p 0.1 --device cuda --learning_rate 1.0e-3 --num_epoches $num_epochs --num_trials  $num_trials --initskip_BP 0.00 --lossfunc_BP 0 --learn_H --verbose --imp_sampling --develop
+	python main.py --dataset OGBN_arXiv --model_name GBPN --dim_hidden 256 --num_layers 2 --num_hops 1 --num_samples   1 --dropout_p 0.1 --device cuda --learning_rate 1.0e-3 --num_epoches $num_epochs --num_trials  $num_trials --initskip_BP 0.00 --lossfunc_BP 0 --learn_H --verbose --imp_sampling #--develop
+	python main.py --dataset OGBN_arXiv --model_name GBPN --dim_hidden 256 --num_layers 2 --num_hops 1 --num_samples   1 --dropout_p 0.1 --device cuda --learning_rate 1.0e-3 --num_epoches $num_epochs --num_trials  $num_trials --initskip_BP 0.00 --lossfunc_BP 0 --learn_H --verbose --imp_sampling --eval_C #--develop 
 fi
 
 
