@@ -382,7 +382,6 @@ class GBPN(nn.Module):
         for _ in range(K):
             log_b = self.bp_conv(log_b_, edge_index, edge_weight, info)
             log_b_ = log_b
-            #msgs += torch.norm(log_msg_[sampler.edge_rv,:], dim=-1)**2
 
 
         # info.log_msg_
@@ -427,9 +426,14 @@ class GBPN(nn.Module):
             sampler.G.update_exps(msgs.sqrt().numpy())
         
         var_ratios = np.array(sampler.G.get_var_ratios())
+        
 
-        print("Var ratios: mean {:.3f} ± {:.3f}, median: {:.3f}, range: [{:.3f}, {:.3f}]\n".format(var_ratios.mean(), var_ratios.std(), np.median(var_ratios), var_ratios.min(),
+        print("Var ratio (our_var / opt_var): mean {:.2f} ± {:.2f}, median: {:.2f}, range: [{:.2f}, {:.2f}]\n".format(var_ratios.mean(), var_ratios.std(), np.median(var_ratios), var_ratios.min(),
             var_ratios.max()))
+
+        #var_ratios_uniform = np.array(sampler.G.get_var_ratios())
+        # print("Var ratio (our_var / unif_var): mean {:.2f} ± {:.2f}, median: {:.2f}, range: [{:.2f}, {:.2f}]\n".format(var_ratios.mean(), var_ratios.std(), np.median(var_ratios), var_ratios.min(),
+        #     var_ratios.max()))
 
 
         return self.compute_log_probabilities(log_b0, log_b_, sampler.deg)

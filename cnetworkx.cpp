@@ -79,9 +79,8 @@ struct Exp3 {
 
         variance_optimal = pow(variance_optimal, 2.0);
 
-        double ratio =  variance_unif / variance_ours;
-
-        //double ratio = variance_unif / variance_optimal;
+        //double ratio =  variance_unif / variance_ours;
+        double ratio = variance_ours / variance_optimal;
 
         //cout << "Variance reduction (var_unif / var_ours) = " << ratio << endl;
         var_ratio_ = ratio;
@@ -153,7 +152,7 @@ struct Exp3 {
            }
         }
 
-                // Save last loss in case optimistic_ == true.
+        // Save last loss in case optimistic_ == true.
         for (int i = 0; i < n_; ++i) {
             last_loss_[i] = loss[i];
         }
@@ -197,7 +196,8 @@ struct Exp3 {
             probability[i] /= sum_w;
         }
 
-        gamma_ = 1.0 / (t_ + 1);
+        //gamma_ = 1.0 / (t_ + 1);
+        gamma_ = 0.0;
 
         for (int i = 0; i < n_; ++i) {
             probability[i] = probability[i] * (1 - gamma_) + gamma_ / n_;
@@ -358,7 +358,7 @@ struct Graph {
         // (Doesn't affect guarantees since we're using scale-invariant algorithms)
 
 
-        const double loss_scaling = 1.0e6;
+        const double loss_scaling = 1.0;
         // Iterate over all nodes.
         #pragma omp parallel for
         for (int i = 0; i < nbrs.size(); ++i) {

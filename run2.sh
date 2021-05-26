@@ -37,8 +37,8 @@ if [ "$uniform" = true ] ; then
 fi
 if [ "$ours" = true ] ; then
 	# Importance sampling
-	#python main.py --dataset County_Facebook --split 0.3 0.2 0.5 --model_name GBPN --dim_hidden 256 --num_layers 2 --num_hops 1 --num_samples   5 --dropout_p 0.1 --device cuda --learning_rate 1.0e-3 --num_epoches $num_epochs --num_trials  $num_trials --initskip_BP 0.00 --lossfunc_BP 0 --learn_H --verbose --imp_sampling --develop
-	python main.py --dataset Cora --split 0.3 0.2 0.5 --model_name GBPN --dim_hidden 256 --num_samples   1 --num_layers 2 --num_hops 1 --dropout_p 0.6 --device cuda --learning_rate 1.0e-3 --num_epoches 500 --num_trials 30 --initskip_BP 0.00 --lossfunc_BP 5 --learn_H --eval_C --verbose --imp_sampling --develop
+	#python main.py --dataset Cora --split 0.3 0.2 0.5 --num_samples 1 --model_name GBPN --dim_hidden 256 --num_layers 2 --num_hops 2 --dropout_p 0.3 --device cuda --learning_rate 1.0e-3 --num_epoches 500 --num_trials $num_trials --initskip_BP 0.00 --lossfunc_BP 5 --learn_H --verbose --imp_sampling --develop
+	#python main.py --dataset Cora --split 0.3 0.2 0.5 --model_name GBPN --dim_hidden 256 --num_samples   1 --num_layers 2 --num_hops 1 --dropout_p 0.6 --device cuda --learning_rate 1.0e-3 --num_epoches 500 --num_trials 30 --initskip_BP 0.00 --lossfunc_BP 5 --learn_H --eval_C --verbose --imp_sampling --develop
 	#python main.py --dataset County_Facebook --model_name GBPN --dim_hidden 256 --num_layers 2 --num_hops 1 --num_samples   2 --dropout_p 0.1 --device cuda --learning_rate 1.0e-3 --num_epoches $num_epochs --num_trials  $num_trials --initskip_BP 0.00 --lossfunc_BP 0 --learn_H --verbose --imp_sampling --develop
 fi
 
