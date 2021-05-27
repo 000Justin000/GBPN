@@ -315,7 +315,8 @@ class BPConv(MessagePassing):
         if info['msg_scaling'] is not None:
             log_msg_raw = log_msg_raw * info['msg_scaling'].unsqueeze(-1)
         log_msg = log_normalize(log_msg_raw)
-        info['log_msg_'] = log_msg
+        info['log_msg_'] = log_msg 
+
         return log_msg
 
     def update(self, agg_log_msg, info):
@@ -362,13 +363,12 @@ class GBPN(nn.Module):
         return log_normalize(log_p)
 
     def forward(self, x, edge_scaling, edge_index, subgraph_edge_oid, edge_weight, edge_rv, deg, deg_ori, phi=None, K=5):
-    #def forward(self, x, edge_index, edge_weight, edge_rv, deg, deg_ori, phi=None, K=5):
         log_b0 = self.transform(x) if (phi is None) else log_normalize(self.transform(x) + phi)
         msg_scaling = get_scaling(deg_ori[edge_index[1]], deg[edge_index[1]]) if (self.deg_scaling and (deg is not None) and (deg_ori is not None)) else None
         
         self.edge_scaling = edge_scaling
 
-        if self.edge_scaling is not None and msg_scaling is not None:
+        if deg is not None:
 
             denom = deg[edge_index[1]]
             denom[denom < 1] = 1.0
@@ -403,8 +403,7 @@ class GBPN(nn.Module):
         for _ in range(K):
             log_b = torch.zeros_like(log_b_)
             log_msg = torch.zeros_like(log_msg_)
-            # TO ASK: New subtree neighbors sampled for each computation here?
-            # Is this a different tree in the evaluation?
+
             for batch_size, batch_nodes, _, _, _, \
                 subgraph_size, subgraph_nodes, _, _, _, \
                 subgraph_edge_index, subgraph_edge_weight, subgraph_edge_rv, subgraph_edge_oid in sampler.get_generator(max_batch_size=max_batch_size, num_hops=1):
@@ -412,14 +411,19 @@ class GBPN(nn.Module):
                 log_b[batch_nodes] = self.bp_conv(log_b_[subgraph_nodes].to(device), subgraph_edge_index.to(device), subgraph_edge_weight.to(device), info)[:batch_size].cpu()
                 subgraph_edge_mask = subgraph_edge_index[1] < batch_size
                 log_msg[subgraph_edge_oid[subgraph_edge_mask]] = info['log_msg_'][subgraph_edge_mask].cpu()
+
+            # import ipdb
+            # ipdb.set_trace()
+
             log_b_ = log_b
             log_msg_ = log_msg
 
             # Should we aggregate messages?
             msgs += torch.norm(log_msg_[sampler.edge_rv,:], dim=-1)**2
-        
-        # self.edge_scaling = torch.tensor(sampler.G.update_exps(msgs.sqrt().numpy())).to(device)
-        # self.edge_scaling = self.edge_scaling[sampler.edge_rv]
+
+            # log_msg[node, class]
+            # y_u = label of node u
+            # importance_of_neighbor_v = max_{y'} (log_msg_[v, y_u] - log_msg_[v, y'])
 
 
         if hasattr(sampler, 'imp_sampling') and sampler.imp_sampling:
@@ -427,11 +431,11 @@ class GBPN(nn.Module):
         
         var_ratios = np.array(sampler.G.get_var_ratios())
         
-        print("\n\t\t\t\t\t\t\t\t(our_var / opt_var): mean {:.2f} ± {:.2f}, median: {:.2f}, range: [{:.2f}, {:.2f}]".format(var_ratios.mean(), var_ratios.std(), np.median(var_ratios), var_ratios.min(),
+        print("\n\t\t\t\t\t\t(our_var / opt_var): mean {:.2f} ± {:.2f}, median: {:.2f}, range: [{:.2f}, {:.2f}]".format(var_ratios.mean(), var_ratios.std(), np.median(var_ratios), var_ratios.min(),
             var_ratios.max()))
 
         var_ratios = np.array(sampler.G.get_var_ratios_unif())
-        print("\t\t\t\t\t\t\t\t(our_var / uni_var): mean {:.2f} ± {:.2f}, median: {:.2f}, range: [{:.2f}, {:.2f}]\n".format(var_ratios.mean(), var_ratios.std(), np.median(var_ratios), var_ratios.min(),
+        print("\t\t\t\t\t\t(our_var / uni_var): mean {:.2f} ± {:.2f}, median: {:.2f}, range: [{:.2f}, {:.2f}]\n".format(var_ratios.mean(), var_ratios.std(), np.median(var_ratios), var_ratios.min(),
             var_ratios.max()))
 
         return self.compute_log_probabilities(log_b0, log_b_, sampler.deg)

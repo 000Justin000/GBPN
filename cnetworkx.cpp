@@ -455,19 +455,19 @@ void subtree_dfs(Graph& G, Graph& T, int r, int rid, int max_d, int num_samples,
                 vector<bool> is_sampled(prob.size(), false);
                 // Pick num_samples weighted samples
 
-                // for (int i = 0; i < num_samples; i++) {
-                //     auto index = dist(gen);
-                //     selected_nbr.push_back(nbr[index]);
-                // }    
-
-                while (selected_nbr.size() < num_samples)
-                {
+                for (int i = 0; i < num_samples; i++) {
                     auto index = dist(gen);
-                    if (is_sampled[index] != true)
-                        selected_nbr.push_back(nbr[index]);
+                    selected_nbr.push_back(nbr[index]);
+                }    
 
-                    is_sampled[index] = true;
-                }
+                // while (selected_nbr.size() < num_samples)
+                // {
+                //     auto index = dist(gen);
+                //     if (is_sampled[index] != true)
+                //         selected_nbr.push_back(nbr[index]);
+
+                //     is_sampled[index] = true;
+                // }
             }
         }
 
@@ -502,7 +502,7 @@ Graph sample_subtree(Graph& G, vector<int> batch_nodes, int max_d, int num_sampl
     }
 
 
-    // #pragma omp parallel for
+    #pragma omp parallel for
     for (unsigned rid=0; rid<batch_size; rid++)
     {
         subtree_dfs(G, TList[rid], batch_nodes[rid], 0, max_d, num_samples, imp_sampling);
