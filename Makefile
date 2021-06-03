@@ -1,4 +1,4 @@
-build_cnetworkx:
+Gbuild_cnetworkx:
 	c++ -O3 -Wall -shared -fopenmp -std=c++17 -fPIC $(shell python3 -m pybind11 --includes) cnetworkx.cpp -o cnetworkx$(shell python3-config --extension-suffix)
 
 run_Ising_P:

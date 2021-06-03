@@ -27,7 +27,7 @@ def get_cts(edge_index, y):
     # _, cct = y.unique(return_counts=True)
     # return ctsm, (cct**-1.0).view(-1, 1) * ctsm * (cct**-1.0).view(1, -1)
     cct = ctsm.sum(dim=1)
-    return ctsm, ctsm * (cct**-1.0).view(1, -1)
+    return ctsm, (cct**-0.5).view(-1, 1) * ctsm * (cct**-0.5).view(1, -1)
 
 
 def classification_accuracy(log_b, y):
@@ -305,7 +305,7 @@ def run(dataset, split, model_name, dim_hidden, num_layers, num_hops, num_sample
         num_hops = 0 if (model_name == 'GBPN' and epoch <= num_epoches*initskip_BP) else max_num_hops
         train(num_hops=num_hops, num_samples=num_samples)
 
-        if epoch % max(int(num_epoches*0.10), 10) == 0:
+        if epoch % max(int(num_epoches*0.10), 10) == 0 or True:
             train_accuracy, val_accuracy, test_accuracy, log_b = evaluation(num_hops=num_hops)
             deg_avg, nll_avg, cfd_avg, crs_avg = accuracy_degree_correlation(log_b[test_mask], y[test_mask], deg[test_mask])
             cfd_ord, crs_ord = accuracy_confidence_correlation(log_b[test_mask], y[test_mask])
