@@ -305,7 +305,7 @@ def run(dataset, split, model_name, dim_hidden, num_layers, num_hops, num_sample
         num_hops = 0 if (model_name == 'GBPN' and epoch <= num_epoches*initskip_BP) else max_num_hops
         train(num_hops=num_hops, num_samples=num_samples)
 
-        if epoch % max(int(num_epoches*0.10), 10) == 0 or True:
+        if epoch % max(int(num_epoches*0.10), 10) == 0:
             train_accuracy, val_accuracy, test_accuracy, log_b = evaluation(num_hops=num_hops)
             deg_avg, nll_avg, cfd_avg, crs_avg = accuracy_degree_correlation(log_b[test_mask], y[test_mask], deg[test_mask])
             cfd_ord, crs_ord = accuracy_confidence_correlation(log_b[test_mask], y[test_mask])

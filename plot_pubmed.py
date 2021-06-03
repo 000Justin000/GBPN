@@ -75,7 +75,7 @@ ax4.set_xlim(xlims)
 ax4.set_ylim(ylims)
 for i in range(6):
     mask = correct_step == i
-    ax4.scatter(coords[mask,0], coords[mask,1], color=cmap(i), s=2.0*0.7**i, label=r'$k={:d}$'.format(i))
+    ax4.scatter(coords[mask,0], coords[mask,1], color=cmap(i), s=5.0*0.7**i, label=r'$t={:d}$'.format(i))
     ax4.legend(loc='lower right', ncol=3, fontsize=10, markerscale=2.0, framealpha=1.0)
     fig.tight_layout()
     plt.savefig('gbpn_predictions{:d}.svg'.format(i), bbox_inches='tight', pad_inches=0)

@@ -105,7 +105,7 @@ def evaluation(num_hops=2):
     return train_accuracy, val_accuracy, test_accuracy
 
 
-run_demo = True
+run_demo = False
 if run_demo:
     optimal_val_accuracy = 0.0
     optimal_test_accuracy = 0.0
@@ -149,18 +149,18 @@ test_accuracies = [accuracy_fun(log_b_[test_mask], y[test_mask]) for log_b_ in l
 b_delta = [float((((log_b_.exp() - log_b.exp())**2).mean())**0.5) for log_b_ in log_b_list]
 
 fig, ax1 = plt.subplots(figsize=(6.0, 4.5))
-ax1.set_xlabel('number of BP steps ($k$)', fontsize=16.5)
-ax1.set_ylabel(r'$\|p^{(k)} - p^{(20)}\|$', color='tab:blue', fontsize=16.5)
+ax1.set_xlabel('number of BP steps ($t$)', fontsize=16.5)
+ax1.set_ylabel(r'$\|p^{(t)} - p^{(20)}\|$', color='tab:blue', fontsize=16.5)
 ax1.semilogy(all_hops, b_delta, color='tab:blue', linestyle='dashed', label='residual')
 ax1.tick_params(axis='y', labelcolor='tab:blue')
 
 ax2 = ax1.twinx()
-ax2.set_ylabel(r'accuracies ($\%$)', fontsize=16.5)
+ax2.set_ylabel(r'accuracy ($\%$)', fontsize=16.5)
 ax2.set_xlim([-1, 21])
-ax2.set_ylim([0.82, 0.92])
+ax2.set_ylim([0.82, 0.90])
 ax2.set_xticks([0, 5, 10, 15, 20])
-ax2.set_yticks([0.82, 0.84, 0.86, 0.88, 0.90, 0.92])
-ax2.set_yticklabels([82, 84, 86, 88, 90, 92])
+ax2.set_yticks([0.82, 0.84, 0.86, 0.88, 0.90])
+ax2.set_yticklabels([82, 84, 86, 88, 90])
 ax2.plot(all_hops, train_accuracies, label='train', color='tab:red', linestyle='solid', marker='o', markeredgecolor='k', markersize=6)
 ax2.plot(all_hops, test_accuracies, label='test', color='tab:green', linestyle='solid', marker='o', markeredgecolor='k', markersize=6)
 ax2.tick_params(axis='y')
@@ -179,7 +179,7 @@ plt.show()
 # plot accuracy visualization
 G = to_networkx(data, to_undirected=True)
 N = networkx.normalized_laplacian_matrix(G)
-eigvals, eigvecs = scipy.sparse.linalg.eigsh(N, k=100)
+eigvals, eigvecs = scipy.sparse.linalg.eigsh(N, k=100, which='SM')
 coords = umap.UMAP().fit_transform(eigvecs)
 xlims = (np.min(coords[:,0])-1.5, np.max(coords[:,0])+1.5)
 ylims = (np.min(coords[:,1])-1.5, np.max(coords[:,1])+1.5)
