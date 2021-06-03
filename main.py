@@ -2,10 +2,12 @@ import sys
 import math
 import random
 import subprocess
+import os
 import argparse
 import torch.nn as nn
 import torch.nn.functional as F
 import torch_geometric.transforms as T
+import seaborn as sns
 from torch_sparse import SparseTensor
 from torch_geometric.data import NeighborSampler
 from torch_geometric.nn import GCNConv
@@ -18,6 +20,11 @@ from utils import *
 import matplotlib
 import matplotlib.pyplot as plt
 
+
+FONT_SIZE = 23
+EPOCH_OFFSET = 9
+LINE_WIDTH = 3
+plt.rcParams.update({"font.size": FONT_SIZE, "text.usetex": True, "font.family": "serif", "font.serif": ["Palatino"]})
 
 def get_cts(edge_index, y):
     idx, cts = torch.stack((y[edge_index[0]], y[edge_index[1]]), dim=0).unique(dim=1, return_counts=True)
@@ -296,22 +303,26 @@ def run(dataset, split, model_name, dim_hidden, num_layers, num_hops, num_sample
         if type(model) == GBPN and eval_C:
             phi = torch.zeros(num_nodes, num_classes)
             phi[train_mask] = torch.log(F.one_hot(y[train_mask], num_classes).float())
-            log_b = model.inference(graph_sampler, max_batch_size, device, phi=phi, K=num_hops)
+            log_b, var_ours, var_unif, var_unif_to_opt = model.inference(graph_sampler, max_batch_size, device, phi=phi, K=num_hops)
             train_loss, val_loss, test_loss, train_accuracy, val_accuracy, test_accuracy = loss_and_accuracy(y.to(device), log_b.to(device))
             if verbose:
                 print('transductive loss / accuracy: ({:5.3f}, {:5.3f}, {:5.3f}) / ({:5.3f}, {:5.3f}, {:5.3f})'.format(train_loss, val_loss, test_loss, train_accuracy, val_accuracy, test_accuracy), end='', flush=True)
         else:
-            log_b = model.inference(graph_sampler, max_batch_size, device, K=num_hops)
+            log_b, var_ours, var_unif, var_unif_to_opt  = model.inference(graph_sampler, max_batch_size, device, K=num_hops)
             train_loss, val_loss, test_loss, train_accuracy, val_accuracy, test_accuracy = loss_and_accuracy(y.to(device), log_b.to(device))
             if verbose:
                 print('inductive loss / accuracy: ({:5.3f}, {:5.3f}, {:5.3f}) / ({:5.3f}, {:5.3f}, {:5.3f})'.format(train_loss, val_loss, test_loss, train_accuracy, val_accuracy, test_accuracy), end='    ', flush=True)
 
 
-        return train_accuracy, val_accuracy, test_accuracy, log_b
+        return train_accuracy, val_accuracy, test_accuracy, log_b, var_ours, var_unif, var_unif_to_opt
 
     max_num_hops = num_hops
     opt_val, opt_test = 0.0, 0.0
     opt_deg_avg, opt_nll_avg, opt_cfd_avg, opt_crs_avg, opt_cdf_ord, opt_crs_ord, opt_H, opt_cfd_ord = None, None, None, None, None, None, None, None
+
+    var_ratios_ours = []
+    var_ratios_uniform = []
+    var_ratios_unif_to_opt = []
     for epoch in range(1, num_epoches+1):
         num_hops = 0 if (model_name == 'GBPN' and epoch <= num_epoches*initskip_BP) else max_num_hops
         train(num_hops=num_hops, num_samples=num_samples)
@@ -320,7 +331,12 @@ def run(dataset, split, model_name, dim_hidden, num_layers, num_hops, num_sample
         #if epoch % 3 == 0:
         #if epoch % max(int(num_epoches*0.05), 100) == 0:
         if True:
-            train_accuracy, val_accuracy, test_accuracy, log_b = evaluation(num_hops=num_hops)
+            train_accuracy, val_accuracy, test_accuracy, log_b, var_ours, var_unif, var_unif_to_opt = evaluation(num_hops=num_hops)
+
+            if epoch >= EPOCH_OFFSET:
+                var_ratios_ours.append(var_ours)
+                var_ratios_uniform.append(var_unif)
+                var_ratios_unif_to_opt.append(var_unif_to_opt)
 
             # if epoch % max(int(num_epoches*0.05), 5) == 0:
             # deg_avg, nll_avg, cfd_avg, crs_avg = accuracy_degree_correlation(log_b[test_mask], y[test_mask], deg[test_mask])
@@ -361,7 +377,7 @@ def run(dataset, split, model_name, dim_hidden, num_layers, num_hops, num_sample
     #     print(opt_H)
     # print()
 
-    return opt_test, opt_deg_avg, opt_nll_avg, opt_cfd_avg, opt_crs_avg, opt_cfd_ord, opt_crs_ord, opt_H
+    return opt_test, opt_deg_avg, opt_nll_avg, opt_cfd_avg, opt_crs_avg, opt_cfd_ord, opt_crs_ord, opt_H, var_ratios_ours, var_ratios_uniform, var_ratios_unif_to_opt
 
 
 random.seed(0)
@@ -409,9 +425,13 @@ test_crs_avg = []
 test_cfd_ord = []
 test_crs_ord = []
 optimal_H = []
+
+var_ratios_ours = []
+var_ratios_uniform = []
+var_ratios_unif_to_opt = []
 print(sys.argv)
 for _ in range(args.num_trials):
-    opt_test, opt_deg_avg, opt_nll_avg, opt_cfd_avg, opt_crs_avg, opt_cfd_ord, opt_crs_ord, opt_H = \
+    opt_test, opt_deg_avg, opt_nll_avg, opt_cfd_avg, opt_crs_avg, opt_cfd_ord, opt_crs_ord, opt_H, this_var_ours, this_var_unif, this_var_unif_to_opt = \
             run(args.dataset, args.split, args.model_name, args.dim_hidden, args.num_layers, args.num_hops, args.num_samples, args.dropout_p, args.device, args.learning_rate, args.num_epoches, args.initskip_BP, args.lossfunc_BP, args.weighted_BP, args.deg_scaling, args.learn_H, args.eval_C, args.verbose, args.imp_sampling)
     test_acc.append(opt_test)
     test_deg_avg.append(opt_deg_avg)
@@ -420,11 +440,72 @@ for _ in range(args.num_trials):
     test_crs_avg.append(opt_crs_avg)
     test_cfd_ord.append(opt_cfd_ord)
     test_crs_ord.append(opt_crs_ord)
+
+    var_ratios_ours.append(this_var_ours)
+    var_ratios_uniform.append(this_var_unif)
+    var_ratios_unif_to_opt.append(this_var_unif_to_opt)
+
     if args.model_name == 'GBPN':
         optimal_H.append(opt_H)
 
 list_avg = lambda ll: list(map(lambda l: sum(l)/len(l), zip(*ll)))
 
+var_ratios_ours = np.array(var_ratios_ours)
+var_ratios_uniform = np.array(var_ratios_uniform)
+var_ratios_unif_to_opt = np.array(var_ratios_unif_to_opt)
+
+sns.set_style("whitegrid")
+
+figures_dir = 'figures'
+if not os.path.exists(figures_dir):
+    os.makedirs(figures_dir)
+
+title = (args.dataset).split('_', 1)[0]
+
+std_ours = np.std(var_ratios_ours, axis=0)
+
+std_unif_to_opt = np.std(var_ratios_unif_to_opt, axis=0)
+
+std_uniform = np.std(var_ratios_uniform, axis=0)
+
+var_ratios_ours = np.mean(var_ratios_ours, axis=0)
+var_ratios_uniform = np.mean(var_ratios_uniform, axis=0)
+var_ratios_unif_to_opt = np.mean(var_ratios_unif_to_opt, axis=0)
+
+x_vals = np.arange(EPOCH_OFFSET, var_ratios_ours.shape[0]+EPOCH_OFFSET)
+
+plt.xticks(fontsize=FONT_SIZE)
+plt.yticks(fontsize=FONT_SIZE)
+plt.plot(x_vals, var_ratios_ours, color='red', linewidth=LINE_WIDTH,
+        label='Ours')
+
+alpha_val = 0.2
+
+plt.fill_between(x_vals, var_ratios_ours - std_ours, var_ratios_ours + std_ours, alpha=alpha_val, color='red')
+
+plt.plot(x_vals, var_ratios_unif_to_opt, color='blue', linewidth=LINE_WIDTH,
+        label='Uniform')
+
+plt.fill_between(x_vals, var_ratios_unif_to_opt - std_unif_to_opt, var_ratios_unif_to_opt + std_unif_to_opt, alpha=alpha_val, color='blue')
+plt.title(title)
+plt.legend()
+plt.xlabel("Epoch", fontsize=FONT_SIZE)
+plt.ylabel(r'Mean Variance Ratio ($\mathrm{Var}_t / \mathrm{Var}_t^\mathrm{opt}$)', fontsize=FONT_SIZE)
+plt.savefig("{}/var_ratios_ours_{}.png".format(figures_dir, args.dataset), bbox_inches="tight", dpi=1200) 
+
+
+plt.clf()
+
+plt.xlabel("Epoch", fontsize=FONT_SIZE)
+plt.ylabel(r'Mean $\mathrm{Var}_t^\mathrm{ours} / \mathrm{Var}_t^\mathrm{uniform}$', fontsize=FONT_SIZE)
+plt.xticks(fontsize=FONT_SIZE)
+plt.yticks(fontsize=FONT_SIZE)
+plt.title(title)
+plt.plot(x_vals, var_ratios_uniform, color='red', linewidth=LINE_WIDTH, label='Ours')
+plt.fill_between(x_vals, var_ratios_uniform - std_uniform, var_ratios_uniform + std_uniform, alpha=alpha_val, color='red')
+plt.legend()
+
+plt.savefig("{}/var_ratios_uniform_{}.png".format(figures_dir, args.dataset), bbox_inches="tight", dpi=1200)
 # print(args)
 # print('optimal deg average: [' + ', '.join(map(lambda f: '{:7.3f}'.format(f), list_avg(test_deg_avg))) + ']')
 # print('optimal nll average: [' + ', '.join(map(lambda f: '{:7.3f}'.format(f), list_avg(test_nll_avg))) + ']')
@@ -434,5 +515,6 @@ list_avg = lambda ll: list(map(lambda l: sum(l)/len(l), zip(*ll)))
 # print('optimal crs ordered: [' + ', '.join(map(lambda f: '{:7.3f}'.format(f), list_avg(test_crs_ord))) + ']')
 # if args.model_name == 'GBPN':
 #     print(sum(optimal_H)/len(optimal_H))
+
 print('overall test accuracies: {:7.3f} ± {:7.3f}'.format(np.mean(test_acc)*100, np.std(test_acc)*100))
 print(sys.argv)

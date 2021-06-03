@@ -366,13 +366,16 @@ class GBPN(nn.Module):
         log_b0 = self.transform(x) if (phi is None) else log_normalize(self.transform(x) + phi)
         msg_scaling = get_scaling(deg_ori[edge_index[1]], deg[edge_index[1]]) if (self.deg_scaling and (deg is not None) and (deg_ori is not None)) else None
         
-        self.edge_scaling = edge_scaling
+        #self.edge_scaling = edge_scaling
 
-        if deg is not None:
+        if self.deg_scaling and (deg is not None):
+            # number of samples
+            #denom = deg[edge_index[1]]
 
-            denom = deg[edge_index[1]]
+            # N(i)
+            denom = deg_ori[edge_index[1]]
+
             denom[denom < 1] = 1.0
-            #msg_scaling = edge_scaling[subgraph_edge_oid] / denom
             msg_scaling = edge_scaling[subgraph_edge_oid] / denom
 
 
@@ -425,20 +428,23 @@ class GBPN(nn.Module):
             # y_u = label of node u
             # importance_of_neighbor_v = max_{y'} (log_msg_[v, y_u] - log_msg_[v, y'])
 
-
+            
         if hasattr(sampler, 'imp_sampling') and sampler.imp_sampling:
             sampler.G.update_exps(msgs.sqrt().numpy())
         
-        var_ratios = np.array(sampler.G.get_var_ratios())
+        var_ratios_ours = np.array(sampler.G.get_var_ratios())
         
-        print("\n\t\t\t\t\t\t(our_var / opt_var): mean {:.2f} ± {:.2f}, median: {:.2f}, range: [{:.2f}, {:.2f}]".format(var_ratios.mean(), var_ratios.std(), np.median(var_ratios), var_ratios.min(),
-            var_ratios.max()))
+        print("\n\t\t\t\t\t\t(our_var / opt_var): mean {:.2f} ± {:.2f}, median: {:.2f}, range: [{:.2f}, {:.2f}]".format(var_ratios_ours.mean(), var_ratios_ours.std(), np.median(var_ratios_ours), var_ratios_ours.min(),
+            var_ratios_ours.max()))
 
-        var_ratios = np.array(sampler.G.get_var_ratios_unif())
-        print("\t\t\t\t\t\t(our_var / uni_var): mean {:.2f} ± {:.2f}, median: {:.2f}, range: [{:.2f}, {:.2f}]\n".format(var_ratios.mean(), var_ratios.std(), np.median(var_ratios), var_ratios.min(),
-            var_ratios.max()))
+        var_ratios_unif = np.array(sampler.G.get_var_ratios_unif())
+        print("\t\t\t\t\t\t(our_var / uni_var): mean {:.2f} ± {:.2f}, median: {:.2f}, range: [{:.2f}, {:.2f}]\n".format(var_ratios_unif.mean(), var_ratios_unif.std(), np.median(var_ratios_unif), var_ratios_unif.min(),
+            var_ratios_unif.max()))
 
-        return self.compute_log_probabilities(log_b0, log_b_, sampler.deg)
+        var_ratios_unif_to_opt = np.array(sampler.G.get_var_ratios_unif_to_opt())
+
+        return self.compute_log_probabilities(log_b0, log_b_, sampler.deg), \
+            var_ratios_ours.mean(), var_ratios_unif.mean(), var_ratios_unif_to_opt.mean()
 
 
 class FullgraphSampler:
