@@ -1,10 +1,14 @@
 # Graph Belief Propagation Networks
+
+The graph belief propagation networks is a family of interpretable graph neural networks for node classification.
+One notable advantage is that they oftentimes converge to a stationary solution, as shown below.
+
 ![GBPN performance on PubMed](figs/demo.png)
+
+
+## Environment
+
 The implementations in this repository are tested under Python 3.8, PyTorch version 1.6.0, and Cuda 10.2.
-
-
-## Requirements
-
 To setup the environment, simply run the following:
 
 ```setup
