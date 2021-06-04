@@ -6,7 +6,7 @@ They are accurate, interpretable, and converge to a stationary solution as the n
 ![GBPN performance on PubMed](figs/demo.svg)
 
 
-## Environment
+## Environment Setup
 
 The implementations in this repository are tested under Python 3.8, PyTorch version 1.6.0, and Cuda 10.2.
 To setup the environment, simply run the following:
@@ -16,15 +16,15 @@ bash install_requirements.sh
 ```
 
 This command installs PyTorch Geometric, and compiles the sub-sampling algorithm written in C++.
-Note PyTorch Geometric may fail to initialize if there are multiple versions of PyTorch installed ([issue](https://github.com/rusty1s/pytorch_geometric/issues/999)).
+Note PyTorch Geometric may fail to initialize ([issue](https://github.com/rusty1s/pytorch_geometric/issues/999)) if there are multiple versions of PyTorch installed.
 Therefore, we highly recommend the users to start with a new conda environment.
 
-## Training
+## Basic Usage
 
-To train the model(s) in the paper, run this command:
+A GBPN model can be defined in the same way as any PyTorch Module.
 
-```train
-python train.py --input-data <path_to_data> --alpha 10 --beta 20
+```model definition
+model = GBPN(num_features, num_classes, dim_hidden=dim_hidden, num_layers=num_layers, activation=nn.ReLU(), dropout_p=dropout_p, lossfunc_BP=0, deg_scaling=False, learn_H=True)
 ```
 
 >📋  Describe how to train the models, with example commands on how to train the models in your paper, including the full training procedure and appropriate hyperparameters.
