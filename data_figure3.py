@@ -105,7 +105,7 @@ def evaluation(num_hops=2):
     return train_accuracy, val_accuracy, test_accuracy
 
 
-run_demo = False
+run_demo = True
 if run_demo:
     optimal_val_accuracy = 0.0
     optimal_test_accuracy = 0.0
