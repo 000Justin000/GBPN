@@ -49,7 +49,7 @@ To reproduce results for a particular dataset (e.g. sexual interaction):
 ```bash
 make device="cuda" run_Sex
 ```
-which gives:
+which gives (in 10 minutes):
 
 | Model      | MLP    | GCN   | SAGE  | GAT   | GBPN-I | GBPN  |
 | ---------- |------- | ----- | ----- | ----- | ------ | ----- |
