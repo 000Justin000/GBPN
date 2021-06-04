@@ -33,11 +33,12 @@ ours=true
 
 if [ "$uniform" = true ] ; then
 	# Uniform sampling
-	python main.py --dataset OGBN_arXiv --model_name GBPN --dim_hidden 256 --num_layers 2 --num_hops 1 --num_samples   1 --dropout_p 0.1 --device cuda --learning_rate 1.0e-3 --num_epoches $num_epochs --num_trials  $num_trials --initskip_BP 0.00 --lossfunc_BP 0 --learn_H --verbose
+	python main.py --dataset OGBN_arXiv --model_name GBPN --dim_hidden 256 --num_layers 2 --num_hops 1 --num_samples   1 --dropout_p 0.1 --device cuda --learning_rate 1.0e-3 --num_epoches $num_epochs --num_trials  $num_trials --initskip_BP 0.00 --lossfunc_BP 0 --learn_H --verbose --develop
 fi
 if [ "$ours" = true ] ; then
 	# Importance sampling
-	python main.py --dataset OGBN_arXiv --model_name GBPN --dim_hidden 256 --num_layers 2 --num_hops 1 --num_samples   1 --dropout_p 0.1 --device cuda --learning_rate 1.0e-3 --num_epoches $num_epochs --num_trials  $num_trials --initskip_BP 0.00 --lossfunc_BP 0 --learn_H --verbose --imp_sampling --deg_scaling --develop
+	#python main.py --dataset OGBN_arXiv --model_name GBPN --dim_hidden 256 --num_layers 2 --num_hops 1 --num_samples   1 --dropout_p 0.1 --device cuda --learning_rate 1.0e-3 --num_epoches $num_epochs --num_trials  $num_trials --initskip_BP 0.00 --lossfunc_BP 0 --learn_H --verbose --imp_sampling --deg_scaling --develop
+	python main.py --dataset OGBN_arXiv --model_name GBPN --dim_hidden 256 --num_layers 2 --num_hops 1 --num_samples   1 --dropout_p 0.1 --device cuda --learning_rate 1.0e-3 --num_epoches $num_epochs --num_trials  $num_trials --initskip_BP 0.00 --lossfunc_BP 0 --learn_H --verbose --imp_sampling --develop
 fi
 
 exit 0
