@@ -25,7 +25,8 @@ A GBPN model consists of a MLP that maps features on each node to its self-poten
 It can be defined in the same way as any PyTorch Module.
 
 ```python
-model = GBPN(num_features, num_classes, dim_hidden=dim_hidden, num_layers=num_layers, activation=nn.ReLU(), dropout_p=dropout_p, lossfunc_BP=0, deg_scaling=False, learn_H=True)
+model = GBPN(num_features, num_classes, dim_hidden=dim_hidden, num_layers=num_layers, 
+             activation=nn.ReLU(), dropout_p=dropout_p, lossfunc_BP=0, deg_scaling=False, learn_H=True)
 ```
 
 In this example, _num\_features_ is the input dimension of the MLP, _num\_classes_ is the output dimension, _dim\_hidden_ is the number of units per hidden layer, and _num\_layers_ is the number of hidden layers.
