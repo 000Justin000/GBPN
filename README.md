@@ -21,11 +21,15 @@ Therefore, we highly recommend the users to start with a new conda environment.
 
 ## Basic Usage
 
-A GBPN model can be defined in the same way as any PyTorch Module.
+A GBPN model consists of a MLP that maps features on each node to its self-potential, and a coupling matrix.
+It can be defined in the same way as any PyTorch Module.
 
-```model definition
+```python
 model = GBPN(num_features, num_classes, dim_hidden=dim_hidden, num_layers=num_layers, activation=nn.ReLU(), dropout_p=dropout_p, lossfunc_BP=0, deg_scaling=False, learn_H=True)
 ```
+
+Here, _num\_features_
+
 
 >📋  Describe how to train the models, with example commands on how to train the models in your paper, including the full training procedure and appropriate hyperparameters.
 
