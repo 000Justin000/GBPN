@@ -28,10 +28,13 @@ It can be defined in the same way as any PyTorch Module.
 model = GBPN(num_features, num_classes, dim_hidden=dim_hidden, num_layers=num_layers, activation=nn.ReLU(), dropout_p=dropout_p, lossfunc_BP=0, deg_scaling=False, learn_H=True)
 ```
 
-Here, the MLP has input dimension = _num\_features_, output dimension = _num\_classes_, hidden dimension = _dim\_hidden_, and number of hidden layers = _num\_layers_.
+In this example, _num\_features_ is the input dimension of the MLP, _num\_classes_ is the output dimension, _dim\_hidden_ is the number of units per hidden layer, and _num\_layers_ is the number of hidden layers.
+After defining the model, we can run GBPN inference as:
 
-
->📋  Describe how to train the models, with example commands on how to train the models in your paper, including the full training procedure and appropriate hyperparameters.
+```python
+log_b = model(x, edge_index, edge_weight=edge_weight, edge_rv=edge_rv, deg=deg, deg_ori=deg, K=5)
+```
+Here, _K_ controls the number of belief propagation steps.
 
 ## Evaluation
 
