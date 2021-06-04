@@ -1,7 +1,5 @@
 # Graph Belief Propagation Networks
 
-This repository is the official implementation of Graph Belief Propagation Networks. 
-
 ## Requirements
 
 To install requirements:
