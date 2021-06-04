@@ -39,36 +39,21 @@ log_b = model(x, edge_index, edge_weight=edge_weight, edge_rv=edge_rv, deg=deg, 
 ```
 Here, _K_ controls the number of belief propagation steps.
 
-## Evaluation
-
-To evaluate my model on ImageNet, run:
-
-```eval
-python eval.py --model-file mymodel.pth --benchmark imagenet
+## Reproducing Results in the Paper
+To reproduce our main experimental results, one can simply run:
+```bash
+bash run.sh
 ```
+which runs GBPN and baselines on all datasets.
+To reproduce results for a particular dataset (e.g. sexual interaction), use:
+```bash
+make device="cuda" run_Sex
+```
+which gives:
 
->📋  Describe how to evaluate the trained models on benchmarks reported in the paper, give commands that produce the results (section below).
-
-## Pre-trained Models
-
-You can download pretrained models here:
-
-- [My awesome model](https://drive.google.com/mymodel.pth) trained on ImageNet using parameters x,y,z. 
-
->📋  Give a link to where/how the pretrained models can be downloaded and how they were trained (if applicable).  Alternatively you can have an additional column in your results table with a link to the models.
-
-## Results
-
-Our model achieves the following performance on :
-
-### [Image Classification on ImageNet](https://paperswithcode.com/sota/image-classification-on-imagenet)
-
-| Model name         | Top 1 Accuracy  | Top 5 Accuracy |
-| ------------------ |---------------- | -------------- |
-| My awesome model   |     85%         |      95%       |
-
->📋  Include a table of results from your paper, and link back to the leaderboard for clarity and context. If your main result is a figure, include that figure and link to the command or notebook to reproduce it. 
-
+| Model      | MLP    | GCN   | SAGE  | GAT   | GBPN-I | GBPN  |
+| ---------- |------- | ----- | ----- | ----- | ------ | ----- |
+| accuracy   | 74.5%  | 83.9% | 93.3% | 93.6% | 97.1%  | 97.4% |
 
 ## Contributing
 
