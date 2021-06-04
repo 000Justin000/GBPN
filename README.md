@@ -55,6 +55,5 @@ which gives:
 | ---------- |------- | ----- | ----- | ----- | ------ | ----- |
 | accuracy   | 74.5%  | 83.9% | 93.3% | 93.6% | 97.1%  | 97.4% |
 
-## Contributing
-
->📋  Pick a licence and describe how to contribute to your code repository. 
+## License
+This project is release under the GNU GENERAL PUBLIC LICENSE.
