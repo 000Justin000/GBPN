@@ -653,11 +653,6 @@ def process_edge_index(num_nodes, edge_index, edge_attr=None):
     return edge_index, (None if edge_attr is None else edge_attr[...,od]), edge_rv
 
 
-def load_snap(name='ego-gplus', transform=None, split=None):
-    data = SNAPDataset(root='datasets', name=name)[0]
-    pass
-
-
 def load_citation(name='Cora', transform=None, split=None):
     data = Planetoid(root='datasets', name=name)[0]
     num_nodes = data.x.shape[0]
@@ -693,43 +688,41 @@ def load_coauthor(name='CS', transform=None, split=[0.3, 0.2, 0.5]):
     return data if (transform is None) else transform(data)
 
 
-def load_reddit(transform=None, split=[0.3, 0.2, 0.5]):
-    data = Reddit(root='datasets')[0]
-    num_nodes = data.x.shape[0]
+def load_ising(transform=None, split=[0.3, 0.2, 0.5], interaction='+', dataset_id=0):
+    edge_index = torch.tensor((pd.read_csv('datasets/ising{}/adj'.format(interaction), sep='\t', header=None)-1).to_numpy().T)
+    features = torch.tensor(pd.read_csv('datasets/ising{}/coord'.format(interaction), sep='\t', header=None).to_numpy(), dtype=torch.float32)
+    labels = torch.tensor(pd.read_csv('datasets/ising{}/label'.format(interaction), sep='\t', header=None).to_numpy(), dtype=torch.int64)[:,dataset_id]
+    labels[labels == -1] = 0
 
-    assert len(split) == 3
+    num_nodes = features.shape[0]
     train_idx, val_idx, test_idx = rand_split(num_nodes, split)
     train_idx, val_idx, test_idx = torch.tensor(train_idx), torch.tensor(val_idx), torch.tensor(test_idx)
 
-    data.train_mask = torch.zeros(num_nodes, dtype=bool).scatter_(0, train_idx, True)
-    data.val_mask = torch.zeros(num_nodes, dtype=bool).scatter_(0, val_idx, True)
-    data.test_mask = torch.zeros(num_nodes, dtype=bool).scatter_(0, test_idx, True)
+    data = Data(x=features, y=labels, edge_index=edge_index)
+    data.train_mask = torch.zeros(num_nodes, dtype=torch.bool).scatter_(0, train_idx, True)
+    data.val_mask = torch.zeros(num_nodes, dtype=torch.bool).scatter_(0, val_idx, True)
+    data.test_mask = torch.zeros(num_nodes, dtype=torch.bool).scatter_(0, test_idx, True)
 
-    data.edge_index, data.edge_weight, data.edge_rv = process_edge_index(num_nodes, data.edge_index, data.edge_weight if hasattr(data, 'edge_weight') else None)
+    data.edge_index, data.edge_weight, data.edge_rv = process_edge_index(num_nodes, data.edge_index, None)
 
     return data if (transform is None) else transform(data)
 
 
-def load_wikipedia(name='Squirrel', transform=None, split=0):
-    data = WikipediaNetwork(root='datasets', name=name)[0]
-    num_nodes = data.x.shape[0]
+def load_mrf(transform=None, split=[0.3, 0.2, 0.5], interaction='+', dataset_id=0):
+    edge_index = torch.tensor((pd.read_csv('datasets/mrf{}/adj'.format(interaction), sep='\t', header=None)-1).to_numpy().T)
+    features = torch.tensor(pd.read_csv('datasets/mrf{}/coord'.format(interaction), sep='\t', header=None).to_numpy(), dtype=torch.float32)
+    labels = torch.tensor(pd.read_csv('datasets/mrf{}/label'.format(interaction), sep='\t', header=None).to_numpy(), dtype=torch.int64)[:,dataset_id]
 
-    if type(split) == int:
-        data.train_mask = data.train_mask[:, split]
-        data.val_mask = data.val_mask[:, split]
-        data.test_mask = data.test_mask[:, split]
-    elif type(split) == list:
-        assert len(split) == 3
-        train_idx, val_idx, test_idx = rand_split(num_nodes, split)
-        train_idx, val_idx, test_idx = torch.tensor(train_idx), torch.tensor(val_idx), torch.tensor(test_idx)
+    num_nodes = features.shape[0]
+    train_idx, val_idx, test_idx = rand_split(num_nodes, split)
+    train_idx, val_idx, test_idx = torch.tensor(train_idx), torch.tensor(val_idx), torch.tensor(test_idx)
 
-        data.train_mask = torch.zeros(num_nodes, dtype=bool).scatter_(0, train_idx, True)
-        data.val_mask = torch.zeros(num_nodes, dtype=bool).scatter_(0, val_idx, True)
-        data.test_mask = torch.zeros(num_nodes, dtype=bool).scatter_(0, test_idx, True)
+    data = Data(x=features, y=labels, edge_index=edge_index)
+    data.train_mask = torch.zeros(num_nodes, dtype=torch.bool).scatter_(0, train_idx, True)
+    data.val_mask = torch.zeros(num_nodes, dtype=torch.bool).scatter_(0, val_idx, True)
+    data.test_mask = torch.zeros(num_nodes, dtype=torch.bool).scatter_(0, test_idx, True)
 
-    data.edge_index, data.edge_weight, data.edge_rv = process_edge_index(num_nodes, data.edge_index, data.edge_weight if hasattr(data, 'edge_weight') else None)
-
-    data.y = data.y.long()
+    data.edge_index, data.edge_weight, data.edge_rv = process_edge_index(num_nodes, data.edge_index, None)
 
     return data if (transform is None) else transform(data)
 
@@ -782,60 +775,6 @@ def load_sexual_interaction(transform=None, split=[0.3, 0.2, 0.5]):
     return data if (transform is None) else transform(data)
 
 
-def load_animal2(homo_ratio=0.5, transform=None, split=[0.3, 0.2, 0.5]):
-    cat_images = torch.load('datasets/animal2/cat_images.pt')
-    dog_images = torch.load('datasets/animal2/dog_images.pt')
-
-    x = torch.cat((cat_images, dog_images), dim=0)
-    y = torch.cat((torch.zeros(cat_images.shape[0], dtype=torch.int64), torch.ones(dog_images.shape[0], dtype=torch.int64)), dim=0)
-    edge_index = stochastic_blockmodel_graph([cat_images.shape[0], dog_images.shape[0]],
-                                             torch.tensor([[homo_ratio, 1.0-homo_ratio],
-                                                           [1.0-homo_ratio, homo_ratio]])*0.003)
-
-    data = Data(x=x, y=y, edge_index=edge_index)
-    num_nodes = data.x.shape[0]
-    assert len(split) == 3
-    train_idx, val_idx, test_idx = rand_split(num_nodes, split)
-    train_idx, val_idx, test_idx = torch.tensor(train_idx), torch.tensor(val_idx), torch.tensor(test_idx)
-
-    data.train_mask = torch.zeros(num_nodes, dtype=bool).scatter_(0, train_idx, True)
-    data.val_mask = torch.zeros(num_nodes, dtype=bool).scatter_(0, val_idx, True)
-    data.test_mask = torch.zeros(num_nodes, dtype=bool).scatter_(0, test_idx, True)
-
-    data.edge_index, data.edge_weight, data.edge_rv = process_edge_index(num_nodes, data.edge_index, None)
-
-    return data if (transform is None) else transform(data)
-
-
-def load_animal3(homo_ratio=0.5, transform=None, split=[0.3, 0.2, 0.5]):
-    cat_images = torch.load('datasets/animal3/cat_images.pt')
-    dog_images = torch.load('datasets/animal3/dog_images.pt')
-    panda_images = torch.load('datasets/animal3/panda_images.pt')
-
-    x = torch.cat((cat_images, dog_images, panda_images), dim=0)
-    y = torch.cat((torch.zeros(cat_images.shape[0], dtype=torch.int64),
-                   torch.ones(dog_images.shape[0], dtype=torch.int64),
-                   torch.ones(panda_images.shape[0], dtype=torch.int64)*2), dim=0)
-    edge_index = stochastic_blockmodel_graph([cat_images.shape[0], dog_images.shape[0], panda_images.shape[0]],
-                                             torch.tensor([[homo_ratio, 1.0-homo_ratio, 1.0-homo_ratio],
-                                                           [1.0-homo_ratio, homo_ratio, 1.0-homo_ratio],
-                                                           [1.0-homo_ratio, 1.0-homo_ratio, homo_ratio]])*0.025)
-
-    data = Data(x=x, y=y, edge_index=edge_index)
-    num_nodes = data.x.shape[0]
-    assert len(split) == 3
-    train_idx, val_idx, test_idx = rand_split(num_nodes, split)
-    train_idx, val_idx, test_idx = torch.tensor(train_idx), torch.tensor(val_idx), torch.tensor(test_idx)
-
-    data.train_mask = torch.zeros(num_nodes, dtype=bool).scatter_(0, train_idx, True)
-    data.val_mask = torch.zeros(num_nodes, dtype=bool).scatter_(0, val_idx, True)
-    data.test_mask = torch.zeros(num_nodes, dtype=bool).scatter_(0, test_idx, True)
-
-    data.edge_index, data.edge_weight, data.edge_rv = process_edge_index(num_nodes, data.edge_index, data.edge_weight if hasattr(data, 'edge_weight') else None)
-
-    return data if (transform is None) else transform(data)
-
-
 def load_ogbn(name='products', transform=None, split=None):
     dataset = PygNodePropPredDataset(root='datasets', name='ogbn-{}'.format(name))
     num_nodes = dataset[0].x.shape[0]
@@ -855,6 +794,35 @@ def load_ogbn(name='products', transform=None, split=None):
     data.test_mask = torch.zeros(num_nodes, dtype=bool).scatter_(0, test_idx, True)
 
     data.edge_index, data.edge_weight, data.edge_rv = process_edge_index(num_nodes, data.edge_index, data.edge_weight if hasattr(data, 'edge_weight') else None)
+
+    return data if (transform is None) else transform(data)
+
+
+def load_elliptic_bitcoin(transform=None, split=None):
+    dat = pd.read_csv('datasets/aml/elliptic/elliptic_txs_features.csv', header=None).sort_values(0)
+    cls = pd.read_csv('datasets/aml/elliptic/elliptic_txs_classes.csv', header=0).sort_values('txId')
+    edge_ids = pd.read_csv('datasets/aml/elliptic/elliptic_txs_edgelist.csv', header=0)
+
+    assert (dat[0] == cls['txId']).all()
+    id2num = dict(map(reversed, enumerate(dat[0])))
+
+    features = torch.tensor(dat.iloc[:, 2:].to_numpy(), dtype=torch.float32)
+    labels = torch.tensor(list(map(lambda x: -1 if (x == 'unknown') else (0 if x == '2' else 1), cls['class'])))
+
+    edge_num1 = list(map(lambda x: id2num[x], edge_ids['txId1']))
+    edge_num2 = list(map(lambda x: id2num[x], edge_ids['txId2']))
+    edge_index = torch.stack((torch.tensor(edge_num1), torch.tensor(edge_num2)), dim=0)
+
+    num_nodes = features.shape[0]
+    train_idx, val_idx, test_idx = rand_split(num_nodes, split)
+    train_idx, val_idx, test_idx = torch.tensor(train_idx), torch.tensor(val_idx), torch.tensor(test_idx)
+
+    data = Data(x=features, y=labels, edge_index=edge_index)
+    data.train_mask = torch.zeros(num_nodes, dtype=torch.bool).scatter_(0, train_idx, True) & (labels != -1)
+    data.val_mask = torch.zeros(num_nodes, dtype=torch.bool).scatter_(0, val_idx, True) & (labels != -1)
+    data.test_mask = torch.zeros(num_nodes, dtype=torch.bool).scatter_(0, test_idx, True) & (labels != -1)
+
+    data.edge_index, data.edge_weight, data.edge_rv = process_edge_index(num_nodes, data.edge_index, None)
 
     return data if (transform is None) else transform(data)
 
@@ -977,74 +945,6 @@ def preprocess_gnn_jpmc_payment(feature, label, info, transform=None, split=[0.3
     data.train_mask = torch.zeros(num_nodes, dtype=bool).scatter(0, torch.tensor(train_idx), True)
     data.val_mask = torch.zeros(num_nodes, dtype=bool).scatter(0, torch.tensor(val_idx), True)
     data.test_mask = torch.zeros(num_nodes, dtype=bool).scatter(0, torch.tensor(test_idx), True)
-
-    data.edge_index, data.edge_weight, data.edge_rv = process_edge_index(num_nodes, data.edge_index, None)
-
-    return data if (transform is None) else transform(data)
-
-
-def load_elliptic_bitcoin(transform=None, split=None):
-    dat = pd.read_csv('datasets/aml/elliptic/elliptic_txs_features.csv', header=None).sort_values(0)
-    cls = pd.read_csv('datasets/aml/elliptic/elliptic_txs_classes.csv', header=0).sort_values('txId')
-    edge_ids = pd.read_csv('datasets/aml/elliptic/elliptic_txs_edgelist.csv', header=0)
-
-    assert (dat[0] == cls['txId']).all()
-    id2num = dict(map(reversed, enumerate(dat[0])))
-
-    features = torch.tensor(dat.iloc[:, 2:].to_numpy(), dtype=torch.float32)
-    labels = torch.tensor(list(map(lambda x: -1 if (x == 'unknown') else (0 if x == '2' else 1), cls['class'])))
-
-    edge_num1 = list(map(lambda x: id2num[x], edge_ids['txId1']))
-    edge_num2 = list(map(lambda x: id2num[x], edge_ids['txId2']))
-    edge_index = torch.stack((torch.tensor(edge_num1), torch.tensor(edge_num2)), dim=0)
-
-    num_nodes = features.shape[0]
-    train_idx, val_idx, test_idx = rand_split(num_nodes, split)
-    train_idx, val_idx, test_idx = torch.tensor(train_idx), torch.tensor(val_idx), torch.tensor(test_idx)
-
-    data = Data(x=features, y=labels, edge_index=edge_index)
-    data.train_mask = torch.zeros(num_nodes, dtype=torch.bool).scatter_(0, train_idx, True) & (labels != -1)
-    data.val_mask = torch.zeros(num_nodes, dtype=torch.bool).scatter_(0, val_idx, True) & (labels != -1)
-    data.test_mask = torch.zeros(num_nodes, dtype=torch.bool).scatter_(0, test_idx, True) & (labels != -1)
-
-    data.edge_index, data.edge_weight, data.edge_rv = process_edge_index(num_nodes, data.edge_index, None)
-
-    return data if (transform is None) else transform(data)
-
-
-def load_ising(transform=None, split=[0.3, 0.2, 0.5], interaction='+', dataset_id=0):
-    edge_index = torch.tensor((pd.read_csv('datasets/ising{}/adj'.format(interaction), sep='\t', header=None)-1).to_numpy().T)
-    features = torch.tensor(pd.read_csv('datasets/ising{}/coord'.format(interaction), sep='\t', header=None).to_numpy(), dtype=torch.float32)
-    labels = torch.tensor(pd.read_csv('datasets/ising{}/label'.format(interaction), sep='\t', header=None).to_numpy(), dtype=torch.int64)[:,dataset_id]
-    labels[labels == -1] = 0
-
-    num_nodes = features.shape[0]
-    train_idx, val_idx, test_idx = rand_split(num_nodes, split)
-    train_idx, val_idx, test_idx = torch.tensor(train_idx), torch.tensor(val_idx), torch.tensor(test_idx)
-
-    data = Data(x=features, y=labels, edge_index=edge_index)
-    data.train_mask = torch.zeros(num_nodes, dtype=torch.bool).scatter_(0, train_idx, True)
-    data.val_mask = torch.zeros(num_nodes, dtype=torch.bool).scatter_(0, val_idx, True)
-    data.test_mask = torch.zeros(num_nodes, dtype=torch.bool).scatter_(0, test_idx, True)
-
-    data.edge_index, data.edge_weight, data.edge_rv = process_edge_index(num_nodes, data.edge_index, None)
-
-    return data if (transform is None) else transform(data)
-
-
-def load_mrf(transform=None, split=[0.3, 0.2, 0.5], interaction='+', dataset_id=0):
-    edge_index = torch.tensor((pd.read_csv('datasets/mrf{}/adj'.format(interaction), sep='\t', header=None)-1).to_numpy().T)
-    features = torch.tensor(pd.read_csv('datasets/mrf{}/coord'.format(interaction), sep='\t', header=None).to_numpy(), dtype=torch.float32)
-    labels = torch.tensor(pd.read_csv('datasets/mrf{}/label'.format(interaction), sep='\t', header=None).to_numpy(), dtype=torch.int64)[:,dataset_id]
-
-    num_nodes = features.shape[0]
-    train_idx, val_idx, test_idx = rand_split(num_nodes, split)
-    train_idx, val_idx, test_idx = torch.tensor(train_idx), torch.tensor(val_idx), torch.tensor(test_idx)
-
-    data = Data(x=features, y=labels, edge_index=edge_index)
-    data.train_mask = torch.zeros(num_nodes, dtype=torch.bool).scatter_(0, train_idx, True)
-    data.val_mask = torch.zeros(num_nodes, dtype=torch.bool).scatter_(0, val_idx, True)
-    data.test_mask = torch.zeros(num_nodes, dtype=torch.bool).scatter_(0, test_idx, True)
 
     data.edge_index, data.edge_weight, data.edge_rv = process_edge_index(num_nodes, data.edge_index, None)
 
