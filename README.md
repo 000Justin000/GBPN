@@ -2,6 +2,8 @@
 
 The implementations in this repository are tested under Python 3.8, PyTorch version 1.6.0, and Cuda 10.2.
 
+![GBPN performance on PubMed](figs/demo.png)
+
 ## Requirements
 
 To setup the environment, simply run the following:
