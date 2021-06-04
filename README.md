@@ -1,7 +1,7 @@
 # Graph Belief Propagation Networks
 
 The graph belief propagation networks is a family of interpretable graph neural networks for node classification.
-One notable advantage is that they oftentimes converge to a stationary solution, as shown below.
+One notable advantage is they often converge to a stationary solution as illustrated below.
 
 ![GBPN performance on PubMed](figs/demo.png)
 
