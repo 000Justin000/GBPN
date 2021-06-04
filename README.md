@@ -16,6 +16,8 @@ bash install_requirements.sh
 ```
 
 This command installs PyTorch Geometric, and compiles the sub-sampling algorithm written in C++.
+Note PyTorch Geometric may fail to initialize if there are multiple versions of PyTorch installed ([issue](https://github.com/rusty1s/pytorch_geometric/issues/999)).
+Therefore, we highly recommend the users to start with a new conda environment.
 
 ## Training
 
