@@ -1,16 +1,16 @@
 # Graph Belief Propagation Networks
 
-The implementations in this repository are tested under python 3.8.
+The implementations in this repository are tested under Python 3.8, PyTorch version 1.6.0, and Cuda 10.2.
 
-## Installation
+## Requirements
 
-To install requirements:
+To setup the environment, simply run the following:
 
 ```setup
 bash install_requirements.sh
 ```
 
->📋  Describe how to set up the environment, e.g. pip/conda/docker commands, download datasets, etc...
+This command installs PyTorch Geometric, and compiles the sub-sampling algorithm we use, which is written in C++.
 
 ## Training
 
