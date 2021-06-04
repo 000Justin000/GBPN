@@ -461,6 +461,8 @@ if not os.path.exists(figures_dir):
     os.makedirs(figures_dir)
 
 title = (args.dataset).split('_', 1)[0]
+if 'arXiv' in args.dataset:
+    title = 'arXiv'
 
 std_ours = np.std(var_ratios_ours, axis=0)
 

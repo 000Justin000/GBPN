@@ -370,10 +370,10 @@ class GBPN(nn.Module):
 
         if self.deg_scaling and (deg is not None):
             # number of samples
-            denom = deg[edge_index[1]]
+            #denom = deg[edge_index[1]]
 
             # N(i)
-            #denom = deg_ori[edge_index[1]]
+            denom = deg_ori[edge_index[1]]
 
             denom[denom < 1] = 1.0
             msg_scaling = edge_scaling[subgraph_edge_oid] / denom
