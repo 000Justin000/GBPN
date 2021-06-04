@@ -1,13 +1,13 @@
 # Graph Belief Propagation Networks
 
-This repository is the official implementation of Graph Belief Propagation Networks. 
+The implementations in this repository are tested under python 3.8.
 
-## Requirements
+## Installation
 
 To install requirements:
 
 ```setup
-pip install -r requirements.txt
+bash install_requirements.sh
 ```
 
 >📋  Describe how to set up the environment, e.g. pip/conda/docker commands, download datasets, etc...
