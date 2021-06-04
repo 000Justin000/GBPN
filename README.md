@@ -2,7 +2,7 @@
 
 The graph belief propagation networks (GBPNs) is a family of graph neural networks models for node classification.
 They are accurate, interpretable, and converge to a stationary solution as the number of BP steps increase.
-On a high level, a GBPN first predicts the initial class probabilities for each node using its features (with a MLP), then runs belief propagation to iteratively correct the predictions.
+On a high level, a GBPN first predicts an initial probabilities for each node's label using its features (with a MLP), then runs belief propagation to iteratively refine/correct the predictions.
 
 ![GBPN performance on PubMed](figs/demo.svg)
 
