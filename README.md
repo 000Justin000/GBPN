@@ -10,7 +10,7 @@ To setup the environment, simply run the following:
 bash install_requirements.sh
 ```
 
-This command installs PyTorch Geometric, and compiles the sub-sampling algorithm we use, which is written in C++.
+This command installs PyTorch Geometric, and compiles the sub-sampling algorithm written in C++.
 
 ## Training
 
