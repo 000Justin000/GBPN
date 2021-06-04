@@ -45,7 +45,7 @@ To reproduce our main experimental results, one can simply run:
 bash run.sh
 ```
 which runs GBPN and baselines on all datasets.
-To reproduce results for a particular dataset (e.g. sexual interaction), use:
+To reproduce results for a particular dataset (e.g. sexual interaction):
 ```bash
 make device="cuda" run_Sex
 ```
