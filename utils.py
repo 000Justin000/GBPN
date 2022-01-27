@@ -649,7 +649,7 @@ def get_undirected(num_nodes, edge_index, edge_attr):
     return edge_index, edge_attr
 
 def sort_edge(num_nodes, edge_index, sort_by_row=True):
-    assert 0 <= edge_index.min() and edge_index.max() <= num_nodes-1
+    assert (edge_index.shape[1] == 0) or (0 <= edge_index.min()) and (edge_index.max() <= num_nodes-1)
     idx = edge_index[1-int(sort_by_row)]*num_nodes+edge_index[int(sort_by_row)]
     perm = idx.argsort()
     return edge_index[:, perm], perm
