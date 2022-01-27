@@ -13,7 +13,7 @@ from torch_sparse import SparseTensor, coalesce, cat
 from torch_geometric.nn import MessagePassing
 from torch_geometric.nn import GCNConv, SAGEConv, GATConv
 from torch_geometric.nn.conv.gcn_conv import gcn_norm
-from torch_geometric.utils import degree, subgraph, remove_self_loops, to_undirected, contains_self_loops, is_undirected, stochastic_blockmodel_graph, k_hop_subgraph
+from torch_geometric.utils import degree, subgraph, remove_self_loops, to_undirected, contains_self_loops, stochastic_blockmodel_graph, k_hop_subgraph
 from torch_geometric.data import Data
 from torch_geometric.data import ClusterData
 from torch_geometric.datasets import Planetoid, SNAPDataset, Coauthor, WikipediaNetwork, Reddit, Reddit2
@@ -551,7 +551,9 @@ class ClusterSampler:
                 assert torch.all(self.cluster_data.perm[subgraph_nodes[subgraph_edge_index.reshape(-1)]] == self.edge_index[:,subgraph_edge_oid].reshape(-1))
 
                 subgraph_edge_index, subgraph_edge_oid, subgraph_edge_rv = process_edge_index(subgraph_nodes.shape[0], subgraph_edge_index, subgraph_edge_oid)
-                subgraph_edge_weight = self.cluster_data.data.edge_weight[subgraph_edge_oid]
+                # subgraph_edge_weight = self.cluster_data.data.edge_weight[subgraph_edge_oid]
+                subgraph_deg = degree(subgraph_edge_index[1], subgraph_size)
+                subgraph_edge_weight = (subgraph_deg[subgraph_edge_index[0]] * subgraph_deg[subgraph_edge_index[1]]) ** -0.5 * subgraph_deg.mean()
 
                 yield batch_size, batch_nodes.to(device), self.cluster_data.data.x[batch_nodes].to(device), self.cluster_data.data.y[batch_nodes].to(device), self.cluster_data.data.deg[batch_nodes].to(device), \
                       subgraph_size, subgraph_nodes.to(device), self.cluster_data.data.x[subgraph_nodes].to(device), self.cluster_data.data.y[subgraph_nodes].to(device), self.cluster_data.data.deg[subgraph_nodes].to(device), \
@@ -627,27 +629,32 @@ def simplex_coordinates_test(m):
     print(torch.mm(x, x.transpose(0,1)))
 
 
+def is_undirected(num_nodes, edge_index):
+    edge_index_rc, _ = sort_edge(num_nodes, edge_index, True)
+    edge_index_cr, _ = sort_edge(num_nodes, edge_index, False)
+    return torch.all(edge_index_rc[0] == edge_index_cr[1]) and torch.all(edge_index_rc[1] == edge_index_cr[0])
+
+def get_undirected(num_nodes, edge_index, edge_attr):
+    row, col = edge_index
+    row, col = torch.cat([row, col], dim=0), torch.cat([col, row], dim=0)
+    edge_attr = None if (edge_attr is None) else torch.cat([edge_attr, edge_attr], dim=0)
+    edge_index = torch.stack([row, col], dim=0)
+    edge_index, edge_attr = coalesce(edge_index, edge_attr, num_nodes, num_nodes, op='max')
+    return edge_index, edge_attr
+
+def sort_edge(num_nodes, edge_index, sort_by_row=True):
+    assert 0 <= edge_index.min() and edge_index.max() <= num_nodes-1
+    idx = edge_index[1-int(sort_by_row)]*num_nodes+edge_index[int(sort_by_row)]
+    perm = idx.argsort()
+    return edge_index[:, perm], perm
+
 def process_edge_index(num_nodes, edge_index, edge_attr=None):
-    def get_undirected(num_nodes, edge_index, edge_attr):
-        row, col = edge_index
-        row, col = torch.cat([row, col], dim=0), torch.cat([col, row], dim=0)
-        edge_attr = None if (edge_attr is None) else torch.cat([edge_attr, edge_attr], dim=0)
-        edge_index = torch.stack([row, col], dim=0)
-        edge_index, edge_attr = coalesce(edge_index, edge_attr, num_nodes, num_nodes, op='max')
-        return edge_index, edge_attr
-
-    def sort_edge(num_nodes, edge_index):
-        idx = edge_index[0]*num_nodes+edge_index[1]
-        sid, perm = idx.sort()
-        assert sid.unique_consecutive().shape == sid.shape
-        return edge_index[:,perm], perm
-
     # process edge_attr
     edge_index, edge_attr = remove_self_loops(edge_index, edge_attr)
-    if (edge_index.shape[1] > 0) and (not is_undirected(edge_index)):
+    if (edge_index.shape[1] > 0) and (not is_undirected(num_nodes, edge_index)):
         edge_index, edge_attr = get_undirected(num_nodes, edge_index, edge_attr)
-    edge_index, od = sort_edge(num_nodes, edge_index)
-    _, edge_rv = sort_edge(num_nodes, edge_index.flip(dims=[0]))
+    edge_index, od = sort_edge(num_nodes, edge_index, True)
+    _, edge_rv = sort_edge(num_nodes, edge_index, False)
     assert torch.all(edge_index[:, edge_rv] == edge_index.flip(dims=[0]))
 
     return edge_index, (None if edge_attr is None else edge_attr[...,od]), edge_rv

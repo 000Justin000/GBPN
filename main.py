@@ -138,7 +138,7 @@ def run(dataset, split, model_name, dim_hidden, num_layers, num_hops, num_sample
         graph_sampler = FullgraphSampler(num_nodes, x, y, edge_index, edge_weight, edge_rv)
         max_batch_size = -1
     elif dataset in ['OGBN_arXiv', 'OGBN_Products', 'JPMC_Payment0', 'JPMC_Payment1', 'Elliptic_Bitcoin']:
-        if model_name in ['LP', 'MLP', 'SAGE', 'GAT', 'GBPN']:
+        if model_name in ['LP', 'MLP', 'SAGE', 'GAT']:
             graph_sampler = SubtreeSampler(num_nodes, x, y, edge_index, edge_weight, edge_rv)
         else:
             graph_sampler = ClusterSampler(num_nodes, x, y, edge_index, edge_weight, edge_rv, train_mask, val_mask, test_mask)
