@@ -405,7 +405,7 @@ class FullgraphSampler:
         self.edge_index = edge_index
         self.edge_weight = edge_weight
         self.edge_rv = edge_rv
-        self.deg = degree(edge_index[1], num_nodes)
+        self.wtdeg = degree(edge_index[1], num_nodes, edge_weight)
 
     def get_generator(self, mask=None, device='cpu', **kwargs):
 
@@ -420,8 +420,8 @@ class FullgraphSampler:
         batch_size = batch_nodes.shape[0]
         subgraph_size = subgraph_nodes.shape[0]
 
-        yield batch_size, batch_nodes.to(device), self.x[batch_nodes].to(device), self.y[batch_nodes].to(device), self.deg[batch_nodes].to(device), \
-              subgraph_size, subgraph_nodes.to(device), self.x[subgraph_nodes].to(device), self.y[subgraph_nodes].to(device), self.deg[subgraph_nodes].to(device), \
+        yield batch_size, batch_nodes.to(device), self.x[batch_nodes].to(device), self.y[batch_nodes].to(device), self.wtdeg[batch_nodes].to(device), \
+              subgraph_size, subgraph_nodes.to(device), self.x[subgraph_nodes].to(device), self.y[subgraph_nodes].to(device), self.wtdeg[subgraph_nodes].to(device), \
               subgraph_edge_index.to(device), subgraph_edge_weight.to(device), subgraph_edge_rv.to(device), subgraph_edge_oid.to(device)
 
 
@@ -437,7 +437,7 @@ class SubtreeSampler:
         self.edge_rv = edge_rv
         self.G = nx.Graph(num_nodes)
         self.G.add_edges_from(torch.cat((edge_index, torch.arange(edge_index.shape[1]).reshape(1,-1)), dim=0).transpose(0,1).numpy())
-        self.deg = degree(edge_index[1], num_nodes)
+        self.wtdeg = degree(edge_index[1], num_nodes, edge_weight)
 
     def get_generator(self, mask=None, shuffle=False, max_batch_size=-1, num_hops=0, num_samples=-1, device='cpu'):
 
@@ -466,8 +466,8 @@ class SubtreeSampler:
             subgraph_edge_index, subgraph_edge_oid, subgraph_edge_rv = process_edge_index(subgraph_nodes.shape[0], subgraph_edge_index, subgraph_edge_oid)
             subgraph_edge_weight = self.edge_weight[subgraph_edge_oid]
 
-            yield batch_size, batch_nodes.to(device), self.x[batch_nodes].to(device), self.y[batch_nodes].to(device), self.deg[batch_nodes].to(device), \
-                  subgraph_size, subgraph_nodes.to(device), self.x[subgraph_nodes].to(device), self.y[subgraph_nodes].to(device), self.deg[subgraph_nodes].to(device), \
+            yield batch_size, batch_nodes.to(device), self.x[batch_nodes].to(device), self.y[batch_nodes].to(device), self.wtdeg[batch_nodes].to(device), \
+                  subgraph_size, subgraph_nodes.to(device), self.x[subgraph_nodes].to(device), self.y[subgraph_nodes].to(device), self.wtdeg[subgraph_nodes].to(device), \
                   subgraph_edge_index.to(device), subgraph_edge_weight.to(device), subgraph_edge_rv.to(device), subgraph_edge_oid.to(device)
 
 
@@ -483,14 +483,14 @@ class ClusterSampler:
         self.edge_rv = edge_rv
         self.G = nx.Graph(num_nodes)
         self.G.add_edges_from(torch.cat((edge_index, torch.arange(edge_index.shape[1]).reshape(1,-1)), dim=0).transpose(0,1).numpy())
-        self.deg = degree(edge_index[1], num_nodes)
+        self.wtdeg = degree(edge_index[1], num_nodes, edge_weight)
 
         data = Data(x=x, y=y, edge_index=edge_index)
         data.train_mask = train_mask
         data.val_mask = val_mask
         data.test_mask = test_mask
         data.edge_weight = edge_weight
-        data.deg = degree(edge_index[1], num_nodes)
+        data.wtdeg = degree(edge_index[1], num_nodes, edge_weight)
         self.cluster_data = ClusterData(data, num_parts=math.ceil(num_nodes / 256), recursive=False)
 
 
@@ -520,8 +520,8 @@ class ClusterSampler:
                 subgraph_edge_index, subgraph_edge_oid, subgraph_edge_rv = process_edge_index(subgraph_nodes.shape[0], subgraph_edge_index, subgraph_edge_oid)
                 subgraph_edge_weight = self.edge_weight[subgraph_edge_oid]
 
-                yield batch_size, batch_nodes.to(device), self.x[batch_nodes].to(device), self.y[batch_nodes].to(device), self.deg[batch_nodes].to(device), \
-                      subgraph_size, subgraph_nodes.to(device), self.x[subgraph_nodes].to(device), self.y[subgraph_nodes].to(device), self.deg[subgraph_nodes].to(device), \
+                yield batch_size, batch_nodes.to(device), self.x[batch_nodes].to(device), self.y[batch_nodes].to(device), self.wtdeg[batch_nodes].to(device), \
+                      subgraph_size, subgraph_nodes.to(device), self.x[subgraph_nodes].to(device), self.y[subgraph_nodes].to(device), self.wtdeg[subgraph_nodes].to(device), \
                       subgraph_edge_index.to(device), subgraph_edge_weight.to(device), subgraph_edge_rv.to(device), subgraph_edge_oid.to(device)
         else:
             partitions = torch.arange(self.cluster_data.num_parts, dtype=torch.int64)
@@ -551,13 +551,19 @@ class ClusterSampler:
                 assert torch.all(self.cluster_data.perm[subgraph_nodes[subgraph_edge_index.reshape(-1)]] == self.edge_index[:,subgraph_edge_oid].reshape(-1))
 
                 subgraph_edge_index, subgraph_edge_oid, subgraph_edge_rv = process_edge_index(subgraph_nodes.shape[0], subgraph_edge_index, subgraph_edge_oid)
-                # subgraph_edge_weight = self.cluster_data.data.edge_weight[subgraph_edge_oid]
-                subgraph_deg = degree(subgraph_edge_index[1], subgraph_size)
-                subgraph_edge_weight = (subgraph_deg[subgraph_edge_index[0]] * subgraph_deg[subgraph_edge_index[1]]) ** -0.5 * subgraph_deg.mean()
+                subgraph_edge_weight = self.cluster_data.data.edge_weight[subgraph_edge_oid]
+                # subgraph_deg = degree(subgraph_edge_index[1], subgraph_size)
+                # subgraph_edge_weight = (subgraph_deg[subgraph_edge_index[0]] * subgraph_deg[subgraph_edge_index[1]]) ** -0.5 * subgraph_deg.mean()
 
-                yield batch_size, batch_nodes.to(device), self.cluster_data.data.x[batch_nodes].to(device), self.cluster_data.data.y[batch_nodes].to(device), self.cluster_data.data.deg[batch_nodes].to(device), \
-                      subgraph_size, subgraph_nodes.to(device), self.cluster_data.data.x[subgraph_nodes].to(device), self.cluster_data.data.y[subgraph_nodes].to(device), self.cluster_data.data.deg[subgraph_nodes].to(device), \
+                yield batch_size, batch_nodes.to(device), self.cluster_data.data.x[batch_nodes].to(device), self.cluster_data.data.y[batch_nodes].to(device), self.cluster_data.data.wtdeg[batch_nodes].to(device), \
+                      subgraph_size, subgraph_nodes.to(device), self.cluster_data.data.x[subgraph_nodes].to(device), self.cluster_data.data.y[subgraph_nodes].to(device), self.cluster_data.data.wtdeg[subgraph_nodes].to(device), \
                       subgraph_edge_index.to(device), subgraph_edge_weight.to(device), subgraph_edge_rv.to(device), subgraph_edge_oid.to(device)
+
+
+def degree(index, num_nodes, weight=None):
+    out = torch.zeros(num_nodes, dtype=torch.int64, device=index.device)
+    weight = weight if (weight is not None) else torch.ones_like(index)
+    return out.scatter_add_(0, index, weight)
 
 
 def get_scaling(deg0, deg1):

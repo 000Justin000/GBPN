@@ -12,7 +12,7 @@ from torch_geometric.nn import GCNConv
 from torch_geometric.transforms import ToSparseTensor
 from torch_geometric.nn import MessagePassing
 from torch_geometric.nn.models import LabelPropagation
-from torch_geometric.utils import degree, is_undirected, subgraph
+from torch_geometric.utils import is_undirected, subgraph
 from sklearn.metrics import roc_auc_score, precision_recall_curve, f1_score
 from utils import *
 import matplotlib
@@ -252,7 +252,7 @@ def run(dataset, split, model_name, dim_hidden, num_layers, num_hops, num_sample
 
             optimizer.zero_grad()
             subgraph_log_b = model(subgraph_x, subgraph_edge_index, edge_weight=subgraph_edge_weight, edge_rv=subgraph_edge_rv,
-                                   deg=degree(subgraph_edge_index[1], subgraph_size), deg_ori=deg[subgraph_nodes].to(device), phi=phi, K=num_hops)
+                                   deg=degree(subgraph_edge_index[1], subgraph_size, subgraph_edge_weight), deg_ori=subgraph_deg, phi=phi, K=num_hops)
             loss = F.nll_loss(subgraph_log_b[:batch_size][backpp_mask], batch_y[backpp_mask], weight=c_weight)
             loss.backward()
             optimizer.step()
