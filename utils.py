@@ -13,7 +13,7 @@ from torch_sparse import SparseTensor, coalesce, cat
 from torch_geometric.nn import MessagePassing
 from torch_geometric.nn import GCNConv, SAGEConv, GATConv
 from torch_geometric.nn.conv.gcn_conv import gcn_norm
-from torch_geometric.utils import degree, subgraph, remove_self_loops, to_undirected, contains_self_loops, stochastic_blockmodel_graph, k_hop_subgraph
+from torch_geometric.utils import subgraph, remove_self_loops, to_undirected, contains_self_loops, stochastic_blockmodel_graph, k_hop_subgraph
 from torch_geometric.data import Data
 from torch_geometric.data import ClusterData
 from torch_geometric.datasets import Planetoid, SNAPDataset, Coauthor, WikipediaNetwork, Reddit, Reddit2
@@ -561,8 +561,8 @@ class ClusterSampler:
 
 
 def degree(index, num_nodes, weight=None):
-    out = torch.zeros(num_nodes, dtype=torch.int64, device=index.device)
-    weight = weight if (weight is not None) else torch.ones_like(index)
+    out = torch.zeros(num_nodes, device=index.device)
+    weight = weight if (weight is not None) else torch.ones(index.shape[0], device=index.device)
     return out.scatter_add_(0, index, weight)
 
 
