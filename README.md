@@ -1,4 +1,4 @@
-# Graph Belief Propagation Networks
+# MLP + Belief Propagation for Interpretable Node Classification
 
 The graph belief propagation networks (GBPNs) is a family of graph neural networks models for node classification.
 They are accurate, interpretable, and converge to a stationary solution as the number of BP steps increase.
