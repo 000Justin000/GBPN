@@ -491,7 +491,7 @@ class ClusterSampler:
         data.test_mask = test_mask
         data.edge_weight = edge_weight
         data.deg = degree(edge_index[1], num_nodes, edge_weight)
-        self.cluster_data = ClusterData(data, num_parts=math.ceil(num_nodes / 256), recursive=False)
+        self.cluster_data = ClusterData(data, num_parts=math.ceil(num_nodes / 2048), recursive=False)
 
 
     def get_generator(self, mask=None, shuffle=False, max_batch_size=-1, num_hops=0, num_samples=-1, device='cpu'):
@@ -527,7 +527,7 @@ class ClusterSampler:
             partitions = torch.arange(self.cluster_data.num_parts, dtype=torch.int64)
             if shuffle:
                 partitions = partitions[torch.randperm(partitions.shape[0])]
-            n_batch = math.ceil(partitions.shape[0] / 3)
+            n_batch = math.ceil(partitions.shape[0] / 2)
 
             for batch_partitions in partitions.chunk(n_batch):
                 start = self.cluster_data.partptr[batch_partitions].tolist()

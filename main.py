@@ -228,7 +228,7 @@ def run(dataset, split, model_name, dim_hidden, num_layers, num_hops, num_sample
         print('optimal crs ordered: [' + ', '.join(map(lambda f: '{:7.3f}'.format(f), opt_crs_ord)) + ']')
         return opt_test, opt_deg_avg, opt_nll_avg, opt_cfd_avg, opt_crs_avg, opt_cfd_ord, opt_crs_ord, None
     elif model_name == 'GBPN':
-        optimizer = MultiOptimizer(torch.optim.AdamW(model.transform.parameters(), lr=learning_rate, weight_decay=2.5e-4), 
+        optimizer = MultiOptimizer(torch.optim.AdamW(model.transform.parameters(), lr=learning_rate, weight_decay=2.5e-4),
                                    torch.optim.AdamW(model.bp_conv.parameters(), lr=learning_rate*10, weight_decay=2.5e-4))
     else:
         optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate, weight_decay=2.5e-4)
@@ -368,6 +368,9 @@ if not args.develop:
     sys.stdout = open(outpath + '/' + commit + '.log', 'w')
     sys.stderr = open(outpath + '/' + commit + '.err', 'w')
 
+print(args)
+print()
+
 test_acc = []
 test_deg_avg = []
 test_nll_avg = []
@@ -400,4 +403,7 @@ print('optimal cfd ordered: [' + ', '.join(map(lambda f: '{:7.3f}'.format(f), li
 print('optimal crs ordered: [' + ', '.join(map(lambda f: '{:7.3f}'.format(f), list_avg(test_crs_ord))) + ']')
 if args.model_name == 'GBPN':
     print(sum(optimal_H)/len(optimal_H))
+
+print()
+print(args)
 print('overall test accuracies: {:7.3f} ± {:7.3f}'.format(np.mean(test_acc)*100, np.std(test_acc)*100))
