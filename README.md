@@ -1,10 +1,10 @@
 # MLP + Belief Propagation for Interpretable Node Classification
 
-The graph belief propagation networks (GBPNs) is a family of graph neural networks models for node classification.
+MLP/BP is a family of graph neural networks models for node classification, it is also referred as GBPN (graph belief propagation network).
 They are accurate, interpretable, and converge to a stationary solution as the number of BP steps increase.
-On a high level, a GBPN first predicts an initial probabilities for each node's label using its features (with a MLP), then runs belief propagation to iteratively refine/correct the predictions.
+On a high level, a MLP/BP first predicts an initial probabilities for each node's label using its features (with a MLP), then runs belief propagation to iteratively refine/correct the predictions.
 
-![GBPN performance on PubMed](figs/demo.svg)
+![MLP/BP performance on PubMed](figs/demo.svg)
 
 
 ## Environment Setup
@@ -22,7 +22,7 @@ Therefore, we highly recommend the users to start with a new conda environment.
 
 ## Basic Usage
 
-A GBPN model consists of a MLP that maps features on each node to its self-potential, and a coupling matrix.
+A MLP/BP model consists of a MLP that maps features on each node to its self-potential, and a coupling matrix.
 It can be defined in the same way as any PyTorch Module.
 
 ```python
@@ -32,7 +32,7 @@ model = GBPN(num_features, num_classes, dim_hidden=dim_hidden, num_layers=num_la
 ```
 
 In this example, _num\_features_ is the input dimension of the MLP, _num\_classes_ is the output dimension of the MLP, _dim\_hidden_ is the number of units per hidden layer in the MLP, and _num\_layers_ is the number of hidden layers in the MLP.
-After defining the model, we can run GBPN inference as:
+After defining the model, we can run MLP/BP inference as:
 
 ```python
 log_b = model(x, edge_index, edge_weight=edge_weight, edge_rv=edge_rv, deg=deg, deg_ori=deg, K=5)
@@ -44,16 +44,16 @@ To reproduce our main experimental results, one can simply run:
 ```bash
 bash run.sh
 ```
-which runs GBPN and baselines on all datasets.
+which runs MLP/BP and baselines on all datasets.
 To reproduce results for a particular dataset (e.g. sexual interaction):
 ```bash
 make device="cuda" run_Sex
 ```
 which gives (finishes running in 10 minutes):
 
-| Model      | MLP    | GCN   | SAGE  | GAT   | GBPN-I | GBPN  |
-| ---------- |------- | ----- | ----- | ----- | ------ | ----- |
-| accuracy   | 74.5%  | 83.9% | 93.3% | 93.6% | 97.1%  | 97.4% |
+| Model      | MLP    | GCN   | SAGE  | GAT   | MLP/BP-I | MLP/BP |
+| ---------- |------- | ----- | ----- | ----- | -------- | ------ |
+| accuracy   | 74.5%  | 83.9% | 93.3% | 93.6% | 97.1%    | 97.4%  |
 
 ## License
 This project is release under the GNU GENERAL PUBLIC LICENSE.
